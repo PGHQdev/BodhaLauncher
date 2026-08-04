@@ -86,6 +86,8 @@ class IntentPromptEngineTest {
             SuppressionFlags(cameraViaShortcut = true),
             SuppressionFlags(emergencyFlow = true),
             SuppressionFlags(returningToFocusTask = true),
+            // At most one pause per opening — an Open Check on screen (#77).
+            SuppressionFlags(openCheckShowing = true),
         )
         for (suppression in flags) {
             val decisions = startSessions(IntentPromptEngine(), count = 3, gapMinutes = 5, suppression = suppression)

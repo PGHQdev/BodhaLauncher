@@ -15,6 +15,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -30,6 +31,7 @@ import com.bodhalauncher.app.capability.EducationStateStore
 import com.bodhalauncher.app.data.EventLogger
 import com.bodhalauncher.app.intent.IntentPromptRuntime
 import com.bodhalauncher.app.entitlement.EntitlementStore
+import com.bodhalauncher.app.opencheck.BypassClassifier
 import com.bodhalauncher.app.opencheck.OpenCheckRuleStore
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalContext
@@ -59,8 +61,10 @@ import com.bodhalauncher.engine.HomeInputs
 import com.bodhalauncher.engine.IntentCategory
 import com.bodhalauncher.engine.LibraryInputs
 import com.bodhalauncher.engine.GateDecision
+import com.bodhalauncher.engine.OpenCheckContext
 import com.bodhalauncher.engine.OpenCheckDecision
 import com.bodhalauncher.engine.OpenCheckEngine
+import com.bodhalauncher.engine.OpenCheckMode
 import com.bodhalauncher.engine.ProBoundary
 import com.bodhalauncher.engine.dayStart
 import com.bodhalauncher.engine.resolveCapability
@@ -159,12 +163,32 @@ private fun HomeRoot(
     var surface by remember { mutableStateOf(HomeSurface.Home) }
     val context = LocalContext.current
     val openCheck = remember { OpenCheckEngine() }
+    val usage = remember { UsageReader(context) }
+    val bypass = remember { BypassClassifier(context) }
     // Saveable so an in-flight check survives rotation; otherwise a displayed
     // check would vanish with no outcome logged, skewing the return rate (#25).
     var checkFor by rememberSaveable(stateSaver = homeActionSaver) { mutableStateOf<HomeAction?>(null) }
+    // At most one pause per opening (#77): the prompt engine is told while a
+    // check is on screen, and a launch while the prompt shows skips the check.
+    SideEffect { intentPrompt.openCheckShowing = checkFor != null }
     // The single opening path (#8): every surface's launch flows through here.
     val openApp: (HomeAction) -> Unit = { action ->
-        when (val decision = openCheck.onLaunchAttempt(action.id, openCheckStore.ruleFor(action.id), Instant.now())) {
+        val rule = openCheckStore.ruleFor(action.id)
+        val localNow = LocalDateTime.now()
+        val launchContext = OpenCheckContext(
+            // Sampled only when the rule needs it, read on demand, never stored (ADR 0009).
+            usedTodayMillis = if (rule?.mode == OpenCheckMode.DailyThreshold) {
+                val dayStartMillis = dayStart(localNow).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                catalog.primaryPackage(action.id)?.let { usage.usedSince(dayStartMillis)?.get(it) }
+            } else null,
+            minuteOfDay = localNow.hour * 60 + localNow.minute,
+            // Bypass is classification only, never a lock on an explicitly ruled app (#77).
+            bypass = rule == null && bypass.bypasses(catalog.primaryPackage(action.id)),
+        )
+        val decision =
+            if (intentPrompt.promptDue.value != null) OpenCheckDecision.Proceed
+            else openCheck.onLaunchAttempt(action.id, rule, Instant.now(), launchContext)
+        when (decision) {
             is OpenCheckDecision.Proceed -> {
                 events.log(EventType.AppLaunched)
                 catalog.launch(action)
@@ -179,7 +203,6 @@ private fun HomeRoot(
     }
 
     checkFor?.let { app ->
-        val usage = remember { UsageReader(context) }
         val capabilityEdge = remember { CapabilityEdge(context) }
         val educationStore = remember { EducationStateStore(context) }
         var educationFor by remember { mutableStateOf<EducationScreen?>(null) }
@@ -281,7 +304,6 @@ private fun HomeRoot(
             val layout by libraryStore.layout
             val categories by catalog.categories
             val groups by groupStore.groups
-            val usage = remember { UsageReader(context) }
             // Re-reads on every resume, so granting access in settings shows up on return;
             // read on demand and never stored (ADR 0009).
             val lifecycleOwner = LocalLifecycleOwner.current
@@ -376,14 +398,32 @@ private fun HomeRoot(
                 OpenCheckRuleDialog(
                     app = app,
                     current = openCheckRules[app.id],
-                    onSelect = { mode ->
+                    onSave = { rule ->
                         val decision = resolveOpenCheckRuleWrite(
                             entitlementStore.snapshot.value,
                             existingRules = openCheckRules.size,
                             creating = app.id !in openCheckRules,
                         )
                         when (decision) {
-                            GateDecision.Allowed -> openCheckStore.set(app.id, mode)
+                            GateDecision.Allowed -> {
+                                openCheckStore.set(app.id, rule)
+                                // The threshold trigger wants usage access; the rule is
+                                // saved either way and stays inert until granted (#73).
+                                if (rule.mode == OpenCheckMode.DailyThreshold &&
+                                    !capabilityEdge.granted(Capability.UsageAccess)
+                                ) {
+                                    val resolution = resolveCapability(
+                                        capability = Capability.UsageAccess,
+                                        granted = false,
+                                        educationShown = educationStore.shown(Capability.UsageAccess),
+                                        entry = EducationEntry.UserRequest,
+                                    )
+                                    if (resolution is CapabilityResolution.Educate) {
+                                        educationFor = resolution.screen
+                                        educationStore.markShown(Capability.UsageAccess)
+                                    }
+                                }
+                            }
                             is GateDecision.Capped -> boundary = decision.boundary
                             is GateDecision.Locked -> boundary = decision.boundary
                         }
@@ -401,7 +441,10 @@ private fun HomeRoot(
                     shortcuts = remember(app.id) { catalog.shortcuts(app.id) },
                     isPinned = app.id in pinnedIds,
                     isHidden = app.id in hidden,
-                    openCheckMode = openCheckRules[app.id],
+                    openCheckMode = openCheckRules[app.id]?.mode,
+                    // Emergency/utility apps don't offer friction unless already ruled (#77).
+                    openCheckOffered = app.id in openCheckRules ||
+                        !bypass.bypasses(catalog.primaryPackage(app.id)),
                     onOpen = { dismiss(); openApp(app) },
                     onShortcut = { dismiss(); catalog.launchShortcut(it) },
                     onPin = { dismiss(); pinStore.pin(app.id) },

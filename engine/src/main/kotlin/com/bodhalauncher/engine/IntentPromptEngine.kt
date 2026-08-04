@@ -18,9 +18,12 @@ data class SuppressionFlags(
     val cameraViaShortcut: Boolean = false,
     val emergencyFlow: Boolean = false,
     val returningToFocusTask: Boolean = false,
+    /** An Open Check is on screen — at most one pause per opening (#77). */
+    val openCheckShowing: Boolean = false,
 ) {
     val anySet: Boolean
-        get() = callActive || navigationActive || cameraViaShortcut || emergencyFlow || returningToFocusTask
+        get() = callActive || navigationActive || cameraViaShortcut ||
+            emergencyFlow || returningToFocusTask || openCheckShowing
 }
 
 enum class TriggerSource { Reflexive, EverySession }

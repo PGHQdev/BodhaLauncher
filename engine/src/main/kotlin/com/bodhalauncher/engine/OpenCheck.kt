@@ -6,13 +6,46 @@ import java.time.Instant
 /**
  * When a rule's check fires (#8). [RepeatedOpening] catches autopilot: the
  * first launches are frictionless, the third within a rolling window is
- * checked (#72). The remaining trigger modes (daily threshold, schedule,
- * during Focus) arrive with their own tickets.
+ * checked (#72). [DailyThreshold] frees the first visits of the day (#73);
+ * [Schedule] confines checks to a daily window (#74); [DuringFocus] is wired
+ * but inert until Focus (#9) lands (#77).
  */
-enum class OpenCheckMode { Always, RepeatedOpening, Never }
+enum class OpenCheckMode { Always, RepeatedOpening, DailyThreshold, Schedule, DuringFocus, Never }
 
-/** A user's per-app Open Check rule; no rule at all means the app just opens. */
-data class OpenCheckRule(val mode: OpenCheckMode)
+/** One daily window in minutes of day, start inclusive, end exclusive; start after end crosses midnight (#74). */
+data class ScheduleWindow(val startMinute: Int, val endMinute: Int) {
+    fun contains(minuteOfDay: Int): Boolean =
+        if (startMinute <= endMinute) minuteOfDay in startMinute until endMinute
+        else minuteOfDay >= startMinute || minuteOfDay < endMinute
+}
+
+/**
+ * A user's per-app Open Check rule; no rule at all means the app just opens.
+ * A mode whose config is absent is inert — the app just opens.
+ */
+data class OpenCheckRule(
+    val mode: OpenCheckMode,
+    /** DailyThreshold only: today's allowance before checks begin (#73). */
+    val dailyThreshold: Duration? = null,
+    /** Schedule only: the daily window checks fire inside (#74). */
+    val window: ScheduleWindow? = null,
+)
+
+/**
+ * What the adapter observed at this launch (#8). Context it can't observe stays
+ * at the default and the corresponding trigger is inert — the [SuppressionFlags]
+ * convention.
+ */
+data class OpenCheckContext(
+    /** The app's foreground time since the 4am boundary; null without usage access (#73). */
+    val usedTodayMillis: Long? = null,
+    /** Local minute of day, for schedule windows (#74). */
+    val minuteOfDay: Int = 0,
+    /** Focus active; false until Focus (#9) exists (#77). */
+    val focusActive: Boolean = false,
+    /** Adapter-classified emergency/utility app — always proceeds (#77). */
+    val bypass: Boolean = false,
+)
 
 /**
  * The check sheet's context lines (#8): information, not guilt. Absent inputs
@@ -111,7 +144,15 @@ class OpenCheckEngine(initial: OpenCheckState = OpenCheckState.Initial) {
 
     fun snapshot(): OpenCheckState = OpenCheckState(grantedApp, grantedUntil, recentLaunches, cooldownUntil)
 
-    fun onLaunchAttempt(appId: String, rule: OpenCheckRule?, now: Instant): OpenCheckDecision {
+    fun onLaunchAttempt(
+        appId: String,
+        rule: OpenCheckRule?,
+        now: Instant,
+        context: OpenCheckContext = OpenCheckContext(),
+    ): OpenCheckDecision {
+        // Friction never stands between the user and a call or alarm (#77) —
+        // before even the grant, so nothing is consumed on the way through.
+        if (context.bypass) return OpenCheckDecision.Proceed
         if (appId == grantedApp && grantedUntil?.isBefore(now) == false) {
             clearGrant()
             return OpenCheckDecision.Proceed
@@ -120,6 +161,20 @@ class OpenCheckEngine(initial: OpenCheckState = OpenCheckState.Initial) {
             null, OpenCheckMode.Never -> OpenCheckDecision.Proceed
             OpenCheckMode.Always -> OpenCheckDecision.ShowCheck(appId, now)
             OpenCheckMode.RepeatedOpening -> onRepeatedAttempt(appId, now)
+            OpenCheckMode.DailyThreshold -> {
+                val threshold = rule.dailyThreshold ?: return OpenCheckDecision.Proceed
+                val used = context.usedTodayMillis ?: return OpenCheckDecision.Proceed
+                if (used >= threshold.toMillis()) OpenCheckDecision.ShowCheck(appId, now)
+                else OpenCheckDecision.Proceed
+            }
+            OpenCheckMode.Schedule -> {
+                val window = rule.window ?: return OpenCheckDecision.Proceed
+                if (window.contains(context.minuteOfDay)) OpenCheckDecision.ShowCheck(appId, now)
+                else OpenCheckDecision.Proceed
+            }
+            OpenCheckMode.DuringFocus ->
+                if (context.focusActive) OpenCheckDecision.ShowCheck(appId, now)
+                else OpenCheckDecision.Proceed
         }
     }
 
