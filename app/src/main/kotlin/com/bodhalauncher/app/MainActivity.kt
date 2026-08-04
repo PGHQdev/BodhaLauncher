@@ -34,6 +34,17 @@ import com.bodhalauncher.engine.resolveHome
 import java.time.LocalDateTime
 
 class MainActivity : ComponentActivity() {
+
+    override fun onResume() {
+        super.onResume()
+        (application as BodhaApp).intentPrompt.onLauncherVisible()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        (application as BodhaApp).intentPrompt.onLauncherHidden()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()

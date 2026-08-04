@@ -1,6 +1,9 @@
 package com.bodhalauncher.app.intent
 
 import android.content.Context
+import android.media.AudioManager
+import android.os.Handler
+import android.os.Looper
 import androidx.compose.runtime.mutableStateOf
 import com.bodhalauncher.app.session.SessionRuntime
 import com.bodhalauncher.engine.IntentCategory
@@ -21,6 +24,10 @@ class IntentPromptRuntime(context: Context, private val sessions: SessionRuntime
     private val store = IntentPromptStateStore(context)
     private val records = IntentRecordStore(context)
     private val engine = IntentPromptEngine(initial = store.load())
+    private val audio = context.getSystemService(AudioManager::class.java)
+    private val handler = Handler(Looper.getMainLooper())
+
+    private var launcherVisible = false
 
     /** The prompt due for the active session, if any; null once handled. */
     val promptDue = mutableStateOf<PromptDecision?>(null)
@@ -31,15 +38,51 @@ class IntentPromptRuntime(context: Context, private val sessions: SessionRuntime
             store.save(engine.snapshot())
             val active = (sessions.phase.value as? SessionPhase.Active)?.session
             when {
-                decision != null && decision.session == active -> promptDue.value = decision
+                decision != null && decision.session == active -> surface(decision)
                 // The session the pending prompt belonged to is gone.
                 promptDue.value != null && promptDue.value?.session != active -> promptDue.value = null
             }
         }
     }
 
-    /** Suppression detection lands with #56; until then nothing suppresses. */
-    private fun currentSuppression() = SuppressionFlags()
+    /**
+     * The prompt lives on Home, so it can never draw over another app. If the
+     * unlock went straight elsewhere — camera via a system shortcut, a
+     * notification — the decision expires unless Home appears within the present
+     * window: that moment of reflexive use has passed.
+     */
+    private fun surface(decision: PromptDecision) {
+        promptDue.value = decision
+        handler.removeCallbacks(expireUnpresented)
+        if (!launcherVisible) handler.postDelayed(expireUnpresented, PRESENT_WINDOW_MS)
+    }
+
+    private val expireUnpresented = Runnable {
+        if (!launcherVisible) promptDue.value = null
+    }
+
+    /** Called from the launcher activity's onResume/onPause. */
+    fun onLauncherVisible() {
+        launcherVisible = true
+        handler.removeCallbacks(expireUnpresented)
+    }
+
+    fun onLauncherHidden() {
+        launcherVisible = false
+    }
+
+    /**
+     * The spec's five suppression states. An active or incoming call reads from
+     * the audio mode (no permission needed). Navigation, emergency/utility flows,
+     * and focus-task return have no signal yet — stubbed false until their
+     * detection (or the Focus feature, #9) exists. Camera-via-shortcut is covered
+     * by the present window in [surface] rather than a flag at decision time.
+     */
+    private fun currentSuppression() = SuppressionFlags(
+        callActive = audio.mode == AudioManager.MODE_RINGTONE ||
+            audio.mode == AudioManager.MODE_IN_CALL ||
+            audio.mode == AudioManager.MODE_IN_COMMUNICATION,
+    )
 
     /**
      * The user chose an intent (or typed free text with no category). The engine
@@ -57,5 +100,9 @@ class IntentPromptRuntime(context: Context, private val sessions: SessionRuntime
         val decision = promptDue.value ?: return
         records.appendDismissal(decision)
         promptDue.value = null
+    }
+
+    private companion object {
+        const val PRESENT_WINDOW_MS = 5000L
     }
 }
