@@ -57,7 +57,9 @@ class SessionRuntime(private val context: Context) {
                 addAction(Intent.ACTION_SCREEN_ON)
                 addAction(Intent.ACTION_SCREEN_OFF)
             },
-            ContextCompat.RECEIVER_NOT_EXPORTED,
+            // Exported is safe and required: these are protected broadcasts only the
+            // system can send, and USER_PRESENT is not delivered to not-exported receivers.
+            ContextCompat.RECEIVER_EXPORTED,
         )
     }
 
