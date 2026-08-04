@@ -95,3 +95,11 @@ _Avoid_: setup wizard, tutorial, walkthrough
 **Home role**:
 Android's `ROLE_HOME` — the one grant Bodha asks for. Held or not; without it Bodha is an app you open, which is a named state rather than a broken one.
 _Avoid_: default launcher permission (it's a role, not a permission)
+
+**Earns a setting**:
+The test a control passes to exist in Settings: the choice is the user's and not identity, Bodha is the only place to make it, and it has no in-context home. All three, or it isn't a setting.
+_Avoid_: configurable, option (says nothing about whether it belongs)
+
+**Accessibility floor**:
+The override beneath that test: every core action reachable only by gesture also appears in Settings as a tappable row. Why Settings lists surfaces it doesn't configure.
+_Avoid_: a11y fallback, alternative navigation
