@@ -7,6 +7,7 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.bodhalauncher.engine.LibraryIndexEntry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -33,9 +34,11 @@ import org.robolectric.annotation.GraphicsMode
  */
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-// A real display, or the host window has no height and every node measures 0 tall —
-// which would let the touch-target clause fail for a reason that is not the floor.
-@Config(sdk = [35], qualifiers = "w411dp-h891dp", application = android.app.Application::class)
+// Tall enough for the whole fixture. The gallery does not scroll, so anything past
+// the window's height measures 0 tall and the touch-target clause fails for a reason
+// that is not the floor. If this suite starts reporting 0-height nodes, the fixture
+// outgrew the display — raise this, don't relax the assertion.
+@Config(sdk = [35], qualifiers = "w411dp-h2400dp", application = android.app.Application::class)
 class AccessibilityFloorTest {
 
     @get:Rule
@@ -68,7 +71,7 @@ class AccessibilityFloorTest {
         // which is exactly how this check could rot into a no-op.
         assertTrue(
             "the gallery must render actionable components, or this suite proves nothing",
-            actionableNodes().size >= 4,
+            actionableNodes().size >= 10,
         )
     }
 
@@ -101,11 +104,8 @@ class AccessibilityFloorTest {
     @Test
     fun `the letter rail is one named node with an action per letter`() {
         val jumped = mutableListOf<Int>()
-        val index = listOf('A', 'F', 'M').mapIndexed { i, c ->
-            com.bodhalauncher.engine.LibraryIndexEntry(letter = c, firstRow = i * 10)
-        }
         compose.setContent {
-            BodhaTheme { AlphabetScrubber(index = index, onJump = { jumped += it }) }
+            BodhaTheme { AlphabetScrubber(index = RAIL_INDEX, onJump = { jumped += it }) }
         }
 
         val rail = actionableNodes().single { it.spokenName() == RAIL_LABEL }
@@ -119,11 +119,8 @@ class AccessibilityFloorTest {
     /** The letters must not be focusable in their own right, or the rail reads as characters. */
     @Test
     fun `the rail's letters are not separately focusable`() {
-        val index = listOf('A', 'F', 'M').mapIndexed { i, c ->
-            com.bodhalauncher.engine.LibraryIndexEntry(letter = c, firstRow = i)
-        }
         compose.setContent {
-            BodhaTheme { AlphabetScrubber(index = index, onJump = {}) }
+            BodhaTheme { AlphabetScrubber(index = RAIL_INDEX, onJump = {}) }
         }
 
         val texts = mutableListOf<String>()
@@ -136,3 +133,7 @@ class AccessibilityFloorTest {
         assertEquals(emptyList<String>(), texts)
     }
 }
+
+/** Three letters is enough to prove one action each; firstRow strides by 10 so a jump is unambiguous. */
+private val RAIL_INDEX = listOf('A', 'F', 'M')
+    .mapIndexed { i, letter -> LibraryIndexEntry(letter = letter, firstRow = i * 10) }

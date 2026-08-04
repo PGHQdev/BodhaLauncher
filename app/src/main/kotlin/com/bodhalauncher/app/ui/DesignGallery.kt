@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.bodhalauncher.engine.HomeAction
 import com.bodhalauncher.engine.LibraryIndexEntry
+import com.bodhalauncher.engine.LibraryLayout
 
 /**
  * The design system's living spec (#26): every token rendered once, with fixed
@@ -68,9 +69,16 @@ fun DesignGallery() {
         // accessibility floor and not only visual drift (ADR 0020). A component
         // the gallery cannot see is a component neither check covers.
         Text("Actionable components", style = BodhaType.overline, color = colors.inkMuted)
+        PinRow(action = GALLERY_APP, onAction = {}, onLongPress = {})
+        AddPinRow(onAdd = {})
         AppRow(app = GALLERY_APP, onOpen = {}, onLongPress = {})
         AppRow(app = GALLERY_APP, onOpen = {}, onLongPress = {}, lastUsedLine = "Last used 8 minutes ago")
         SheetRow("Sheet row") {}
+        SectionHeader(title = "Section header", onLongPress = {})
+        HiddenHeader(count = 3, expanded = false, onToggle = {})
+        HiddenSearchableRow(enabled = true, onChange = {})
+        NewGroupRow(onTap = {})
+        LayoutSwitcher(current = LibraryLayout.Alphabetical, onChange = {})
         Row {
             IconCell(app = GALLERY_APP, iconKey = Unit, iconFor = { null }, onOpen = {}, onLongPress = {})
             Spacer(Modifier.width(BodhaSpacing.l))

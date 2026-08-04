@@ -44,8 +44,18 @@ So the scale carries a sans title and a serif voice title at the same 22sp: mach
 - **"Still want to open it?" moves 16→18**, into `voicePassage`. A one-point shift on one site, in exchange for not carrying a sixth serif role.
 - **Three tappable 13sp controls move to 14** — the Library's layout switcher, "New group …", "Shown in search". This makes 13sp uniquely the overline, and it grows three touch targets, so the type collapse and ADR 0020's 48dp floor push the same direction.
 - **11 folds into `caption`.** One point on the icon-cell label and the rail letters; neither reflows.
-- **Five overlines unify at letterSpacing 2**, and two sites that were plainly overlines missing their tracking — `OpenCheckDialogs`' "Open Check — …" and `GroupDialogs`' app label — get it.
+- **Five overlines unify at letterSpacing 2**, and the sites that were plainly overlines missing their tracking get it. The census undercounted these while the scale was being drawn; implementing it found the real set. Two corrections, both recorded here rather than left as drift:
+  - **Four sites, not two**, were untracked overlines: `OpenCheckDialogs`' "Open Check — …" and `GroupDialogs`' app label, plus `HomeDialogs`' action label and its "Edit Home" — both dialog eyebrows of exactly the same kind, which fell between the census's "tracked overline" and "tappable control" groups and so were counted in neither.
+  - **The Library's "Apps" header is a seventh overline**, moving 14→13. It carried 2sp tracking already and was filed under 14sp as a plain label; a muted tracked screen eyebrow is an overline, so the collapse that was described as five-plus-two is really seven.
 - **The date under the clock folds into `label`**, losing its 1sp tracking. A seventh sans role for a single `Text` was the alternative. If the pairing with the 64sp clock genuinely needs the tracking, the golden diff will say so and a role can be added then, rather than invented now on a guess.
+
+## What implementing it changed
+
+Two things the collapses did not predict, both consequences of the floor and the scale meeting:
+
+The **layout switcher scrolls** rather than squeezes. Its five labels moved from 13sp to `label`, and each gained the 48dp floor, so the row needs about 332dp — which a 360dp phone does not have once the page padding is off. The floor wins over the layout, so the row gives way: `horizontalScroll`, which is invisible at 411dp and keeps all five reachable below it.
+
+The **gallery's captures were clipped and had been for some time.** The screenshot fixture rendered at the Robolectric default of 320×480 while the gallery was already taller, so the large-type captures — the ones proving "large text never breaks a layout" — were photographing the top third. That was true before this change and unrelated to it; it surfaced because the actionable components were added below the fold and did not appear. The fixture now gets a display taller than itself, and the same trap catches the walk: a node past the window's height measures zero tall, which reads as a floor violation that is really a clipped fixture.
 
 ## Roles carry no colour
 

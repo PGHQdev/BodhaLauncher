@@ -23,7 +23,7 @@ import org.robolectric.annotation.GraphicsMode
 // it: the actionable components sit below the fold, and the large-type captures
 // were cropped long before they were added — so "the layout holds at large type"
 // was being asserted about the top third of the gallery.
-@Config(sdk = [35], qualifiers = "w320dp-h1800dp", application = android.app.Application::class)
+@Config(sdk = [35], qualifiers = "w320dp-h3000dp", application = android.app.Application::class)
 class DesignGalleryScreenshotTest {
 
     @get:Rule

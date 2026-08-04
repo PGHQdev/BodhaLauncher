@@ -23,6 +23,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.bodhalauncher.engine.HomeAction
@@ -74,7 +76,8 @@ fun HomeScreen(
                 color = colors.ink,
                 style = BodhaType.voiceLine,
                 textAlign = TextAlign.Center,
-                modifier = Modifier.clickable(enabled = onEditIntention != null) { onEditIntention?.invoke() },
+                modifier = Modifier.touchTargetFloor()
+                    .clickable(enabled = onEditIntention != null) { onEditIntention?.invoke() },
             )
         } else if (onEditIntention != null) {
             // Temporary empty-state entry point; Today (#5) owns this moment once it exists.
@@ -84,16 +87,16 @@ fun HomeScreen(
                 color = colors.inkMuted,
                 style = BodhaType.voiceLine,
                 textAlign = TextAlign.Center,
-                modifier = Modifier.clickable { onEditIntention() },
+                modifier = Modifier.touchTargetFloor().clickable { onEditIntention() },
             )
         }
         Spacer(Modifier.height(48.dp))
         Column(modifier = Modifier.fillMaxWidth()) {
             state.actions.forEach { action ->
-                ActionRow(action, onAction, onActionLongPress)
+                PinRow(action, onAction, onActionLongPress)
             }
             if (onAddAction != null && state.actions.size < MAX_ACTIONS) {
-                AddRow(onAddAction)
+                AddPinRow(onAddAction)
             }
         }
         state.inboxDigest?.let {
@@ -133,7 +136,7 @@ private fun Clock() {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ActionRow(
+internal fun PinRow(
     action: HomeAction,
     onAction: (HomeAction) -> Unit,
     onLongPress: (HomeAction) -> Unit,
@@ -158,7 +161,7 @@ private fun ActionRow(
 }
 
 @Composable
-private fun AddRow(onAdd: () -> Unit) {
+internal fun AddPinRow(onAdd: () -> Unit) {
     val colors = LocalBodhaColors.current
     Column(modifier = Modifier.fillMaxWidth()) {
         Box(Modifier.fillMaxWidth().height(1.dp).background(colors.hairline))
@@ -168,6 +171,7 @@ private fun AddRow(onAdd: () -> Unit) {
             style = BodhaType.body,
             modifier = Modifier
                 .fillMaxWidth()
+                .semantics { contentDescription = "Add a pin" }
                 .touchTargetFloor()
                 .clickable(onClick = onAdd)
                 .padding(vertical = 16.dp),

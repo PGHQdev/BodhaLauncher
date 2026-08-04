@@ -231,6 +231,7 @@ fun ProBoundaryDialog(boundary: ProBoundary, onDismiss: () -> Unit) {
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(4.dp))
                 .background(colors.ground)
+                .touchTargetFloor()
                 .clickable(onClick = onDismiss)
                 .padding(28.dp),
         )

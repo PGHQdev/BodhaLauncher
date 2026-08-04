@@ -32,8 +32,8 @@ import com.bodhalauncher.engine.OpenCheckLines
 
 /**
  * The Open Check (#8): a gentle pause before a checked app, never a wall.
- * Serif question (the voice), sans app name and rows (the machinery) — ADR 0010,
- * ADR 0021. No
+ * Serif question (the voice), sans app name and rows (the machinery) — ADR 0010
+ * and ADR 0021. No
  * countdown, no guilt copy, no red, nothing pre-focused; swipe-down,
  * tap-outside and the back gesture all turn back.
  */

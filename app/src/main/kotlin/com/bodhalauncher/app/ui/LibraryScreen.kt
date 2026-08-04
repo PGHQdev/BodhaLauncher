@@ -4,6 +4,8 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -313,9 +315,17 @@ private fun androidx.compose.foundation.lazy.grid.LazyGridScope.hiddenSection(
 }
 
 @Composable
-private fun LayoutSwitcher(current: LibraryLayout, onChange: (LibraryLayout) -> Unit) {
+internal fun LayoutSwitcher(current: LibraryLayout, onChange: (LibraryLayout) -> Unit) {
     val colors = LocalBodhaColors.current
-    Row(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+    // Scrolls rather than squeezes: five labels at the 48dp floor need ~332dp, which
+    // a 360dp phone does not have once the page padding is off (ADR 0020 — the floor
+    // wins, so the row gives way instead of the targets).
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(bottom = 12.dp)
+    ) {
         layoutLabels.forEach { (layout, label) ->
             Text(
                 text = label,
@@ -341,7 +351,7 @@ private val layoutLabels = listOf(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun SectionHeader(title: String, onLongPress: (() -> Unit)? = null) {
+internal fun SectionHeader(title: String, onLongPress: (() -> Unit)? = null) {
     val colors = LocalBodhaColors.current
     Text(
         text = title,
@@ -349,6 +359,7 @@ private fun SectionHeader(title: String, onLongPress: (() -> Unit)? = null) {
         style = BodhaType.overline,
         modifier = Modifier
             .fillMaxWidth()
+            .touchTargetFloor()
             .let { base ->
                 if (onLongPress == null) base
                 else base.combinedClickable(onClick = {}, onLongClick = onLongPress)
@@ -359,7 +370,7 @@ private fun SectionHeader(title: String, onLongPress: (() -> Unit)? = null) {
 
 /** The Groups layout's quiet entry point for creating a group. */
 @Composable
-private fun NewGroupRow(onTap: () -> Unit) {
+internal fun NewGroupRow(onTap: () -> Unit) {
     val colors = LocalBodhaColors.current
     Text(
         text = "New group …",
@@ -475,8 +486,8 @@ internal fun AlphabetScrubber(
     }
 }
 
-/** The rail's spoken name; shared with the gallery fixture and its tests. */
-const val RAIL_LABEL = "Jump to letter"
+/** The rail's spoken name, asserted by [AccessibilityFloorTest]. */
+internal const val RAIL_LABEL = "Jump to letter"
 
 @Composable
 private fun LibrarySearchField(query: String, onQueryChange: (String) -> Unit) {
@@ -549,7 +560,7 @@ internal fun AppRow(
 }
 
 @Composable
-private fun HiddenHeader(count: Int, expanded: Boolean, onToggle: () -> Unit) {
+internal fun HiddenHeader(count: Int, expanded: Boolean, onToggle: () -> Unit) {
     val colors = LocalBodhaColors.current
     Column(modifier = Modifier.fillMaxWidth()) {
         Box(Modifier.fillMaxWidth().height(1.dp).background(colors.hairline))
@@ -559,6 +570,7 @@ private fun HiddenHeader(count: Int, expanded: Boolean, onToggle: () -> Unit) {
             style = BodhaType.overline,
             modifier = Modifier
                 .fillMaxWidth()
+                .touchTargetFloor()
                 .clickable(onClick = onToggle)
                 .padding(vertical = 16.dp),
         )
@@ -566,7 +578,7 @@ private fun HiddenHeader(count: Int, expanded: Boolean, onToggle: () -> Unit) {
 }
 
 @Composable
-private fun HiddenSearchableRow(enabled: Boolean, onChange: (Boolean) -> Unit) {
+internal fun HiddenSearchableRow(enabled: Boolean, onChange: (Boolean) -> Unit) {
     val colors = LocalBodhaColors.current
     Text(
         text = if (enabled) "Shown in search" else "Kept out of search",
