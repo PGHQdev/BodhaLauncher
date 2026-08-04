@@ -30,6 +30,7 @@ import com.bodhalauncher.app.capability.CapabilityEdge
 import com.bodhalauncher.app.capability.EducationStateStore
 import com.bodhalauncher.app.data.EventLogger
 import com.bodhalauncher.app.intent.IntentPromptRuntime
+import com.bodhalauncher.app.intent.IntentRecordStore
 import com.bodhalauncher.app.entitlement.EntitlementStore
 import com.bodhalauncher.app.opencheck.BypassClassifier
 import com.bodhalauncher.app.opencheck.OpenCheckRuleStore
@@ -172,6 +173,7 @@ private fun HomeRoot(
     val syncOpenCheck = { openCheckStateStore.save(openCheck.snapshot()) }
     val usage = remember { UsageReader(context) }
     val bypass = remember { BypassClassifier(context) }
+    val records = remember { IntentRecordStore(context) }
     // Saveable so an in-flight check survives rotation; otherwise a displayed
     // check would vanish with no outcome logged, skewing the return rate (#25).
     var checkFor by rememberSaveable(stateSaver = homeActionSaver) { mutableStateOf<HomeAction?>(null) }
@@ -302,14 +304,16 @@ private fun HomeRoot(
                     }
                 }
             },
-            onOpen = {
+            onOpen = { typed ->
+                typed?.let(records::appendOpenCheckIntention)
                 events.log(EventType.OpenCheckProceeded)
                 openCheck.onProceeded(app.id, Instant.now())
                 checkFor = null
                 // Back through the same path; the grant it holds covers this launch.
                 openApp(app)
             },
-            onOpenFor = { minutes ->
+            onOpenFor = { minutes, typed ->
+                typed?.let(records::appendOpenCheckIntention)
                 events.log(EventType.OpenCheckProceeded)
                 openCheck.onProceededFor(app.id, Instant.now(), minutes)
                 checkFor = null

@@ -6,6 +6,7 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import com.bodhalauncher.app.intent.IntentRecordStore
 import com.bodhalauncher.engine.RetentionCategory
 import com.bodhalauncher.engine.RetentionConfig
 import com.bodhalauncher.engine.resolveRetention
@@ -24,6 +25,12 @@ class RetentionWorker(context: Context, params: WorkerParameters) : CoroutineWor
         val plan = resolveRetention(LocalDateTime.now(), RetentionConfig())
         plan.cutoffs[RetentionCategory.EventLog]?.let { cutoff ->
             BodhaDatabase.get(applicationContext).eventLog().deleteBefore(cutoff.toEpochMillis())
+        }
+        // Intent records (prompt selections and Open Check intentions, #76) are
+        // reflective text — pruned under Reflections, whose window is
+        // user-controlled and unlimited by default.
+        plan.cutoffs[RetentionCategory.Reflections]?.let { cutoff ->
+            IntentRecordStore(applicationContext).pruneBefore(cutoff.toEpochMillis())
         }
         return Result.success()
     }
