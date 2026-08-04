@@ -50,12 +50,14 @@ fun HomeScreen(
     onAddAction: (() -> Unit)? = null,
     /** Temporary editor entry point until Today (#5) is the intention's editor. */
     onEditIntention: (() -> Unit)? = null,
+    gestures: HomeGestures? = null,
 ) {
     val colors = LocalBodhaColors.current
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(colors.ground)
+            .then(if (gestures != null) Modifier.homeGestures(gestures) else Modifier)
             .safeDrawingPadding()
             .padding(horizontal = 28.dp, vertical = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,

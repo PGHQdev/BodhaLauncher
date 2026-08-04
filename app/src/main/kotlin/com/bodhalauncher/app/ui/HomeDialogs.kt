@@ -97,6 +97,35 @@ fun ActionOptionsDialog(
     }
 }
 
+/** Edit-mode entry point (#54); the editor itself is a later slice. */
+@Composable
+fun EditHomeDialog(onAddPin: () -> Unit, onDismiss: () -> Unit) {
+    val colors = LocalBodhaColors.current
+    Dialog(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(4.dp))
+                .background(colors.ground)
+                .padding(horizontal = 24.dp, vertical = 8.dp),
+        ) {
+            Text(
+                text = "Edit Home",
+                color = colors.inkMuted,
+                fontSize = 13.sp,
+                modifier = Modifier.padding(vertical = 12.dp),
+            )
+            OptionRow("Add pin") { onAddPin(); onDismiss() }
+            Text(
+                text = "More editing — coming",
+                color = colors.inkMuted,
+                fontSize = 16.sp,
+                modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
+            )
+        }
+    }
+}
+
 @Composable
 private fun OptionRow(label: String, onClick: () -> Unit) {
     val colors = LocalBodhaColors.current
