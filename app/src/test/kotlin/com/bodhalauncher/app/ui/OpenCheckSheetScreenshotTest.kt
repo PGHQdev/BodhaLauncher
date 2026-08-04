@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.bodhalauncher.engine.OpenCheckLines
 import com.github.takahirom.roborazzi.captureRoboImage
 import org.junit.Rule
 import org.junit.Test
@@ -27,7 +28,16 @@ class OpenCheckSheetScreenshotTest {
 
     @Composable
     private fun Sheet() {
-        OpenCheckSheetContent(appLabel = "Instagram", icon = null, onOpen = {}, onGoBack = {})
+        OpenCheckSheetContent(
+            appLabel = "Instagram",
+            icon = null,
+            lines = OpenCheckLines(
+                lastOpened = "Last opened 8 minutes ago",
+                usedToday = "Used 34 minutes today",
+            ),
+            onOpen = {},
+            onGoBack = {},
+        )
     }
 
     @Test
@@ -40,6 +50,30 @@ class OpenCheckSheetScreenshotTest {
     fun open_check_dark() {
         compose.setContent { BodhaTheme(darkTheme = true) { Sheet() } }
         compose.onRoot().captureRoboImage("src/test/screenshots/open_check_dark.png")
+    }
+
+    // The degraded state: lines omitted, only the explicit-ask note (#18).
+    @Composable
+    private fun NeedsAccessSheet() {
+        OpenCheckSheetContent(
+            appLabel = "Instagram",
+            icon = null,
+            onContextNoteTap = {},
+            onOpen = {},
+            onGoBack = {},
+        )
+    }
+
+    @Test
+    fun open_check_needs_access_light() {
+        compose.setContent { BodhaTheme(darkTheme = false) { NeedsAccessSheet() } }
+        compose.onRoot().captureRoboImage("src/test/screenshots/open_check_needs_access_light.png")
+    }
+
+    @Test
+    fun open_check_needs_access_dark() {
+        compose.setContent { BodhaTheme(darkTheme = true) { NeedsAccessSheet() } }
+        compose.onRoot().captureRoboImage("src/test/screenshots/open_check_needs_access_dark.png")
     }
 
     @Test

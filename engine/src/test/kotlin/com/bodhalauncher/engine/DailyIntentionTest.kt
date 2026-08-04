@@ -21,6 +21,14 @@ class DailyIntentionTest {
     }
 
     @Test
+    fun `day start is 4am of the current day key`() {
+        assertEquals(at("2026-08-04T04:00:00"), dayStart(at("2026-08-04T22:15:00")))
+        // Late night still belongs to the previous evening's day.
+        assertEquals(at("2026-08-04T04:00:00"), dayStart(at("2026-08-05T01:30:00")))
+        assertEquals(at("2026-08-05T04:00:00"), dayStart(at("2026-08-05T04:01:00")))
+    }
+
+    @Test
     fun `an intention set at 1am is still valid until the next 4am`() {
         val intention = DailyIntention(text = "Finish Bodha prototype", dayKey = dayKey(at("2026-08-05T01:00:00")))
 

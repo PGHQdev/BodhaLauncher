@@ -58,7 +58,9 @@ import com.bodhalauncher.engine.LibraryInputs
 import com.bodhalauncher.engine.OpenCheckDecision
 import com.bodhalauncher.engine.OpenCheckEngine
 import com.bodhalauncher.engine.OpenCheckMode
+import com.bodhalauncher.engine.dayStart
 import com.bodhalauncher.engine.resolveCapability
+import com.bodhalauncher.engine.resolveOpenCheckLines
 import com.bodhalauncher.engine.resolveHome
 import com.bodhalauncher.engine.resolveLibrary
 import androidx.lifecycle.Lifecycle
@@ -67,6 +69,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.delay
 import java.time.Instant
 import java.time.LocalDateTime
+import java.time.ZoneId
 
 class MainActivity : ComponentActivity() {
 
@@ -167,9 +170,63 @@ private fun HomeRoot(
     }
 
     checkFor?.let { app ->
+        val usage = remember { UsageReader(context) }
+        val capabilityEdge = remember { CapabilityEdge(context) }
+        val educationStore = remember { EducationStateStore(context) }
+        var educationFor by remember { mutableStateOf<EducationScreen?>(null) }
+        // Re-reads on resume so a grant made from this sheet's education path
+        // shows up on return from system settings (#18).
+        val lifecycleOwner = LocalLifecycleOwner.current
+        var usageTick by remember { mutableIntStateOf(0) }
+        DisposableEffect(lifecycleOwner) {
+            val observer = LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_RESUME) usageTick++
+            }
+            lifecycleOwner.lifecycle.addObserver(observer)
+            onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+        }
+        val usageGranted = remember(app.id, usageTick) { capabilityEdge.granted(Capability.UsageAccess) }
+        // Read at check time, never stored (ADR 0009). The 4am boundary is engine
+        // math. Work-profile ids read as "no data" — see AppCatalog.primaryPackage.
+        val lines = remember(app.id, usageTick) {
+            val pkg = catalog.primaryPackage(app.id)
+            val dayStartMillis = dayStart(LocalDateTime.now())
+                .atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+            resolveOpenCheckLines(
+                lastOpenedEpochMillis = pkg?.let { usage.lastUsed()?.get(it) },
+                usedTodayMillis = pkg?.let { usage.usedSince(dayStartMillis)?.get(it) },
+                nowEpochMillis = System.currentTimeMillis(),
+            )
+        }
+        // The grant becomes observable only on return from system settings (#18); log it once (#25).
+        LaunchedEffect(usageGranted) {
+            if (usageGranted &&
+                educationStore.shown(Capability.UsageAccess) &&
+                !educationStore.grantLogged(Capability.UsageAccess)
+            ) {
+                events.log(EventType.PermissionEnabled)
+                educationStore.markGrantLogged(Capability.UsageAccess)
+            }
+        }
         OpenCheckSheet(
             app = app,
             icon = remember(app.id, catalog.version.intValue) { catalog.icon(app.id) },
+            lines = lines,
+            // The note is an explicit ask — education precedes any system screen (#18).
+            onContextNoteTap = if (usageGranted) null else {
+                {
+                    val resolution = resolveCapability(
+                        capability = Capability.UsageAccess,
+                        granted = false,
+                        educationShown = educationStore.shown(Capability.UsageAccess),
+                        entry = EducationEntry.UserRequest,
+                    )
+                    if (resolution is CapabilityResolution.Educate) {
+                        educationFor = resolution.screen
+                        educationStore.markShown(Capability.UsageAccess)
+                    }
+                }
+            },
             onOpen = {
                 events.log(EventType.OpenCheckProceeded)
                 openCheck.onProceeded(app.id, Instant.now())
@@ -183,6 +240,20 @@ private fun HomeRoot(
                 checkFor = null
             },
         )
+        educationFor?.let { screen ->
+            EducationSheet(
+                screen = screen,
+                // The grant isn't known until observed on return; only the skip is terminal here.
+                onContinue = {
+                    capabilityEdge.openSystemScreen(screen.capability)
+                    educationFor = null
+                },
+                onDismiss = {
+                    events.log(EventType.PermissionSkipped)
+                    educationFor = null
+                },
+            )
+        }
     }
 
     if (surface != HomeSurface.Home) {

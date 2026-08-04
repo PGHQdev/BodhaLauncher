@@ -9,6 +9,9 @@ import java.time.LocalDateTime
  */
 fun dayKey(now: LocalDateTime): LocalDate = now.minusHours(4).toLocalDate()
 
+/** Where "today" began: 4:00am of the current day key (ADR 0003). */
+fun dayStart(now: LocalDateTime): LocalDateTime = dayKey(now).atTime(4, 0)
+
 /**
  * The stored daily intention. The record survives its own expiry — Today offers
  * yesterday's text as a suggestion — but [textOn] yields nothing once stale;
