@@ -29,6 +29,10 @@ class IntentPromptRuntime(context: Context, private val sessions: SessionRuntime
 
     private var launcherVisible = false
 
+    /** Set from composition while an Open Check is on screen — one pause per opening (#77). */
+    @Volatile
+    var openCheckShowing = false
+
     /** The prompt due for the active session, if any; null once handled. */
     val promptDue = mutableStateOf<PromptDecision?>(null)
 
@@ -90,6 +94,7 @@ class IntentPromptRuntime(context: Context, private val sessions: SessionRuntime
         callActive = audio.mode == AudioManager.MODE_RINGTONE ||
             audio.mode == AudioManager.MODE_IN_CALL ||
             audio.mode == AudioManager.MODE_IN_COMMUNICATION,
+        openCheckShowing = openCheckShowing,
     )
 
     /**

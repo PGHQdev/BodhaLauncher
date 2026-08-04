@@ -1,6 +1,8 @@
 package com.bodhalauncher.engine
 
+import java.time.Duration
 import java.time.Instant
+import java.time.LocalDateTime
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -191,6 +193,242 @@ class OpenCheckEngineTest {
         val restored = OpenCheckEngine(engine.snapshot())
 
         assertIs<OpenCheckDecision.ShowCheck>(restored.onLaunchAttempt("app", repeated, at(20)))
+    }
+
+    // Timed sessions (#75): "Open for N minutes" grants the opening and records
+    // the expiry; the session-end moment and its choices live in this seam.
+
+    @Test
+    fun `opening for a duration grants the opening like a plain proceed`() {
+        val engine = OpenCheckEngine()
+        assertIs<OpenCheckDecision.ShowCheck>(engine.onLaunchAttempt("app", always, t0))
+
+        engine.onProceededFor("app", t0, minutes = 10)
+
+        assertEquals(OpenCheckDecision.Proceed, engine.onLaunchAttempt("app", always, at(2)))
+    }
+
+    @Test
+    fun `no session-end before the time completes`() {
+        val engine = OpenCheckEngine()
+        engine.onProceededFor("app", t0, minutes = 10)
+
+        assertEquals(null, engine.advanceTo(at(599)))
+    }
+
+    @Test
+    fun `the session-end moment is due when the time completes`() {
+        val engine = OpenCheckEngine()
+        engine.onProceededFor("app", t0, minutes = 10)
+
+        val due = engine.advanceTo(at(600))
+
+        assertEquals("app", due?.timedSession?.appId)
+        assertEquals(10, due?.timedSession?.plannedMinutes)
+        assertEquals(0, due?.overByMillis)
+    }
+
+    @Test
+    fun `a late moment reports how far past the boundary it is`() {
+        val engine = OpenCheckEngine()
+        engine.onProceededFor("app", t0, minutes = 10)
+
+        val due = engine.advanceTo(at(600 + 23 * 60))
+
+        assertEquals(23 * 60_000L, due?.overByMillis)
+    }
+
+    @Test
+    fun `the expiry survives a snapshot restore`() {
+        val engine = OpenCheckEngine()
+        engine.onProceededFor("app", t0, minutes = 10)
+
+        val restored = OpenCheckEngine(engine.snapshot())
+
+        assertEquals("app", restored.advanceTo(at(600))?.timedSession?.appId)
+    }
+
+    @Test
+    fun `add five extends from the moment of choice`() {
+        val engine = OpenCheckEngine()
+        engine.onProceededFor("app", t0, minutes = 10)
+        assertEquals("app", engine.advanceTo(at(600))?.timedSession?.appId)
+
+        engine.onSessionEndAddFive(at(660))
+
+        assertEquals(null, engine.advanceTo(at(660 + 299)))
+        val due = engine.advanceTo(at(660 + 300))
+        assertEquals(15, due?.timedSession?.plannedMinutes)
+    }
+
+    @Test
+    fun `add five grants the reopening`() {
+        val engine = OpenCheckEngine()
+        engine.onProceededFor("app", t0, minutes = 10)
+        engine.advanceTo(at(600))
+
+        engine.onSessionEndAddFive(at(660))
+
+        assertEquals(OpenCheckDecision.Proceed, engine.onLaunchAttempt("app", always, at(661)))
+    }
+
+    @Test
+    fun `continue without a timer clears the session and grants the reopening`() {
+        val engine = OpenCheckEngine()
+        engine.onProceededFor("app", t0, minutes = 10)
+        engine.advanceTo(at(600))
+
+        engine.onSessionEndContinue(at(660))
+
+        assertEquals(OpenCheckDecision.Proceed, engine.onLaunchAttempt("app", always, at(661)))
+        assertEquals(null, engine.advanceTo(at(7200)))
+    }
+
+    @Test
+    fun `close clears the session and grants nothing`() {
+        val engine = OpenCheckEngine()
+        engine.onProceededFor("app", t0, minutes = 10)
+        engine.advanceTo(at(600))
+
+        engine.onSessionEndClose()
+
+        assertEquals(null, engine.advanceTo(at(7200)))
+        assertIs<OpenCheckDecision.ShowCheck>(engine.onLaunchAttempt("app", always, at(700)))
+    }
+
+    @Test
+    fun `a plain proceed for the same app supersedes a pending timed session`() {
+        val engine = OpenCheckEngine()
+        engine.onProceededFor("app", t0, minutes = 10)
+
+        engine.onProceeded("app", at(300))
+
+        assertEquals(null, engine.advanceTo(at(7200)))
+    }
+
+    @Test
+    fun `the session-end phrase is calm on time and honest when late`() {
+        assertEquals("Your 10 minutes are complete.", sessionEndPhrase(10, overByMillis = 0))
+        assertEquals("Your 10 minutes are complete.", sessionEndPhrase(10, overByMillis = 59_000))
+        assertEquals(
+            "Your 10 minutes ended 23 minutes ago.",
+            sessionEndPhrase(10, overByMillis = 23 * 60_000L),
+        )
+    }
+
+    // Daily-usage-threshold trigger (#73). Usage is sampled by the adapter
+    // since the 4am boundary; null means no usage access and an inert trigger.
+
+    private val thirtyDaily = OpenCheckRule(OpenCheckMode.DailyThreshold, dailyThreshold = Duration.ofMinutes(30))
+
+    @Test
+    fun `below today's threshold the app just opens`() {
+        val context = OpenCheckContext(usedTodayMillis = Duration.ofMinutes(29).toMillis())
+        assertEquals(OpenCheckDecision.Proceed, OpenCheckEngine().onLaunchAttempt("app", thirtyDaily, t0, context))
+    }
+
+    @Test
+    fun `at the threshold the check shows`() {
+        val context = OpenCheckContext(usedTodayMillis = Duration.ofMinutes(30).toMillis())
+        assertIs<OpenCheckDecision.ShowCheck>(OpenCheckEngine().onLaunchAttempt("app", thirtyDaily, t0, context))
+    }
+
+    @Test
+    fun `without usage access the threshold trigger is inert`() {
+        val context = OpenCheckContext(usedTodayMillis = null)
+        assertEquals(OpenCheckDecision.Proceed, OpenCheckEngine().onLaunchAttempt("app", thirtyDaily, t0, context))
+    }
+
+    @Test
+    fun `a threshold rule without a duration is inert`() {
+        val rule = OpenCheckRule(OpenCheckMode.DailyThreshold)
+        val context = OpenCheckContext(usedTodayMillis = Duration.ofHours(9).toMillis())
+        assertEquals(OpenCheckDecision.Proceed, OpenCheckEngine().onLaunchAttempt("app", rule, t0, context))
+    }
+
+    @Test
+    fun `today begins at 4am - late-night use belongs to the evening`() {
+        // The adapter samples usage since dayStart; these pin the boundary (ADR 0003).
+        assertEquals(
+            LocalDateTime.of(2026, 8, 3, 4, 0),
+            dayStart(LocalDateTime.of(2026, 8, 4, 1, 30)),
+        )
+        assertEquals(
+            LocalDateTime.of(2026, 8, 4, 4, 0),
+            dayStart(LocalDateTime.of(2026, 8, 4, 5, 0)),
+        )
+    }
+
+    // Schedule trigger (#74): one daily window, evaluated purely from the
+    // minute-of-day the adapter passes in; it may cross midnight.
+
+    private val evenings = OpenCheckRule(
+        OpenCheckMode.Schedule,
+        window = ScheduleWindow(startMinute = 21 * 60, endMinute = 23 * 60),
+    )
+
+    @Test
+    fun `inside the window the check shows`() {
+        val context = OpenCheckContext(minuteOfDay = 22 * 60)
+        assertIs<OpenCheckDecision.ShowCheck>(OpenCheckEngine().onLaunchAttempt("app", evenings, t0, context))
+    }
+
+    @Test
+    fun `outside the window the app opens unchanged`() {
+        val context = OpenCheckContext(minuteOfDay = 12 * 60)
+        assertEquals(OpenCheckDecision.Proceed, OpenCheckEngine().onLaunchAttempt("app", evenings, t0, context))
+    }
+
+    @Test
+    fun `the window starts inclusive and ends exclusive`() {
+        val engine = OpenCheckEngine()
+        assertIs<OpenCheckDecision.ShowCheck>(engine.onLaunchAttempt("app", evenings, t0, OpenCheckContext(minuteOfDay = 21 * 60)))
+        assertEquals(OpenCheckDecision.Proceed, engine.onLaunchAttempt("app", evenings, t0, OpenCheckContext(minuteOfDay = 23 * 60)))
+    }
+
+    @Test
+    fun `a midnight-crossing window checks on both sides of midnight`() {
+        val lateNight = OpenCheckRule(
+            OpenCheckMode.Schedule,
+            window = ScheduleWindow(startMinute = 21 * 60, endMinute = 2 * 60),
+        )
+        val engine = OpenCheckEngine()
+        assertIs<OpenCheckDecision.ShowCheck>(engine.onLaunchAttempt("app", lateNight, t0, OpenCheckContext(minuteOfDay = 23 * 60)))
+        assertIs<OpenCheckDecision.ShowCheck>(engine.onLaunchAttempt("app", lateNight, t0, OpenCheckContext(minuteOfDay = 1 * 60)))
+        assertEquals(OpenCheckDecision.Proceed, engine.onLaunchAttempt("app", lateNight, t0, OpenCheckContext(minuteOfDay = 3 * 60)))
+        assertEquals(OpenCheckDecision.Proceed, engine.onLaunchAttempt("app", lateNight, t0, OpenCheckContext(minuteOfDay = 12 * 60)))
+    }
+
+    @Test
+    fun `a schedule rule without a window is inert`() {
+        val rule = OpenCheckRule(OpenCheckMode.Schedule)
+        assertEquals(OpenCheckDecision.Proceed, OpenCheckEngine().onLaunchAttempt("app", rule, t0, OpenCheckContext(minuteOfDay = 0)))
+    }
+
+    // During-Focus trigger (#77): wired but inert until Focus (#9) lands.
+
+    private val duringFocus = OpenCheckRule(OpenCheckMode.DuringFocus)
+
+    @Test
+    fun `during focus the check shows`() {
+        val context = OpenCheckContext(focusActive = true)
+        assertIs<OpenCheckDecision.ShowCheck>(OpenCheckEngine().onLaunchAttempt("app", duringFocus, t0, context))
+    }
+
+    @Test
+    fun `with focus inactive the during-focus trigger is inert`() {
+        assertEquals(OpenCheckDecision.Proceed, OpenCheckEngine().onLaunchAttempt("app", duringFocus, t0, OpenCheckContext()))
+    }
+
+    // Bypass (#77): friction never stands between the user and a call or alarm.
+
+    @Test
+    fun `a bypassed app always proceeds whatever its rule`() {
+        val context = OpenCheckContext(bypass = true)
+        val engine = OpenCheckEngine()
+        assertEquals(OpenCheckDecision.Proceed, engine.onLaunchAttempt("app", always, t0, context))
+        assertEquals(OpenCheckDecision.Proceed, engine.onLaunchAttempt("app", thirtyDaily, t0,
+            OpenCheckContext(usedTodayMillis = Duration.ofHours(5).toMillis(), bypass = true)))
     }
 
     @Test

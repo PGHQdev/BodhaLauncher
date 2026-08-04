@@ -25,19 +25,42 @@ class IntentRecordStore(context: Context) {
         append(decision, CATEGORY_DISMISSED, text = null)
     }
 
+    /**
+     * A typed Open Check intention (#76): same file, same retention pruning,
+     * never anywhere else — the event log carries no text by construction.
+     */
+    fun appendOpenCheckIntention(text: String) {
+        append(CATEGORY_OPEN_CHECK, text, TRIGGER_OPEN_CHECK, session = null)
+    }
+
     private fun append(decision: PromptDecision, category: String, text: String?) {
+        append(category, text, decision.trigger.name, decision.session.value)
+    }
+
+    private fun append(category: String, text: String?, trigger: String, session: Any?) {
         val record = JSONObject()
             .put("category", category)
             .putOpt("text", text)
             .put("at", Instant.now().toEpochMilli())
-            .put("trigger", decision.trigger.name)
-            .put("session", decision.session.value)
+            .put("trigger", trigger)
+            .putOpt("session", session)
         file.appendText(record.toString() + "\n")
+    }
+
+    /** Drops records older than [epochMillis] — the retention worker's arm here (#19). */
+    fun pruneBefore(epochMillis: Long) {
+        if (!file.exists()) return
+        val kept = file.readLines().filter { line ->
+            runCatching { JSONObject(line).getLong("at") >= epochMillis }.getOrDefault(false)
+        }
+        file.writeText(if (kept.isEmpty()) "" else kept.joinToString("\n", postfix = "\n"))
     }
 
     private companion object {
         /** Free text submitted without picking one of the six categories. */
         const val CATEGORY_OTHER = "other"
         const val CATEGORY_DISMISSED = "dismissed"
+        const val CATEGORY_OPEN_CHECK = "open_check"
+        const val TRIGGER_OPEN_CHECK = "open_check"
     }
 }

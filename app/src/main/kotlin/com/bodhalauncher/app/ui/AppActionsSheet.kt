@@ -33,6 +33,8 @@ fun AppActionsSheet(
     isPinned: Boolean,
     isHidden: Boolean,
     openCheckMode: OpenCheckMode?,
+    /** False for classified emergency/utility apps with no rule (#77). */
+    openCheckOffered: Boolean,
     onOpen: () -> Unit,
     onShortcut: (AppShortcut) -> Unit,
     onPin: () -> Unit,
@@ -65,7 +67,7 @@ fun AppActionsSheet(
             SheetRow("Groups", onGroups)
             SheetRow("Pause", onPause)
             // Wording over glyphs (ADR 0010); the rule dialog holds edit and remove.
-            SheetRow(
+            if (openCheckOffered) SheetRow(
                 openCheckMode?.let { "Open Check · ${openCheckModeLabel(it).lowercase()}" } ?: "Open Check",
                 onOpenCheck,
             )
