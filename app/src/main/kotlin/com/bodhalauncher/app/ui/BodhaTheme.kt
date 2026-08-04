@@ -30,6 +30,19 @@ data class BodhaColors(
     /** Secondary text: date, digest, labels — the machinery. */
     val inkMuted: Color,
     val accent: Color,
+    /**
+     * A card's own ground, one step off [ground] (ADR 0025). Not a new colour
+     * decision — a card cannot be drawn without a fill, and the rule that cards
+     * exist is the reference's.
+     */
+    val surface: Color,
+    /**
+     * The tinted fill, and it means exactly one thing: *the current or
+     * summarising item* (ADR 0025). The other fill is [accent] solid, for the
+     * single primary action on a screen. Neither is available for anything else,
+     * which is why focus cannot use them.
+     */
+    val accentTint: Color,
     val hairline: Color,
     /** Genuine errors and destructive actions only — red never means "look here" (#26). */
     val error: Color,
@@ -40,6 +53,8 @@ private val Light = BodhaColors(
     ink = Color(0xFF2B261F),
     inkMuted = Color(0xFF7A7263),
     accent = Color(0xFF7D8C6F),
+    surface = Color(0xFFFBF8F1),
+    accentTint = Color(0x2E7D8C6F),
     hairline = Color(0x332B261F),
     error = Color(0xFF9C4A38),
 )
@@ -49,6 +64,8 @@ private val Dark = BodhaColors(
     ink = Color(0xFFEAE3D6),
     inkMuted = Color(0xFF9A9184),
     accent = Color(0xFF93A284),
+    surface = Color(0xFF2A2721),
+    accentTint = Color(0x3393A284),
     hairline = Color(0x33EAE3D6),
     error = Color(0xFFC4796A),
 )

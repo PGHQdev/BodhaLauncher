@@ -68,6 +68,41 @@ fun DesignGallery() {
         // The actionable components, which is what makes this fixture answer the
         // accessibility floor and not only visual drift (ADR 0020). A component
         // the gallery cannot see is a component neither check covers.
+        // The visual vocabulary (ADR 0025). Rendered here first because the
+        // vocabulary is built as components before screens adopt it, and this
+        // fixture is what makes both guards see them.
+        SectionOverline("Vocabulary")
+        CardRow(
+            title = "Card row — a block acted on once",
+            subtitle = "Home actions, Today's slots, Settings",
+            onClick = {},
+            leading = { IconChip { Text("✎", style = BodhaType.body, color = colors.ink) } },
+            trailing = { TrailingChevron() },
+        )
+        Spacer(Modifier.height(BodhaSpacing.s))
+        CardRow(
+            title = "Tinted — the current or summarising item",
+            onClick = {},
+            emphasis = Emphasis.Tinted,
+        )
+        Spacer(Modifier.height(BodhaSpacing.s))
+        BodhaPill("Solid — the one primary action", onClick = {}, emphasis = Emphasis.Solid)
+        Spacer(Modifier.height(BodhaSpacing.s))
+        BodhaPill("Plain pill", onClick = {})
+        Spacer(Modifier.height(BodhaSpacing.s))
+        BodhaPill("Destructive pill", onClick = {}, destructive = true)
+        Spacer(Modifier.height(BodhaSpacing.s))
+        BodhaField(name = "Gallery field") {
+            Text("Field — the pill shape, typed into", style = BodhaType.body, color = colors.inkMuted)
+        }
+        ListRow(
+            title = "List row — one entry in a list that scrolls",
+            subtitle = "Search results, Library apps, Context modes",
+            onClick = {},
+            trailing = { TrailingChevron() },
+        )
+        Spacer(Modifier.height(BodhaSpacing.xl))
+
         Text("Actionable components", style = BodhaType.overline, color = colors.inkMuted)
         PinRow(action = GALLERY_APP, onAction = {}, onLongPress = {})
         AddPinRow(onAdd = {})
