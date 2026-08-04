@@ -1,6 +1,7 @@
 package com.bodhalauncher.app.ui
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -10,13 +11,21 @@ import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Text
@@ -29,6 +38,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
@@ -37,27 +47,33 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bodhalauncher.engine.HomeAction
 import com.bodhalauncher.engine.LibraryIndexEntry
+import com.bodhalauncher.engine.LibraryLayout
 import com.bodhalauncher.engine.LibraryState
 import kotlinx.coroutines.launch
 
 /**
  * The App Library: a quiet text-first list of launchable apps (ADR 0010 —
- * left-aligned hairline machinery, no icons or badges), with a search field
- * above and a letter rail beside the rows [LibraryState] resolved. Tap opens,
- * a rightward swipe pins to Home. Pulling down past the list's top returns
- * Home, mirroring the swipe-up that opened it; back does the same via the
- * caller's BackHandler.
+ * left-aligned hairline machinery, no badges), with a search field and layout
+ * switcher above the rows [LibraryState] resolved. Optional layouts render the
+ * same resolved content denser (compact icons) or grouped (categories). Tap
+ * opens, a rightward swipe pins to Home, leftward hides, long-press opens the
+ * actions sheet. Pulling down past the top returns Home, mirroring the
+ * swipe-up that opened it; back does the same via the caller's BackHandler.
  */
 @Composable
 fun LibraryScreen(
     state: LibraryState,
     query: String,
     onQueryChange: (String) -> Unit,
+    onLayoutChange: (LibraryLayout) -> Unit,
+    iconFor: (HomeAction) -> ImageBitmap?,
     onOpen: (HomeAction) -> Unit,
     onLongPress: (HomeAction) -> Unit,
     onPin: (HomeAction) -> Unit,
@@ -114,58 +130,206 @@ fun LibraryScreen(
             modifier = Modifier.padding(bottom = 20.dp),
         )
         LibrarySearchField(query, onQueryChange)
+        LayoutSwitcher(state.layout, onLayoutChange)
         val hiddenExpanded = remember { mutableStateOf(false) }
-        val listState = rememberLazyListState()
+        val showHiddenRows = hiddenExpanded.value || query.isNotBlank()
         val scope = rememberCoroutineScope()
         Box(modifier = Modifier.fillMaxSize()) {
-            LazyColumn(
-                state = listState,
-                modifier = Modifier.fillMaxSize().nestedScroll(dismissOnOverscroll),
-            ) {
-                items(count = state.rows.size, key = { state.rows[it].id }) { index ->
-                    AppRow(
-                        state.rows[index],
-                        onOpen,
-                        onLongPress,
-                        onSwipeRight = onPin,
-                        onSwipeLeft = onHide,
+            if (state.layout == LibraryLayout.CompactIcons) {
+                val gridState = rememberLazyGridState()
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(minSize = 76.dp),
+                    state = gridState,
+                    modifier = Modifier.fillMaxSize().nestedScroll(dismissOnOverscroll),
+                ) {
+                    items(count = state.rows.size, key = { state.rows[it].id }) { i ->
+                        IconCell(state.rows[i], iconFor, onOpen, onLongPress)
+                    }
+                    hiddenSection(
+                        state.hiddenRows, hiddenExpanded.value, showHiddenRows,
+                        hiddenSearchable, onHiddenSearchableChange,
+                        onToggle = { hiddenExpanded.value = !hiddenExpanded.value },
+                        row = { app ->
+                            AppRow(app, onOpen, onLongPress, onSwipeRight = onUnhide)
+                        },
                     )
                 }
-                if (state.hiddenRows.isNotEmpty()) {
-                    item(key = "hidden-header") {
-                        HiddenHeader(
-                            count = state.hiddenRows.size,
-                            expanded = hiddenExpanded.value,
-                            onToggle = { hiddenExpanded.value = !hiddenExpanded.value },
-                        )
-                    }
-                    // A search that surfaced hidden matches shouldn't hide them behind a tap.
-                    if (hiddenExpanded.value || query.isNotBlank()) {
-                        item(key = "hidden-searchable") {
-                            HiddenSearchableRow(hiddenSearchable, onHiddenSearchableChange)
-                        }
-                        items(
-                            count = state.hiddenRows.size,
-                            key = { "hidden:" + state.hiddenRows[it].id },
-                        ) { index ->
+                if (state.index.isNotEmpty()) {
+                    AlphabetScrubber(
+                        index = state.index,
+                        onJump = { row -> scope.launch { gridState.scrollToItem(row) } },
+                        modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+                    )
+                }
+            } else {
+                val listState = rememberLazyListState()
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize().nestedScroll(dismissOnOverscroll),
+                ) {
+                    if (state.sections.isEmpty()) {
+                        items(count = state.rows.size, key = { state.rows[it].id }) { i ->
                             AppRow(
-                                state.hiddenRows[index],
-                                onOpen,
-                                onLongPress,
-                                onSwipeRight = onUnhide,
+                                state.rows[i], onOpen, onLongPress,
+                                onSwipeRight = onPin, onSwipeLeft = onHide,
                             )
                         }
+                    } else {
+                        state.sections.forEach { section ->
+                            item(key = "section:" + section.title) {
+                                SectionHeader(section.title)
+                            }
+                            items(
+                                count = section.rows.size,
+                                key = { section.rows[it].id },
+                            ) { i ->
+                                AppRow(
+                                    section.rows[i], onOpen, onLongPress,
+                                    onSwipeRight = onPin, onSwipeLeft = onHide,
+                                )
+                            }
+                        }
                     }
+                    hiddenSection(
+                        state.hiddenRows, hiddenExpanded.value, showHiddenRows,
+                        hiddenSearchable, onHiddenSearchableChange,
+                        onToggle = { hiddenExpanded.value = !hiddenExpanded.value },
+                        row = { app ->
+                            AppRow(app, onOpen, onLongPress, onSwipeRight = onUnhide)
+                        },
+                    )
+                }
+                if (state.index.isNotEmpty()) {
+                    AlphabetScrubber(
+                        index = state.index,
+                        onJump = { row -> scope.launch { listState.scrollToItem(row) } },
+                        modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+                    )
                 }
             }
-            if (state.index.isNotEmpty()) {
-                AlphabetScrubber(
-                    index = state.index,
-                    onJump = { row -> scope.launch { listState.scrollToItem(row) } },
-                    modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-                )
-            }
         }
+    }
+}
+
+/** The hidden section, shared by list and grid scopes via each scope's item builders. */
+private fun androidx.compose.foundation.lazy.LazyListScope.hiddenSection(
+    hiddenRows: List<HomeAction>,
+    expanded: Boolean,
+    showRows: Boolean,
+    hiddenSearchable: Boolean,
+    onHiddenSearchableChange: (Boolean) -> Unit,
+    onToggle: () -> Unit,
+    row: @Composable (HomeAction) -> Unit,
+) {
+    if (hiddenRows.isEmpty()) return
+    item(key = "hidden-header") { HiddenHeader(hiddenRows.size, expanded, onToggle) }
+    if (showRows) {
+        item(key = "hidden-searchable") {
+            HiddenSearchableRow(hiddenSearchable, onHiddenSearchableChange)
+        }
+        items(count = hiddenRows.size, key = { "hidden:" + hiddenRows[it].id }) { i ->
+            row(hiddenRows[i])
+        }
+    }
+}
+
+private fun androidx.compose.foundation.lazy.grid.LazyGridScope.hiddenSection(
+    hiddenRows: List<HomeAction>,
+    expanded: Boolean,
+    showRows: Boolean,
+    hiddenSearchable: Boolean,
+    onHiddenSearchableChange: (Boolean) -> Unit,
+    onToggle: () -> Unit,
+    row: @Composable (HomeAction) -> Unit,
+) {
+    if (hiddenRows.isEmpty()) return
+    val fullSpan: (androidx.compose.foundation.lazy.grid.LazyGridItemSpanScope) -> GridItemSpan =
+        { GridItemSpan(it.maxLineSpan) }
+    item(key = "hidden-header", span = fullSpan) { HiddenHeader(hiddenRows.size, expanded, onToggle) }
+    if (showRows) {
+        item(key = "hidden-searchable", span = fullSpan) {
+            HiddenSearchableRow(hiddenSearchable, onHiddenSearchableChange)
+        }
+        items(
+            count = hiddenRows.size,
+            key = { "hidden:" + hiddenRows[it].id },
+            span = { fullSpan(this) },
+        ) { i ->
+            row(hiddenRows[i])
+        }
+    }
+}
+
+@Composable
+private fun LayoutSwitcher(current: LibraryLayout, onChange: (LibraryLayout) -> Unit) {
+    val colors = LocalBodhaColors.current
+    Row(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+        layoutLabels.forEach { (layout, label) ->
+            Text(
+                text = label,
+                color = if (layout == current) colors.ink else colors.inkMuted,
+                fontSize = 13.sp,
+                modifier = Modifier
+                    .clickable { onChange(layout) }
+                    .padding(vertical = 4.dp),
+            )
+            Spacer(Modifier.width(20.dp))
+        }
+    }
+}
+
+private val layoutLabels = listOf(
+    LibraryLayout.Alphabetical to "A–Z",
+    LibraryLayout.CompactIcons to "Icons",
+    LibraryLayout.Categories to "Categories",
+)
+
+@Composable
+private fun SectionHeader(title: String) {
+    val colors = LocalBodhaColors.current
+    Text(
+        text = title,
+        color = colors.inkMuted,
+        fontSize = 13.sp,
+        letterSpacing = 1.sp,
+        modifier = Modifier.fillMaxWidth().padding(top = 20.dp, bottom = 8.dp),
+    )
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun IconCell(
+    app: HomeAction,
+    iconFor: (HomeAction) -> ImageBitmap?,
+    onOpen: (HomeAction) -> Unit,
+    onLongPress: (HomeAction) -> Unit,
+) {
+    val colors = LocalBodhaColors.current
+    val icon = remember(app.id) { iconFor(app) }
+    Column(
+        modifier = Modifier
+            .combinedClickable(
+                onClick = { onOpen(app) },
+                onLongClick = { onLongPress(app) },
+            )
+            .padding(vertical = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        if (icon != null) {
+            Image(bitmap = icon, contentDescription = null, modifier = Modifier.size(44.dp))
+        } else {
+            Box(Modifier.size(44.dp))
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            text = app.label,
+            color = colors.ink,
+            fontSize = 11.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 4.dp),
+        )
     }
 }
 

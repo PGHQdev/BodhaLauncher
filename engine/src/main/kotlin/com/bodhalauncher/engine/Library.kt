@@ -1,11 +1,24 @@
 package com.bodhalauncher.engine
 
+/** The library's view modes; [CompactIcons] renders the same rows denser, with icons. */
+enum class LibraryLayout {
+    Alphabetical,
+    CompactIcons,
+    Categories,
+}
+
+/** One titled group of the Categories layout. */
+data class LibrarySection(val title: String, val rows: List<HomeAction>)
+
 /**
  * Everything the App Library may draw from. Grows as the library's features ship
- * (search #59, hidden section #62, layouts #66); absent inputs mean absent elements.
+ * (recents #65, groups #67); absent inputs mean absent elements.
  */
 data class LibraryInputs(
     val apps: List<HomeAction> = emptyList(),
+    val layout: LibraryLayout = LibraryLayout.Alphabetical,
+    /** App id to category title; apps without one group under "Other". */
+    val categories: Map<String, String> = emptyMap(),
     /** Search text; blank means no filtering. Matches anywhere in the label, ignoring case. */
     val query: String = "",
     /** App ids the user has hidden; they collect in [LibraryState.hiddenRows]. */
@@ -19,9 +32,13 @@ data class LibraryIndexEntry(val letter: Char, val firstRow: Int)
 
 /** Resolved library content; the UI renders exactly this, in this order. */
 data class LibraryState(
+    val layout: LibraryLayout,
+    /** The flat list; what Alphabetical and CompactIcons render. */
     val rows: List<HomeAction>,
-    /** Scrubber entries for letters actually present in [rows], in row order. */
+    /** Scrubber entries for letters actually present in [rows]; empty for Categories. */
     val index: List<LibraryIndexEntry>,
+    /** Titled groups; non-empty only for the Categories layout, "Other" last. */
+    val sections: List<LibrarySection>,
     /** The hidden section: hidden apps, alphabetical; empty while a search excludes them. */
     val hiddenRows: List<HomeAction>,
 )
@@ -37,9 +54,22 @@ fun resolveLibrary(inputs: LibraryInputs): LibraryState {
     val hiddenRows = hiddenApps
         .filter { (query.isEmpty() || inputs.hiddenSearchable) && matches(it) }
         .sortedWith(alphabetical)
-    val index = rows.withIndex()
+    val categorised = inputs.layout == LibraryLayout.Categories
+    val index = if (categorised) emptyList() else rows.withIndex()
         .groupBy { (_, app) -> app.label.firstOrNull()?.uppercaseChar()?.takeIf { it in 'A'..'Z' } ?: '#' }
         .map { (letter, entries) -> LibraryIndexEntry(letter, entries.first().index) }
         .sortedBy { it.firstRow }
-    return LibraryState(rows = rows, index = index, hiddenRows = hiddenRows)
+    val sections = if (!categorised) emptyList() else rows
+        .groupBy { inputs.categories[it.id] ?: OTHER_CATEGORY }
+        .map { (title, apps) -> LibrarySection(title, apps) }
+        .sortedWith(compareBy({ it.title == OTHER_CATEGORY }, { it.title }))
+    return LibraryState(
+        layout = inputs.layout,
+        rows = rows,
+        index = index,
+        sections = sections,
+        hiddenRows = hiddenRows,
+    )
 }
+
+const val OTHER_CATEGORY = "Other"

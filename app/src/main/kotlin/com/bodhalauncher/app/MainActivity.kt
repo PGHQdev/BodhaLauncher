@@ -119,10 +119,14 @@ private fun HomeRoot(
             var query by remember { mutableStateOf("") }
             var actionsFor by remember { mutableStateOf<HomeAction?>(null) }
             val hiddenSearchable by libraryStore.hiddenSearchable
+            val layout by libraryStore.layout
+            val categories by catalog.categories
             LibraryScreen(
                 state = resolveLibrary(
                     LibraryInputs(
                         apps = allApps,
+                        layout = layout,
+                        categories = categories,
                         query = query,
                         hidden = hidden,
                         hiddenSearchable = hiddenSearchable,
@@ -130,6 +134,8 @@ private fun HomeRoot(
                 ),
                 query = query,
                 onQueryChange = { query = it },
+                onLayoutChange = libraryStore::setLayout,
+                iconFor = { catalog.icon(it.id) },
                 onOpen = catalog::launch,
                 onLongPress = { actionsFor = it },
                 onPin = { pinStore.pin(it.id) },

@@ -2,6 +2,7 @@ package com.bodhalauncher.app.home
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.content.pm.LauncherApps
 import android.net.Uri
 import android.os.Handler
@@ -11,6 +12,9 @@ import android.os.UserHandle
 import android.os.UserManager
 import android.provider.Settings
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.core.graphics.drawable.toBitmap
 import com.bodhalauncher.engine.HomeAction
 
 /** A static or dynamic app shortcut ("New chat", "Selfie") exposed by an installed app. */
@@ -31,6 +35,9 @@ class AppCatalog(private val context: Context) {
 
     /** All launchable apps across profiles; updates as packages and profiles change. */
     val apps = mutableStateOf(queryApps())
+
+    /** App id to Android's category title, for ids Android categorises at all. */
+    val categories = mutableStateOf(queryCategories())
 
     /** Fires with the ids of apps that were uninstalled, so stale state can drop out. */
     var onAppsRemoved: ((Set<String>) -> Unit)? = null
@@ -108,9 +115,24 @@ class AppCatalog(private val context: Context) {
         )
     }
 
+    /** The app's launcher icon, ready for Compose. */
+    fun icon(id: String): ImageBitmap? =
+        launcherApps.getActivityList(packageOf(id), handleOf(id) ?: Process.myUserHandle())
+            .firstOrNull()?.getIcon(0)?.toBitmap()?.asImageBitmap()
+
     private fun refresh() {
         apps.value = queryApps()
+        categories.value = queryCategories()
     }
+
+    private fun queryCategories(): Map<String, String> =
+        launcherApps.profiles.flatMap { profile ->
+            launcherApps.getActivityList(null, profile).mapNotNull { activity ->
+                val info = activity.applicationInfo
+                ApplicationInfo.getCategoryTitle(context, info.category)
+                    ?.let { idFor(info.packageName, profile) to it.toString() }
+            }
+        }.toMap()
 
     private fun queryApps(): List<HomeAction> =
         launcherApps.profiles.flatMap { profile ->

@@ -165,6 +165,60 @@ class LibraryReducerTest {
     }
 
     @Test
+    fun `compact icons keeps the alphabetical rows and index`() {
+        val library = resolveLibrary(
+            LibraryInputs(
+                apps = listOf(app("Signal"), app("Camera")),
+                layout = LibraryLayout.CompactIcons,
+            )
+        )
+
+        assertEquals(listOf("Camera", "Signal"), library.rows.map { it.label })
+        assertEquals(2, library.index.size)
+        assertTrue(library.sections.isEmpty())
+    }
+
+    @Test
+    fun `categories groups rows into titled sections, uncategorized last`() {
+        val library = resolveLibrary(
+            LibraryInputs(
+                apps = listOf(app("Signal"), app("Chess"), app("Doom"), app("Ledger")),
+                layout = LibraryLayout.Categories,
+                categories = mapOf("chess" to "Games", "doom" to "Games", "signal" to "Social"),
+            )
+        )
+
+        assertEquals(listOf("Games", "Social", "Other"), library.sections.map { it.title })
+        assertEquals(listOf("Chess", "Doom"), library.sections[0].rows.map { it.label })
+        assertEquals(listOf("Ledger"), library.sections[2].rows.map { it.label })
+    }
+
+    @Test
+    fun `categories respects hidden apps and search`() {
+        val library = resolveLibrary(
+            LibraryInputs(
+                apps = listOf(app("Chess"), app("Doom"), app("Signal")),
+                layout = LibraryLayout.Categories,
+                categories = mapOf("chess" to "Games", "doom" to "Games"),
+                hidden = setOf("doom"),
+                query = "ches",
+            )
+        )
+
+        assertEquals(listOf("Games"), library.sections.map { it.title })
+        assertEquals(listOf("Chess"), library.sections[0].rows.map { it.label })
+    }
+
+    @Test
+    fun `categories layout has no scrubber index`() {
+        val library = resolveLibrary(
+            LibraryInputs(apps = listOf(app("Chess")), layout = LibraryLayout.Categories)
+        )
+
+        assertTrue(library.index.isEmpty())
+    }
+
+    @Test
     fun `every app passed in appears in the rows`() {
         val apps = listOf(app("A"), app("B"), app("C"), app("D"))
 
