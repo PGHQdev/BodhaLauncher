@@ -43,6 +43,8 @@ import java.time.LocalDateTime
 
 class MainActivity : ComponentActivity() {
 
+    private lateinit var catalog: AppCatalog
+
     override fun onResume() {
         super.onResume()
         (application as BodhaApp).intentPrompt.onLauncherVisible()
@@ -60,12 +62,21 @@ class MainActivity : ComponentActivity() {
         val pinStore = PinStore(this)
         val intentionStore = IntentionStore(this)
         val libraryStore = LibraryStore(this)
-        val catalog = AppCatalog(this)
+        catalog = AppCatalog(this)
+        catalog.onAppsRemoved = { ids ->
+            ids.forEach { pinStore.unpin(it); pinStore.unhide(it) }
+        }
+        catalog.startWatching()
         setContent {
             BodhaTheme {
                 HomeRoot(pinStore, intentionStore, libraryStore, catalog, app.intentPrompt)
             }
         }
+    }
+
+    override fun onDestroy() {
+        catalog.stopWatching()
+        super.onDestroy()
     }
 }
 
@@ -90,9 +101,10 @@ private fun HomeRoot(
 ) {
     val pinnedIds by pinStore.pinned
     val hidden by pinStore.hidden
+    val allApps by catalog.apps
     val intention by intentionStore.intention
     val sessionIntent by intentPrompt.sessionIntent
-    val pinned = remember(pinnedIds) { catalog.resolve(pinnedIds) }
+    val pinned = remember(pinnedIds, allApps) { catalog.resolve(pinnedIds) }
     var pickerOpen by remember { mutableStateOf(false) }
     var optionsFor by remember { mutableStateOf<HomeAction?>(null) }
     var editingIntention by remember { mutableStateOf(false) }
@@ -104,14 +116,13 @@ private fun HomeRoot(
         val back = { surface = HomeSurface.Home }
         BackHandler(onBack = back)
         if (surface == HomeSurface.Library) {
-            val apps = remember { catalog.installedApps() }
             var query by remember { mutableStateOf("") }
             var actionsFor by remember { mutableStateOf<HomeAction?>(null) }
             val hiddenSearchable by libraryStore.hiddenSearchable
             LibraryScreen(
                 state = resolveLibrary(
                     LibraryInputs(
-                        apps = apps,
+                        apps = allApps,
                         query = query,
                         hidden = hidden,
                         hiddenSearchable = hiddenSearchable,
@@ -207,9 +218,8 @@ private fun HomeRoot(
     }
 
     if (pickerOpen) {
-        val apps = remember { catalog.installedApps() }
         AppPickerDialog(
-            apps = apps.filter { it.id !in pinnedIds },
+            apps = allApps.filter { it.id !in pinnedIds },
             onPick = { pinStore.pin(it.id); pickerOpen = false },
             onDismiss = { pickerOpen = false },
         )
