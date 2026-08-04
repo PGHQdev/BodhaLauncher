@@ -1,4 +1,4 @@
-package app.bodha.launcher
+package com.bodhalauncher.app
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity

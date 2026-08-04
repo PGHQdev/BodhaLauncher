@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace = "app.bodha.launcher"
+    namespace = "com.bodhalauncher.app"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "app.bodha.launcher"
+        applicationId = "com.bodhalauncher.app"
         minSdk = 29
         targetSdk = 36
         versionCode = 1
