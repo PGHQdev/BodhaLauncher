@@ -1,6 +1,6 @@
 # Bodha
 
-Intentional Android launcher. Kotlin + Jetpack Compose. Open source; distributed on Google Play.
+Intentional Android launcher. Kotlin + Jetpack Compose. Fair Source (FSL-1.1-ALv2 — each release becomes Apache-2.0 two years on); distributed on Google Play.
 
 Product and screen specs live as GitHub issues (`Spec: …`, #1–#27; roadmap and open decisions in #28). Visual reference: `bodhalauncher.png`.
 
