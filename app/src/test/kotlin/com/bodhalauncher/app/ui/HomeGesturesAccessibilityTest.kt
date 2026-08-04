@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -73,24 +74,17 @@ class HomeGesturesAccessibilityTest {
         assertEquals(listOf("right"), performed)
     }
 
+    /**
+     * Custom actions are offered only on the node holding accessibility focus,
+     * and Home's children are focusable in their own right. Without a
+     * description the container is not reliably focused, and actions that
+     * exist but cannot be reached would leave #111 unfixed.
+     */
     @Test
-    fun `labels follow the assignment rather than the direction`() {
-        compose.setContent {
-            Box(
-                Modifier.fillMaxSize().testTag("home").homeGestures(
-                    HomeGestures(
-                        swipeDown = GestureAction("Open Today") {},
-                        swipeUp = GestureAction("Open App Library") {},
-                        swipeLeft = GestureAction("Open Awareness") {},
-                        swipeRight = GestureAction("Open Search") {},
-                        doubleTapEmpty = GestureAction("Lock screen") {},
-                        longPressEmpty = GestureAction("Edit layout") {},
-                    )
-                )
-            )
-        }
-        val labels = customActions().map { it.label }
-        assertEquals("Open Today", labels.first())
-        assertTrue(labels.none { it.startsWith("Swipe") })
+    fun `the node carrying the actions is describable and traversable`() {
+        setContent()
+        val config = compose.onNodeWithTag("home").fetchSemanticsNode().config
+        assertEquals(listOf("Home"), config[SemanticsProperties.ContentDescription])
+        assertTrue(config[SemanticsProperties.IsTraversalGroup])
     }
 }

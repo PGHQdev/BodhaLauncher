@@ -42,8 +42,8 @@ import com.bodhalauncher.app.ui.AppActionsSheet
 import com.bodhalauncher.app.ui.AppPickerDialog
 import com.bodhalauncher.app.ui.BodhaTheme
 import com.bodhalauncher.app.ui.EditHomeDialog
-import com.bodhalauncher.app.ui.GroupPickerDialog
 import com.bodhalauncher.app.ui.GestureAction
+import com.bodhalauncher.app.ui.GroupPickerDialog
 import com.bodhalauncher.app.ui.HomeGestures
 import com.bodhalauncher.app.ui.HomeScreen
 import com.bodhalauncher.app.ui.IntentPromptSheet
@@ -138,6 +138,10 @@ private enum class HomeSurface(val title: String) {
     Today("Today"),
     Focus("Focus"),
 }
+
+/** The label comes from the surface, so renaming one renames what TalkBack announces. */
+private fun openSurface(target: HomeSurface, go: (HomeSurface) -> Unit) =
+    GestureAction("Open ${target.title}") { go(target) }
 
 private val homeActionSaver = listSaver<HomeAction?, String>(
     save = { it?.let { action -> listOf(action.id, action.label) } ?: emptyList() },
@@ -551,12 +555,12 @@ private fun HomeRoot(
             // Labels name the destination, so they stay true when ADR 0011's
             // reassignment lands and a swipe points somewhere else.
             gestures = HomeGestures(
-                swipeDown = GestureAction("Open Search") { surface = HomeSurface.Search },
-                swipeUp = GestureAction("Open App Library") { surface = HomeSurface.Library },
-                swipeLeft = GestureAction("Open Awareness") { surface = HomeSurface.Awareness },
-                swipeRight = GestureAction("Open Today") { surface = HomeSurface.Today },
+                swipeDown = openSurface(HomeSurface.Search) { surface = it },
+                swipeUp = openSurface(HomeSurface.Library) { surface = it },
+                swipeLeft = openSurface(HomeSurface.Awareness) { surface = it },
+                swipeRight = openSurface(HomeSurface.Today) { surface = it },
                 // Lock mechanism is settled in the permissions spec (#18); stub until then.
-                doubleTapEmpty = GestureAction("Lock screen") {
+                doubleTapEmpty = GestureAction("Lock phone") {
                     Toast.makeText(context, "Lock — mechanism pending", Toast.LENGTH_SHORT).show()
                 },
                 longPressEmpty = GestureAction("Edit layout") { editingHome = true },

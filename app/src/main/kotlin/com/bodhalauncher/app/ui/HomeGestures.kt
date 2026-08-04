@@ -6,7 +6,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import kotlin.math.abs
@@ -45,6 +47,12 @@ data class HomeGestures(
 
 fun Modifier.homeGestures(gestures: HomeGestures): Modifier = this
     .semantics {
+        // Custom actions are offered only on the node holding accessibility
+        // focus, and a node with no description is not reliably focusable when
+        // its children are. Naming the surface and marking it a traversal group
+        // is what makes the actions actually reachable rather than merely present.
+        contentDescription = "Home"
+        isTraversalGroup = true
         customActions = gestures.all.map { action ->
             CustomAccessibilityAction(action.label) {
                 action.perform()
