@@ -1,0 +1,460 @@
+<title>Bodha — Visual Direction Specimen</title>
+<style>
+  :root {
+    --paper: #f5f1e8; --ink: #2e2a24; --muted: #7d7668; --sage: #6b7d5e;
+    --card: #fbf8f1; --line: #d9d2c2; --accent-ink: #3d4a35;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --paper: #211f1a; --ink: #e8e2d4; --muted: #9a927f; --sage: #8ba07a;
+            --card: #2a2721; --line: #3d3930; --accent-ink: #aabf99; }
+  }
+  :root[data-theme="light"] {
+    --paper: #f5f1e8; --ink: #2e2a24; --muted: #7d7668; --sage: #6b7d5e;
+    --card: #fbf8f1; --line: #d9d2c2; --accent-ink: #3d4a35;
+  }
+  :root[data-theme="dark"] {
+    --paper: #211f1a; --ink: #e8e2d4; --muted: #9a927f; --sage: #8ba07a;
+    --card: #2a2721; --line: #3d3930; --accent-ink: #aabf99;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font-family: system-ui, -apple-system, sans-serif;
+    padding: 2.5rem 1rem 7rem;
+    transition: background .3s;
+  }
+  .serif { font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif; }
+  main { max-width: 68rem; margin: 0 auto; }
+  header.page { text-align: center; margin-bottom: 2.5rem; }
+  header.page h1 { font-size: 2.2rem; margin: 0 0 .3rem; font-weight: 500; }
+  header.page p { color: var(--muted); margin: 0; font-size: .95rem; }
+  .variant { display: none; }
+  .variant.active { display: block; }
+  .vhead { max-width: 42rem; margin: 0 auto 2rem; text-align: center; }
+  .vhead .eyebrow { text-transform: uppercase; letter-spacing: .14em; font-size: .72rem; color: var(--sage); font-weight: 600; }
+  .vhead h2 { margin: .35rem 0 .5rem; font-size: 1.7rem; font-weight: 500; text-wrap: balance; }
+  .vhead p { color: var(--muted); line-height: 1.55; margin: 0; font-size: .95rem; }
+  .cols { display: flex; flex-wrap: wrap; gap: 2.5rem; justify-content: center; align-items: flex-start; }
+  .spec { flex: 1 1 20rem; max-width: 26rem; display: flex; flex-direction: column; gap: 1.8rem; }
+  .spec h3 { font-size: .72rem; text-transform: uppercase; letter-spacing: .14em; color: var(--muted); margin: 0 0 .8rem; font-weight: 600; }
+  .chips { display: flex; gap: .5rem; }
+  .chip { flex: 1; border-radius: .5rem; height: 3.2rem; border: 1px solid var(--line); position: relative; }
+  .chip span { position: absolute; bottom: -1.3rem; left: 0; font-size: .62rem; color: var(--muted); white-space: nowrap; }
+  .chips { margin-bottom: 1.3rem; }
+
+  /* phone frame */
+  .phone {
+    width: 19.5rem; border-radius: 2.2rem; padding: .55rem;
+    background: #1a1813; box-shadow: 0 14px 40px rgba(0,0,0,.18);
+    flex: 0 0 auto;
+  }
+  .screen { border-radius: 1.75rem; overflow: hidden; height: 39rem; padding: 1.4rem 1.15rem; display: flex; flex-direction: column; }
+
+  /* ============ A · Manuscript ============ */
+  .vA .screen { background: #f5f0e4; color: #33302a; }
+  .vA .clock { font-size: 3.4rem; line-height: 1; margin-top: 1.2rem; }
+  .vA .date { color: #8a8271; font-size: .85rem; margin-top: .45rem; }
+  .vA .intent { margin-top: 1.5rem; background: #fbf7ec; border: 1px solid #e0d8c4; border-radius: 1rem; padding: .85rem 1rem; }
+  .vA .intent .lbl { font-size: .68rem; text-transform: uppercase; letter-spacing: .1em; color: #92a184; font-weight: 600; }
+  .vA .intent .val { font-size: .95rem; margin-top: .2rem; }
+  .vA .acts { margin-top: 1.1rem; display: flex; flex-direction: column; gap: .55rem; }
+  .vA .act { display: flex; align-items: center; gap: .7rem; background: #fbf7ec; border: 1px solid #e0d8c4; border-radius: .85rem; padding: .7rem .95rem; font-size: .9rem; }
+  .vA .act .ico { width: 1.05rem; text-align: center; color: #6b7d5e; }
+  .vA .quiet { margin-top: auto; text-align: center; color: #a29a86; font-size: .8rem; font-style: italic; }
+  .vA .search { margin-top: .9rem; background: #efe9da; border-radius: 999px; padding: .65rem 1rem; font-size: .85rem; color: #8a8271; text-align: center; }
+
+  /* ============ B · Quiet Ink ============ */
+  .vB .screen { background: #f2efe9; color: #3a362f; font-family: "Iowan Old Style", Palatino, Georgia, serif; }
+  .vB .clock { font-size: 3rem; line-height: 1; margin-top: 1.4rem; letter-spacing: .01em; }
+  .vB .date { font-size: .85rem; color: #8c8577; margin-top: .4rem; font-style: italic; }
+  .vB .rule { border: 0; border-top: 1px solid #cfc8b8; margin: 1.3rem 0 0; }
+  .vB .sect { font-size: .66rem; letter-spacing: .18em; text-transform: uppercase; color: #8c8577; margin: 1.1rem 0 .5rem; font-family: system-ui, sans-serif; }
+  .vB .row { display: flex; justify-content: space-between; align-items: baseline; padding: .5rem 0; border-bottom: 1px solid #e2dccd; font-size: .95rem; }
+  .vB .row em { font-style: normal; color: #4e5e42; }
+  .vB .row .meta { font-size: .78rem; color: #8c8577; }
+  .vB .quiet { margin-top: auto; text-align: center; color: #8c8577; font-size: .85rem; font-style: italic; }
+  .vB .search { margin-top: 1rem; border-top: 1px solid #cfc8b8; padding-top: .8rem; text-align: center; font-size: .85rem; color: #8c8577; font-style: italic; }
+
+  /* ============ C · Modern Calm ============ */
+  .vC .screen { background: linear-gradient(175deg, #eef0e7, #e4e8db); color: #2f342b; }
+  .vC .clock { font-size: 3.2rem; line-height: 1; margin-top: 1.2rem; font-weight: 300; letter-spacing: -.02em; }
+  .vC .date { color: #78816d; font-size: .85rem; margin-top: .4rem; }
+  .vC .intent { margin-top: 1.5rem; background: #6b7d5e; color: #f2f4ec; border-radius: 1.4rem; padding: 1rem 1.15rem; }
+  .vC .intent .lbl { font-size: .68rem; text-transform: uppercase; letter-spacing: .1em; opacity: .75; font-weight: 600; }
+  .vC .intent .val { font-size: 1rem; margin-top: .25rem; font-weight: 500; }
+  .vC .acts { margin-top: 1.1rem; display: flex; flex-direction: column; gap: .55rem; }
+  .vC .act { display: flex; align-items: center; gap: .7rem; background: rgba(255,255,255,.65); border-radius: 999px; padding: .7rem 1.1rem; font-size: .9rem; font-weight: 500; }
+  .vC .act .ico { width: 1.05rem; text-align: center; color: #6b7d5e; }
+  .vC .quiet { margin-top: auto; text-align: center; color: #909a85; font-size: .8rem; }
+  .vC .search { margin-top: .9rem; background: rgba(255,255,255,.85); border-radius: 999px; padding: .7rem 1rem; font-size: .85rem; color: #78816d; text-align: center; box-shadow: 0 2px 8px rgba(60,70,50,.08); }
+
+  /* line icons (shared by hybrids) */
+  .li { width: .95em; height: .95em; stroke: currentColor; stroke-width: 1.3; fill: none;
+        stroke-linecap: round; stroke-linejoin: round; vertical-align: -.12em; flex: 0 0 auto; }
+
+  /* ============ D · Ink & Air (B×C, left clock, info beside) ============ */
+  .vD .screen { background: #f3f0e9; color: #35322b; }
+  .vD .top { display: flex; justify-content: space-between; align-items: flex-start; margin-top: 1.1rem; }
+  .vD .clock { font-size: 3.1rem; line-height: 1; }
+  .vD .date { color: #8c8577; font-size: .82rem; margin-top: .4rem; }
+  .vD .glance { display: flex; flex-direction: column; gap: .5rem; align-items: flex-end; margin-top: .5rem; }
+  .vD .glance div { display: flex; align-items: center; gap: .45rem; font-size: .8rem; color: #6d675b; }
+  .vD .glance .li { color: #5f7052; }
+  .vD .intent { margin: 1.4rem 0 0; padding: .9rem 0; border-top: 1px solid #d5cebd; border-bottom: 1px solid #d5cebd; font-size: 1.05rem; }
+  .vD .sect { font-size: .64rem; letter-spacing: .18em; text-transform: uppercase; color: #8c8577; margin: 1.2rem 0 .4rem; }
+  .vD .row { display: flex; align-items: center; gap: .65rem; padding: .55rem 0; border-bottom: 1px solid #e4ddcd; font-size: .92rem; }
+  .vD .row .li { color: #5f7052; }
+  .vD .row .meta { margin-left: auto; font-size: .76rem; color: #8c8577; }
+  .vD .quiet { margin-top: auto; text-align: center; color: #948c7a; font-size: .8rem; font-style: italic; }
+  .vD .search { margin-top: .9rem; border: 1px solid #d5cebd; border-radius: 999px; padding: .6rem 1rem; font-size: .84rem; color: #8c8577; text-align: center; }
+
+  /* ============ E · Centered Axis (B×C, centered clock, complication row) ============ */
+  .vE .screen { background: #f3f0e9; color: #35322b; text-align: center; }
+  .vE .clock { font-size: 3.4rem; line-height: 1; margin-top: 1.6rem; }
+  .vE .date { color: #8c8577; font-size: .82rem; margin-top: .45rem; }
+  .vE .comps { display: flex; justify-content: center; gap: 1.3rem; margin-top: 1rem; font-size: .8rem; color: #6d675b; }
+  .vE .comps span { display: inline-flex; align-items: center; gap: .4rem; }
+  .vE .comps .li { color: #5f7052; }
+  .vE .intent { margin-top: 1.5rem; font-size: 1.05rem; font-style: italic; }
+  .vE .hr { border: 0; border-top: 1px solid #d5cebd; margin: 1.2rem 2rem 0; }
+  .vE .row { display: flex; align-items: center; gap: .65rem; padding: .55rem .4rem; border-bottom: 1px solid #e4ddcd; font-size: .92rem; text-align: left; }
+  .vE .row .li { color: #5f7052; }
+  .vE .row .meta { margin-left: auto; font-size: .76rem; color: #8c8577; }
+  .vE .rows { margin-top: .9rem; }
+  .vE .quiet { margin-top: auto; color: #948c7a; font-size: .8rem; font-style: italic; }
+  .vE .search { margin-top: .9rem; border: 1px solid #d5cebd; border-radius: 999px; padding: .6rem 1rem; font-size: .84rem; color: #8c8577; }
+
+  /* ============ F · Soft Ink (C-lean, centered light clock, pills) ============ */
+  .vF .screen { background: #f0eee6; color: #32362d; text-align: center; }
+  .vF .clock { font-size: 3.3rem; line-height: 1; margin-top: 1.5rem; font-weight: 300; letter-spacing: -.02em; }
+  .vF .date { color: #85897b; font-size: .82rem; margin-top: .4rem; }
+  .vF .comps { display: flex; justify-content: center; gap: 1.2rem; margin-top: .9rem; font-size: .8rem; color: #6f7466; }
+  .vF .comps span { display: inline-flex; align-items: center; gap: .4rem; }
+  .vF .comps .li { color: #5f7052; }
+  .vF .intent { margin-top: 1.4rem; font-size: 1.1rem; }
+  .vF .acts { margin-top: 1.3rem; display: flex; flex-direction: column; gap: .55rem; }
+  .vF .act { display: flex; align-items: center; gap: .7rem; background: rgba(255,255,255,.6); border-radius: 999px; padding: .68rem 1.1rem; font-size: .9rem; text-align: left; }
+  .vF .act .li { color: #5f7052; }
+  .vF .act .meta { margin-left: auto; font-size: .76rem; color: #85897b; }
+  .vF .quiet { margin-top: auto; color: #949887; font-size: .8rem; }
+  .vF .search { margin-top: .9rem; background: rgba(255,255,255,.8); border-radius: 999px; padding: .65rem 1rem; font-size: .84rem; color: #85897b; }
+
+  /* type scale block */
+  .scale { display: flex; flex-direction: column; gap: .55rem; }
+  .scale .l { display: flex; align-items: baseline; gap: .8rem; }
+  .scale .tag { font-size: .62rem; color: var(--muted); width: 4.6rem; flex: 0 0 auto; text-transform: uppercase; letter-spacing: .08em; }
+
+  /* switcher */
+  .bar {
+    position: fixed; bottom: 1.2rem; left: 50%; transform: translateX(-50%);
+    background: #24221c; color: #f0ead9; border-radius: 999px;
+    display: flex; align-items: center; gap: .3rem; padding: .35rem .5rem;
+    box-shadow: 0 8px 26px rgba(0,0,0,.35); font-size: .85rem; z-index: 50;
+  }
+  .bar button {
+    background: none; border: 0; color: inherit; font-size: 1rem; cursor: pointer;
+    width: 2.2rem; height: 2.2rem; border-radius: 999px;
+  }
+  .bar button:hover, .bar button:focus-visible { background: rgba(255,255,255,.14); outline: none; }
+  .bar .label { min-width: 11.5rem; text-align: center; font-weight: 500; }
+</style>
+
+<main>
+  <header class="page">
+    <h1 class="serif">Bodha — Visual Direction</h1>
+    <p>Three directions over the same Home content, anchored to <code>bodhalauncher.png</code>. Flip with the bar below or ←/→ keys.</p>
+  </header>
+
+  <!-- A -->
+  <section class="variant vA active" id="vA">
+    <div class="vhead">
+      <div class="eyebrow">Direction A</div>
+      <h2 class="serif">Manuscript</h2>
+      <p>The anchor image, committed to: warm paper ground, a high-contrast serif voice for the clock and headings, a quiet humanist sans for interface text, soft outlined cards, sage used sparingly. Feels like a well-made notebook.</p>
+    </div>
+    <div class="cols">
+      <div class="phone"><div class="screen">
+        <div class="clock serif">9:41</div>
+        <div class="date">Tuesday 4 August</div>
+        <div class="intent"><div class="lbl">Today</div><div class="val serif">Finish the Bodha prototype</div></div>
+        <div class="acts">
+          <div class="act"><span class="ico">✎</span> Continue writing</div>
+          <div class="act"><span class="ico">▦</span> Design review · 11:30</div>
+          <div class="act"><span class="ico">✆</span> Call Mom</div>
+          <div class="act"><span class="ico">◔</span> Nothing urgent — all caught up</div>
+        </div>
+        <div class="quiet serif">Clarity is the first step.</div>
+        <div class="search">Search apps, contacts, actions</div>
+      </div></div>
+      <div class="spec">
+        <div><h3>Palette</h3>
+          <div class="chips">
+            <div class="chip" style="background:#f5f0e4"><span>paper #F5F0E4</span></div>
+            <div class="chip" style="background:#fbf7ec"><span>card #FBF7EC</span></div>
+            <div class="chip" style="background:#33302a"><span>ink #33302A</span></div>
+            <div class="chip" style="background:#6b7d5e"><span>sage #6B7D5E</span></div>
+            <div class="chip" style="background:#e0d8c4"><span>line #E0D8C4</span></div>
+          </div>
+        </div>
+        <div><h3>Type</h3>
+          <div class="scale">
+            <div class="l"><span class="tag">display</span><span class="serif" style="font-size:1.9rem">Bodha 9:41</span></div>
+            <div class="l"><span class="tag">heading</span><span class="serif" style="font-size:1.2rem">What are you here for?</span></div>
+            <div class="l"><span class="tag">body</span><span style="font-size:.95rem">Interface text is a humanist sans — quiet, legible, never the voice.</span></div>
+            <div class="l"><span class="tag">label</span><span style="font-size:.7rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted)">Section label</span></div>
+          </div>
+        </div>
+        <div><h3>Character</h3>
+          <p style="margin:0;font-size:.9rem;color:var(--muted);line-height:1.55">Serif display + sans UI. Cards carry structure; hairlines and warmth carry calm. The direction the anchor image already speaks.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- B -->
+  <section class="variant vB" id="vB">
+    <div class="vhead">
+      <div class="eyebrow">Direction B</div>
+      <h2 class="serif">Quiet Ink</h2>
+      <p>Push the paper metaphor to its end: book typography throughout — serif body included — hairline rules instead of cards, near-monochrome warm ink, green demoted to a single text accent. The launcher as a printed page.</p>
+    </div>
+    <div class="cols">
+      <div class="phone"><div class="screen">
+        <div class="clock">9:41</div>
+        <div class="date">Tuesday the 4th of August</div>
+        <hr class="rule">
+        <div class="sect">Today</div>
+        <div class="row"><em>Finish the Bodha prototype</em></div>
+        <div class="row"><span>Design review</span><span class="meta">11:30</span></div>
+        <div class="row"><span>Continue writing</span><span class="meta">24 min ago</span></div>
+        <div class="row"><span>Call Mom</span><span class="meta">mobile</span></div>
+        <div class="sect">Notifications</div>
+        <div class="row"><span>Nothing urgent</span><span class="meta">all clear</span></div>
+        <div class="quiet">Clarity is the first step.</div>
+        <div class="search">search…</div>
+      </div></div>
+      <div class="spec">
+        <div><h3>Palette</h3>
+          <div class="chips">
+            <div class="chip" style="background:#f2efe9"><span>paper #F2EFE9</span></div>
+            <div class="chip" style="background:#3a362f"><span>ink #3A362F</span></div>
+            <div class="chip" style="background:#8c8577"><span>faded #8C8577</span></div>
+            <div class="chip" style="background:#4e5e42"><span>accent #4E5E42</span></div>
+            <div class="chip" style="background:#cfc8b8"><span>rule #CFC8B8</span></div>
+          </div>
+        </div>
+        <div><h3>Type</h3>
+          <div class="scale">
+            <div class="l"><span class="tag">display</span><span class="serif" style="font-size:1.9rem">Bodha 9:41</span></div>
+            <div class="l"><span class="tag">body</span><span class="serif" style="font-size:.98rem">Body text is serif too — the whole surface reads like a book page.</span></div>
+            <div class="l"><span class="tag">label</span><span style="font-size:.66rem;text-transform:uppercase;letter-spacing:.18em;color:var(--muted)">Small caps labels in sans</span></div>
+          </div>
+        </div>
+        <div><h3>Character</h3>
+          <p style="margin:0;font-size:.9rem;color:var(--muted);line-height:1.55">Most distinctive, most opinionated. No cards, no chrome — rules and rhythm. Risks feeling austere; unbeatable calm if it lands.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- C -->
+  <section class="variant vC" id="vC">
+    <div class="vhead">
+      <div class="eyebrow">Direction C</div>
+      <h2 class="serif">Modern Calm</h2>
+      <p>Drop the serif entirely: a light grotesk voice, sage-tinted surfaces, pill affordances, one saturated intention card as the anchor. Tests whether the serif is essential to Bodha — or whether calm can be carried by space and softness alone.</p>
+    </div>
+    <div class="cols">
+      <div class="phone"><div class="screen">
+        <div class="clock">9:41</div>
+        <div class="date">Tuesday 4 August</div>
+        <div class="intent"><div class="lbl">Today</div><div class="val">Finish the Bodha prototype</div></div>
+        <div class="acts">
+          <div class="act"><span class="ico">✎</span> Continue writing</div>
+          <div class="act"><span class="ico">▦</span> Design review · 11:30</div>
+          <div class="act"><span class="ico">✆</span> Call Mom</div>
+          <div class="act"><span class="ico">◔</span> Nothing urgent</div>
+        </div>
+        <div class="quiet">All caught up.</div>
+        <div class="search">Search apps, contacts, actions</div>
+      </div></div>
+      <div class="spec">
+        <div><h3>Palette</h3>
+          <div class="chips">
+            <div class="chip" style="background:#eef0e7"><span>mist #EEF0E7</span></div>
+            <div class="chip" style="background:#ffffff"><span>surface #FFF</span></div>
+            <div class="chip" style="background:#2f342b"><span>ink #2F342B</span></div>
+            <div class="chip" style="background:#6b7d5e"><span>sage #6B7D5E</span></div>
+            <div class="chip" style="background:#78816d"><span>muted #78816D</span></div>
+          </div>
+        </div>
+        <div><h3>Type</h3>
+          <div class="scale">
+            <div class="l"><span class="tag">display</span><span style="font-size:1.9rem;font-weight:300;letter-spacing:-.02em">Bodha 9:41</span></div>
+            <div class="l"><span class="tag">heading</span><span style="font-size:1.15rem;font-weight:500">What are you here for?</span></div>
+            <div class="l"><span class="tag">body</span><span style="font-size:.95rem">One family, weight does the hierarchy. Softness comes from shape and tint.</span></div>
+            <div class="l"><span class="tag">label</span><span style="font-size:.7rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted)">Section label</span></div>
+          </div>
+        </div>
+        <div><h3>Character</h3>
+          <p style="margin:0;font-size:.9rem;color:var(--muted);line-height:1.55">Safest and most conventional — closest to Material-adjacent wellness apps. Easiest to build; least distinctive on a store listing.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+  <!-- shared icon defs -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <g id="i-cal"><rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><line x1="2.5" y1="6.5" x2="13.5" y2="6.5"/><line x1="5.5" y1="2" x2="5.5" y2="4.5"/><line x1="10.5" y1="2" x2="10.5" y2="4.5"/></g>
+      <g id="i-sun"><circle cx="8" cy="8" r="3"/><line x1="8" y1="1.5" x2="8" y2="3"/><line x1="8" y1="13" x2="8" y2="14.5"/><line x1="1.5" y1="8" x2="3" y2="8"/><line x1="13" y1="8" x2="14.5" y2="8"/><line x1="3.5" y1="3.5" x2="4.5" y2="4.5"/><line x1="11.5" y1="11.5" x2="12.5" y2="12.5"/></g>
+      <g id="i-leaf"><path d="M3 13 C3 6.5 7 3 13 3 C13 9.5 9 13 3 13 Z"/><path d="M3.5 12.5 C6 10 8.5 7.5 11 5"/></g>
+      <g id="i-pen"><path d="M3 13 L3.5 10.5 L11 3 L13 5 L5.5 12.5 Z"/></g>
+      <g id="i-phone"><rect x="4.5" y="1.8" width="7" height="12.4" rx="1.6"/><line x1="7" y1="12" x2="9" y2="12"/></g>
+      <g id="i-bell"><path d="M4 11 C4.8 10 5 8.8 5 7 C5 4.8 6.3 3.2 8 3.2 C9.7 3.2 11 4.8 11 7 C11 8.8 11.2 10 12 11 Z"/><path d="M6.8 12.8 C7 13.5 9 13.5 9.2 12.8"/></g>
+      <g id="i-book"><path d="M8 4 C6.8 2.9 4.6 2.7 2.5 3.2 L2.5 12.4 C4.6 11.9 6.8 12.1 8 13.2 C9.2 12.1 11.4 11.9 13.5 12.4 L13.5 3.2 C11.4 2.7 9.2 2.9 8 4 Z"/><line x1="8" y1="4.2" x2="8" y2="12.9"/></g>
+    </defs>
+  </svg>
+
+  <!-- D -->
+  <section class="variant vD" id="vD">
+    <div class="vhead">
+      <div class="eyebrow">Direction D — hybrid</div>
+      <h2 class="serif">Ink &amp; Air</h2>
+      <p>B's rhythm, C's cleanliness. Left-aligned serif clock with an at-a-glance column beside it — next event and weather as hairline glyphs, no emoji. Hairline sections instead of cards; sans interface text.</p>
+    </div>
+    <div class="cols">
+      <div class="phone"><div class="screen">
+        <div class="top">
+          <div><div class="clock serif">9:41</div><div class="date">Tuesday 4 August</div></div>
+          <div class="glance">
+            <div><svg class="li" viewBox="0 0 16 16"><use href="#i-cal"/></svg> 11:30 Design review</div>
+            <div><svg class="li" viewBox="0 0 16 16"><use href="#i-sun"/></svg> 22° Clear</div>
+            <div><svg class="li" viewBox="0 0 16 16"><use href="#i-leaf"/></svg> Focus · Writing 42m</div>
+          </div>
+        </div>
+        <div class="intent serif">Finish the Bodha prototype</div>
+        <div class="sect">Next</div>
+        <div class="row"><svg class="li" viewBox="0 0 16 16"><use href="#i-pen"/></svg> Continue writing <span class="meta">24 min ago</span></div>
+        <div class="row"><svg class="li" viewBox="0 0 16 16"><use href="#i-phone"/></svg> Call Mom <span class="meta">mobile</span></div>
+        <div class="sect">Notifications</div>
+        <div class="row"><svg class="li" viewBox="0 0 16 16"><use href="#i-bell"/></svg> Nothing urgent <span class="meta">all clear</span></div>
+        <div class="quiet serif">Clarity is the first step.</div>
+        <div class="search">Search apps, contacts, actions</div>
+      </div></div>
+      <div class="spec">
+        <div><h3>Blend</h3>
+          <p style="margin:0;font-size:.9rem;color:var(--muted);line-height:1.55">Serif reserved for the clock, the intention, and the closing line — everything operational is sans. Info beside the clock keeps the top edge dense with meaning without a single card.</p>
+        </div>
+        <div><h3>Axis tested</h3>
+          <p style="margin:0;font-size:.9rem;color:var(--muted);line-height:1.55">Clock <strong>left</strong>, glance column right. Compare with E/F for the centered answer.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- E -->
+  <section class="variant vE" id="vE">
+    <div class="vhead">
+      <div class="eyebrow">Direction E — hybrid</div>
+      <h2 class="serif">Centered Axis</h2>
+      <p>Same B×C blend on a centered spine: serif clock centered, a complication row of hairline glyphs directly beneath, the intention as a centered italic line, then a left-aligned list under a rule.</p>
+    </div>
+    <div class="cols">
+      <div class="phone"><div class="screen">
+        <div class="clock serif">9:41</div>
+        <div class="date">Tuesday 4 August</div>
+        <div class="comps">
+          <span><svg class="li" viewBox="0 0 16 16"><use href="#i-cal"/></svg> 11:30</span>
+          <span><svg class="li" viewBox="0 0 16 16"><use href="#i-sun"/></svg> 22°</span>
+          <span><svg class="li" viewBox="0 0 16 16"><use href="#i-leaf"/></svg> 42m</span>
+        </div>
+        <div class="intent serif">Finish the Bodha prototype</div>
+        <hr class="hr">
+        <div class="rows">
+          <div class="row"><svg class="li" viewBox="0 0 16 16"><use href="#i-pen"/></svg> Continue writing <span class="meta">24 min ago</span></div>
+          <div class="row"><svg class="li" viewBox="0 0 16 16"><use href="#i-cal"/></svg> Design review <span class="meta">11:30</span></div>
+          <div class="row"><svg class="li" viewBox="0 0 16 16"><use href="#i-phone"/></svg> Call Mom <span class="meta">mobile</span></div>
+          <div class="row"><svg class="li" viewBox="0 0 16 16"><use href="#i-bell"/></svg> Nothing urgent <span class="meta">all clear</span></div>
+        </div>
+        <div class="quiet serif">Clarity is the first step.</div>
+        <div class="search">Search apps, contacts, actions</div>
+      </div></div>
+      <div class="spec">
+        <div><h3>Blend</h3>
+          <p style="margin:0;font-size:.9rem;color:var(--muted);line-height:1.55">The complication row is the "info with the clock" pattern in its most classic form — three glyph-plus-value pairs, all stroke icons drawn from one 16px grid, nothing pictorial.</p>
+        </div>
+        <div><h3>Axis tested</h3>
+          <p style="margin:0;font-size:.9rem;color:var(--muted);line-height:1.55">Clock <strong>centered</strong>, serif voice kept. The centered spine gives the top half a shrine-like stillness; the list below stays workmanlike.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- F -->
+  <section class="variant vF" id="vF">
+    <div class="vhead">
+      <div class="eyebrow">Direction F — hybrid</div>
+      <h2 class="serif">Soft Ink</h2>
+      <p>The C-leaning blend: centered <em>light grotesk</em> clock, same complication row, serif kept only for the intention line, actions as soft pills. Tests whether the serif clock or the serif intention is the piece that matters.</p>
+    </div>
+    <div class="cols">
+      <div class="phone"><div class="screen">
+        <div class="clock">9:41</div>
+        <div class="date">Tuesday 4 August</div>
+        <div class="comps">
+          <span><svg class="li" viewBox="0 0 16 16"><use href="#i-cal"/></svg> 11:30</span>
+          <span><svg class="li" viewBox="0 0 16 16"><use href="#i-sun"/></svg> 22°</span>
+          <span><svg class="li" viewBox="0 0 16 16"><use href="#i-leaf"/></svg> 42m</span>
+        </div>
+        <div class="intent serif">Finish the Bodha prototype</div>
+        <div class="acts">
+          <div class="act"><svg class="li" viewBox="0 0 16 16"><use href="#i-pen"/></svg> Continue writing <span class="meta">24m</span></div>
+          <div class="act"><svg class="li" viewBox="0 0 16 16"><use href="#i-cal"/></svg> Design review <span class="meta">11:30</span></div>
+          <div class="act"><svg class="li" viewBox="0 0 16 16"><use href="#i-phone"/></svg> Call Mom</div>
+          <div class="act"><svg class="li" viewBox="0 0 16 16"><use href="#i-bell"/></svg> Nothing urgent</div>
+        </div>
+        <div class="quiet">All caught up.</div>
+        <div class="search">Search apps, contacts, actions</div>
+      </div></div>
+      <div class="spec">
+        <div><h3>Blend</h3>
+          <p style="margin:0;font-size:.9rem;color:var(--muted);line-height:1.55">One serif moment only — the intention — so the day's chosen sentence is literally the only thing on the phone in a different voice. Everything else is C's quiet grotesk and softness.</p>
+        </div>
+        <div><h3>Axis tested</h3>
+          <p style="margin:0;font-size:.9rem;color:var(--muted);line-height:1.55">Clock <strong>centered, sans</strong>. Compare against E to isolate what the serif clock contributes.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div class="bar" role="toolbar" aria-label="Variant switcher">
+  <button id="prev" aria-label="Previous direction">←</button>
+  <span class="label" id="label"></span>
+  <button id="next" aria-label="Next direction">→</button>
+</div>
+
+<script>
+  const variants = [
+    { id: "vA", name: "A — Manuscript" },
+    { id: "vB", name: "B — Quiet Ink" },
+    { id: "vC", name: "C — Modern Calm" },
+    { id: "vD", name: "D — Ink & Air" },
+    { id: "vE", name: "E — Centered Axis" },
+    { id: "vF", name: "F — Soft Ink" },
+  ];
+  let i = 3;
+  function show(n) {
+    i = (n + variants.length) % variants.length;
+    variants.forEach((v, k) => document.getElementById(v.id).classList.toggle("active", k === i));
+    document.getElementById("label").textContent = variants[i].name;
+  }
+  document.getElementById("prev").onclick = () => show(i - 1);
+  document.getElementById("next").onclick = () => show(i + 1);
+  document.addEventListener("keydown", (e) => {
+    if (e.target.matches("input, textarea, [contenteditable]")) return;
+    if (e.key === "ArrowLeft") show(i - 1);
+    if (e.key === "ArrowRight") show(i + 1);
+  });
+  show(0);
+</script>
