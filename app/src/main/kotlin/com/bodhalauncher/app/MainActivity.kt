@@ -19,6 +19,7 @@ import com.bodhalauncher.app.home.AppCatalog
 import com.bodhalauncher.app.home.IntentionStore
 import com.bodhalauncher.app.home.LibraryStore
 import com.bodhalauncher.app.home.PinStore
+import com.bodhalauncher.app.home.UsageReader
 import com.bodhalauncher.app.intent.IntentPromptRuntime
 import androidx.compose.ui.platform.LocalContext
 import com.bodhalauncher.app.ui.ActionOptionsDialog
@@ -121,6 +122,9 @@ private fun HomeRoot(
             val hiddenSearchable by libraryStore.hiddenSearchable
             val layout by libraryStore.layout
             val categories by catalog.categories
+            val usage = remember { UsageReader(context) }
+            // Read on entry and never stored (ADR 0009); reopening the library re-reads.
+            val lastUsed = remember(allApps) { usage.lastUsed() }
             LibraryScreen(
                 state = resolveLibrary(
                     LibraryInputs(
@@ -130,11 +134,14 @@ private fun HomeRoot(
                         query = query,
                         hidden = hidden,
                         hiddenSearchable = hiddenSearchable,
+                        lastUsed = lastUsed,
+                        now = System.currentTimeMillis(),
                     )
                 ),
                 query = query,
                 onQueryChange = { query = it },
                 onLayoutChange = libraryStore::setLayout,
+                onLayoutNoteTap = usage::openAccessSettings,
                 iconFor = { catalog.icon(it.id) },
                 onOpen = catalog::launch,
                 onLongPress = { actionsFor = it },

@@ -73,6 +73,8 @@ fun LibraryScreen(
     query: String,
     onQueryChange: (String) -> Unit,
     onLayoutChange: (LibraryLayout) -> Unit,
+    /** Opens usage-access settings; the layout note is the entry point. */
+    onLayoutNoteTap: () -> Unit,
     iconFor: (HomeAction) -> ImageBitmap?,
     onOpen: (HomeAction) -> Unit,
     onLongPress: (HomeAction) -> Unit,
@@ -131,6 +133,16 @@ fun LibraryScreen(
         )
         LibrarySearchField(query, onQueryChange)
         LayoutSwitcher(state.layout, onLayoutChange)
+        state.layoutNote?.let { note ->
+            Text(
+                text = note,
+                color = colors.inkMuted,
+                fontSize = 12.sp,
+                modifier = Modifier
+                    .clickable(onClick = onLayoutNoteTap)
+                    .padding(bottom = 12.dp),
+            )
+        }
         val hiddenExpanded = remember { mutableStateOf(false) }
         val showHiddenRows = hiddenExpanded.value || query.isNotBlank()
         val scope = rememberCoroutineScope()
@@ -169,9 +181,11 @@ fun LibraryScreen(
                 ) {
                     if (state.sections.isEmpty()) {
                         items(count = state.rows.size, key = { state.rows[it].id }) { i ->
+                            val app = state.rows[i]
                             AppRow(
-                                state.rows[i], onOpen, onLongPress,
+                                app, onOpen, onLongPress,
                                 onSwipeRight = onPin, onSwipeLeft = onHide,
+                                context = state.rowContext[app.id],
                             )
                         }
                     } else {
@@ -183,9 +197,11 @@ fun LibraryScreen(
                                 count = section.rows.size,
                                 key = { section.rows[it].id },
                             ) { i ->
+                                val app = section.rows[i]
                                 AppRow(
-                                    section.rows[i], onOpen, onLongPress,
+                                    app, onOpen, onLongPress,
                                     onSwipeRight = onPin, onSwipeLeft = onHide,
+                                    context = state.rowContext[app.id],
                                 )
                             }
                         }
@@ -282,6 +298,7 @@ private val layoutLabels = listOf(
     LibraryLayout.Alphabetical to "A–Z",
     LibraryLayout.CompactIcons to "Icons",
     LibraryLayout.Categories to "Categories",
+    LibraryLayout.Recent to "Recent",
 )
 
 @Composable
@@ -405,14 +422,13 @@ private fun AppRow(
     onLongPress: (HomeAction) -> Unit,
     onSwipeRight: ((HomeAction) -> Unit)? = null,
     onSwipeLeft: ((HomeAction) -> Unit)? = null,
+    /** Subdued screen-time line ("Last used 8 minutes ago"); absent without usage access. */
+    context: String? = null,
 ) {
     val colors = LocalBodhaColors.current
     Column(modifier = Modifier.fillMaxWidth()) {
         Box(Modifier.fillMaxWidth().height(1.dp).background(colors.hairline))
-        Text(
-            text = app.label,
-            color = colors.ink,
-            fontSize = 16.sp,
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .pointerInput(app, onSwipeRight, onSwipeLeft) {
@@ -433,8 +449,13 @@ private fun AppRow(
                     onClick = { onOpen(app) },
                     onLongClick = { onLongPress(app) },
                 )
-                .padding(vertical = 16.dp),
-        )
+                .padding(vertical = if (context == null) 16.dp else 12.dp),
+        ) {
+            Text(text = app.label, color = colors.ink, fontSize = 16.sp)
+            if (context != null) {
+                Text(text = context, color = colors.inkMuted, fontSize = 12.sp)
+            }
+        }
     }
 }
 

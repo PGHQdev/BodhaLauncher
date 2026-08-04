@@ -5,6 +5,7 @@ enum class LibraryLayout {
     Alphabetical,
     CompactIcons,
     Categories,
+    Recent,
 }
 
 /** One titled group of the Categories layout. */
@@ -25,6 +26,10 @@ data class LibraryInputs(
     val hidden: Set<String> = emptySet(),
     /** Whether hidden apps may match a search; off, a query never surfaces them. */
     val hiddenSearchable: Boolean = false,
+    /** App id to last-use epoch millis; null when usage access isn't granted. */
+    val lastUsed: Map<String, Long>? = null,
+    /** The current epoch millis, for phrasing [LibraryState.rowContext]. */
+    val now: Long = 0,
 )
 
 /** One scrubber letter and the first row it jumps to. Non-letter labels bucket under '#'. */
@@ -41,6 +46,10 @@ data class LibraryState(
     val sections: List<LibrarySection>,
     /** The hidden section: hidden apps, alphabetical; empty while a search excludes them. */
     val hiddenRows: List<HomeAction>,
+    /** App id to subdued screen-time line ("Last used 8 minutes ago"); empty without usage access. */
+    val rowContext: Map<String, String>,
+    /** A quiet line under the switcher when a layout can't fully deliver (Recent sans access). */
+    val layoutNote: String?,
 )
 
 /** Resolves what the App Library shows: every launchable app, alphabetical ignoring case. */
@@ -50,12 +59,18 @@ fun resolveLibrary(inputs: LibraryInputs): LibraryState {
     // Locale-independent so ordering can't shift under a Turkish-ı style locale.
     val alphabetical = compareBy(String.CASE_INSENSITIVE_ORDER, HomeAction::label)
     val (hiddenApps, visible) = inputs.apps.partition { it.id in inputs.hidden }
-    val rows = visible.filter(::matches).sortedWith(alphabetical)
+    val recency = inputs.lastUsed
+    val ordering =
+        if (inputs.layout == LibraryLayout.Recent && recency != null)
+            compareByDescending<HomeAction> { recency[it.id] ?: Long.MIN_VALUE }.then(alphabetical)
+        else alphabetical
+    val rows = visible.filter(::matches).sortedWith(ordering)
     val hiddenRows = hiddenApps
         .filter { (query.isEmpty() || inputs.hiddenSearchable) && matches(it) }
         .sortedWith(alphabetical)
     val categorised = inputs.layout == LibraryLayout.Categories
-    val index = if (categorised) emptyList() else rows.withIndex()
+    val recentOrdered = inputs.layout == LibraryLayout.Recent && recency != null
+    val index = if (categorised || recentOrdered) emptyList() else rows.withIndex()
         .groupBy { (_, app) -> app.label.firstOrNull()?.uppercaseChar()?.takeIf { it in 'A'..'Z' } ?: '#' }
         .map { (letter, entries) -> LibraryIndexEntry(letter, entries.first().index) }
         .sortedBy { it.firstRow }
@@ -69,7 +84,22 @@ fun resolveLibrary(inputs: LibraryInputs): LibraryState {
         index = index,
         sections = sections,
         hiddenRows = hiddenRows,
+        rowContext = recency.orEmpty().mapValues { (_, then) -> lastUsedLabel(inputs.now, then) },
+        layoutNote = "Recents need usage access"
+            .takeIf { inputs.layout == LibraryLayout.Recent && recency == null },
     )
 }
 
 const val OTHER_CATEGORY = "Other"
+
+private fun lastUsedLabel(now: Long, then: Long): String {
+    val minutes = (now - then) / 60_000
+    val hours = minutes / 60
+    val days = hours / 24
+    return when {
+        minutes < 1 -> "Just now"
+        minutes < 60 -> "Last used $minutes minute${if (minutes == 1L) "" else "s"} ago"
+        hours < 24 -> "Last used $hours hour${if (hours == 1L) "" else "s"} ago"
+        else -> "Last used $days day${if (days == 1L) "" else "s"} ago"
+    }
+}

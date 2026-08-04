@@ -2,6 +2,7 @@ package com.bodhalauncher.engine
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class LibraryReducerTest {
@@ -216,6 +217,67 @@ class LibraryReducerTest {
         )
 
         assertTrue(library.index.isEmpty())
+    }
+
+    @Test
+    fun `recent orders by last use, never-used apps last alphabetically`() {
+        val now = 1_000_000_000L
+        val library = resolveLibrary(
+            LibraryInputs(
+                apps = listOf(app("Anki"), app("Signal"), app("Camera"), app("Doom")),
+                layout = LibraryLayout.Recent,
+                lastUsed = mapOf("camera" to now - 60_000, "signal" to now - 5_000),
+                now = now,
+            )
+        )
+
+        assertEquals(listOf("Signal", "Camera", "Anki", "Doom"), library.rows.map { it.label })
+        assertNull(library.layoutNote)
+    }
+
+    @Test
+    fun `recent without usage access falls back to alphabetical with a note`() {
+        val library = resolveLibrary(
+            LibraryInputs(
+                apps = listOf(app("Signal"), app("Camera")),
+                layout = LibraryLayout.Recent,
+                lastUsed = null,
+            )
+        )
+
+        assertEquals(listOf("Camera", "Signal"), library.rows.map { it.label })
+        assertEquals("Recents need usage access", library.layoutNote)
+    }
+
+    @Test
+    fun `rows carry last-used context in minutes, hours or days`() {
+        val now = 10_000_000_000L
+        val library = resolveLibrary(
+            LibraryInputs(
+                apps = listOf(app("Signal"), app("Camera"), app("Anki"), app("Doom")),
+                lastUsed = mapOf(
+                    "signal" to now - 8 * 60_000,
+                    "camera" to now - 3 * 3_600_000,
+                    "anki" to now - 2 * 86_400_000,
+                    "doom" to now - 30_000,
+                ),
+                now = now,
+            )
+        )
+
+        assertEquals("Last used 8 minutes ago", library.rowContext["signal"])
+        assertEquals("Last used 3 hours ago", library.rowContext["camera"])
+        assertEquals("Last used 2 days ago", library.rowContext["anki"])
+        assertEquals("Just now", library.rowContext["doom"])
+    }
+
+    @Test
+    fun `absent usage metadata means absent context`() {
+        val library = resolveLibrary(
+            LibraryInputs(apps = listOf(app("Signal")), lastUsed = null)
+        )
+
+        assertTrue(library.rowContext.isEmpty())
     }
 
     @Test
