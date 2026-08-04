@@ -195,6 +195,127 @@ class OpenCheckEngineTest {
         assertIs<OpenCheckDecision.ShowCheck>(restored.onLaunchAttempt("app", repeated, at(20)))
     }
 
+    // Timed sessions (#75): "Open for N minutes" grants the opening and records
+    // the expiry; the session-end moment and its choices live in this seam.
+
+    @Test
+    fun `opening for a duration grants the opening like a plain proceed`() {
+        val engine = OpenCheckEngine()
+        assertIs<OpenCheckDecision.ShowCheck>(engine.onLaunchAttempt("app", always, t0))
+
+        engine.onProceededFor("app", t0, minutes = 10)
+
+        assertEquals(OpenCheckDecision.Proceed, engine.onLaunchAttempt("app", always, at(2)))
+    }
+
+    @Test
+    fun `no session-end before the time completes`() {
+        val engine = OpenCheckEngine()
+        engine.onProceededFor("app", t0, minutes = 10)
+
+        assertEquals(null, engine.advanceTo(at(599)))
+    }
+
+    @Test
+    fun `the session-end moment is due when the time completes`() {
+        val engine = OpenCheckEngine()
+        engine.onProceededFor("app", t0, minutes = 10)
+
+        val due = engine.advanceTo(at(600))
+
+        assertEquals("app", due?.session?.appId)
+        assertEquals(10, due?.session?.plannedMinutes)
+        assertEquals(0, due?.overByMillis)
+    }
+
+    @Test
+    fun `a late moment reports how far past the boundary it is`() {
+        val engine = OpenCheckEngine()
+        engine.onProceededFor("app", t0, minutes = 10)
+
+        val due = engine.advanceTo(at(600 + 23 * 60))
+
+        assertEquals(23 * 60_000L, due?.overByMillis)
+    }
+
+    @Test
+    fun `the expiry survives a snapshot restore`() {
+        val engine = OpenCheckEngine()
+        engine.onProceededFor("app", t0, minutes = 10)
+
+        val restored = OpenCheckEngine(engine.snapshot())
+
+        assertEquals("app", restored.advanceTo(at(600))?.session?.appId)
+    }
+
+    @Test
+    fun `add five extends from the moment of choice`() {
+        val engine = OpenCheckEngine()
+        engine.onProceededFor("app", t0, minutes = 10)
+        assertEquals("app", engine.advanceTo(at(600))?.session?.appId)
+
+        engine.onSessionEndAddFive(at(660))
+
+        assertEquals(null, engine.advanceTo(at(660 + 299)))
+        val due = engine.advanceTo(at(660 + 300))
+        assertEquals(15, due?.session?.plannedMinutes)
+    }
+
+    @Test
+    fun `add five grants the reopening`() {
+        val engine = OpenCheckEngine()
+        engine.onProceededFor("app", t0, minutes = 10)
+        engine.advanceTo(at(600))
+
+        engine.onSessionEndAddFive(at(660))
+
+        assertEquals(OpenCheckDecision.Proceed, engine.onLaunchAttempt("app", always, at(661)))
+    }
+
+    @Test
+    fun `continue without a timer clears the session and grants the reopening`() {
+        val engine = OpenCheckEngine()
+        engine.onProceededFor("app", t0, minutes = 10)
+        engine.advanceTo(at(600))
+
+        engine.onSessionEndContinue(at(660))
+
+        assertEquals(OpenCheckDecision.Proceed, engine.onLaunchAttempt("app", always, at(661)))
+        assertEquals(null, engine.advanceTo(at(7200)))
+    }
+
+    @Test
+    fun `close clears the session and grants nothing`() {
+        val engine = OpenCheckEngine()
+        engine.onProceededFor("app", t0, minutes = 10)
+        engine.advanceTo(at(600))
+
+        engine.onSessionEndClose()
+
+        assertEquals(null, engine.advanceTo(at(7200)))
+        assertIs<OpenCheckDecision.ShowCheck>(engine.onLaunchAttempt("app", always, at(700)))
+    }
+
+    @Test
+    fun `a plain proceed for the same app supersedes a pending timed session`() {
+        val engine = OpenCheckEngine()
+        engine.onProceededFor("app", t0, minutes = 10)
+
+        engine.onProceeded("app", at(300))
+
+        assertEquals(null, engine.advanceTo(at(7200)))
+    }
+
+    @Test
+    fun `the session-end phrase is calm on time and honest when late`() {
+        assertEquals("Your 10 minutes are complete.", sessionEndPhrase(10, overByMillis = 0))
+        assertEquals("Your 10 minutes are complete.", sessionEndPhrase(10, overByMillis = 59_000))
+        assertEquals(
+            "Your 10 minutes ended 23 minutes ago.",
+            sessionEndPhrase(10, overByMillis = 23 * 60_000L),
+        )
+    }
+
     // Daily-usage-threshold trigger (#73). Usage is sampled by the adapter
     // since the 4am boundary; null means no usage access and an inert trigger.
 

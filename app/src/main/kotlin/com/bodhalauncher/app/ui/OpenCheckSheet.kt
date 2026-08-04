@@ -23,6 +23,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bodhalauncher.engine.HomeAction
+import com.bodhalauncher.engine.OpenCheckEngine
 import com.bodhalauncher.engine.OpenCheckLines
 
 /**
@@ -40,6 +41,8 @@ fun OpenCheckSheet(
     /** Explicit ask for usage access when the context lines are off; null hides the note (#18). */
     onContextNoteTap: (() -> Unit)?,
     onOpen: () -> Unit,
+    /** Open for a chosen number of minutes — the timed session (#75). */
+    onOpenFor: (Long) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val colors = LocalBodhaColors.current
@@ -50,6 +53,7 @@ fun OpenCheckSheet(
             lines = lines,
             onContextNoteTap = onContextNoteTap,
             onOpen = onOpen,
+            onOpenFor = onOpenFor,
             onGoBack = onDismiss,
         )
     }
@@ -63,6 +67,7 @@ fun OpenCheckSheetContent(
     lines: OpenCheckLines = OpenCheckLines(null, null),
     onContextNoteTap: (() -> Unit)? = null,
     onOpen: () -> Unit,
+    onOpenFor: (Long) -> Unit = {},
     onGoBack: () -> Unit,
 ) {
     val colors = LocalBodhaColors.current
@@ -102,6 +107,9 @@ fun OpenCheckSheetContent(
             modifier = Modifier.padding(bottom = 12.dp),
         )
         SheetRow("Open", onOpen)
+        OpenCheckEngine.TIMED_SESSION_MINUTES.forEach { minutes ->
+            SheetRow("Open for $minutes minutes") { onOpenFor(minutes) }
+        }
         SheetRow("Go back", onGoBack)
         Box(Modifier.fillMaxWidth().height(1.dp).background(colors.hairline))
         Spacer(Modifier.height(24.dp))

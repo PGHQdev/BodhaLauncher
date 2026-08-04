@@ -33,6 +33,7 @@ import com.bodhalauncher.app.intent.IntentPromptRuntime
 import com.bodhalauncher.app.entitlement.EntitlementStore
 import com.bodhalauncher.app.opencheck.BypassClassifier
 import com.bodhalauncher.app.opencheck.OpenCheckRuleStore
+import com.bodhalauncher.app.opencheck.OpenCheckStateStore
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalContext
 import com.bodhalauncher.app.ui.ActionOptionsDialog
@@ -51,6 +52,7 @@ import com.bodhalauncher.app.ui.OpenCheckRuleDialog
 import com.bodhalauncher.app.ui.OpenCheckSheet
 import com.bodhalauncher.app.ui.ProBoundaryDialog
 import com.bodhalauncher.app.ui.PlaceholderSurface
+import com.bodhalauncher.app.ui.SessionEndSheet
 import com.bodhalauncher.engine.Capability
 import com.bodhalauncher.engine.CapabilityResolution
 import com.bodhalauncher.engine.EducationEntry
@@ -66,8 +68,10 @@ import com.bodhalauncher.engine.OpenCheckDecision
 import com.bodhalauncher.engine.OpenCheckEngine
 import com.bodhalauncher.engine.OpenCheckMode
 import com.bodhalauncher.engine.ProBoundary
+import com.bodhalauncher.engine.TimedSessionEnd
 import com.bodhalauncher.engine.dayStart
 import com.bodhalauncher.engine.resolveCapability
+import com.bodhalauncher.engine.sessionEndPhrase
 import com.bodhalauncher.engine.resolveOpenCheckLines
 import com.bodhalauncher.engine.resolveOpenCheckRuleWrite
 import com.bodhalauncher.engine.resolveHome
@@ -162,15 +166,29 @@ private fun HomeRoot(
     var editingHome by remember { mutableStateOf(false) }
     var surface by remember { mutableStateOf(HomeSurface.Home) }
     val context = LocalContext.current
-    val openCheck = remember { OpenCheckEngine() }
+    val openCheckStateStore = remember { OpenCheckStateStore(context) }
+    // Snapshot-restored so a pending timed session survives Bodha being killed (#75).
+    val openCheck = remember { OpenCheckEngine(openCheckStateStore.load()) }
+    val syncOpenCheck = { openCheckStateStore.save(openCheck.snapshot()) }
     val usage = remember { UsageReader(context) }
     val bypass = remember { BypassClassifier(context) }
     // Saveable so an in-flight check survives rotation; otherwise a displayed
     // check would vanish with no outcome logged, skewing the return rate (#25).
     var checkFor by rememberSaveable(stateSaver = homeActionSaver) { mutableStateOf<HomeAction?>(null) }
+    var sessionEnd by remember { mutableStateOf<TimedSessionEnd?>(null) }
+    // The session-end moment appears only where policy allows Bodha on screen:
+    // if the launcher was elsewhere at expiry, it shows on the next visibility,
+    // and the phrase (computed at render) owns the time that actually elapsed.
+    // No overlay, no forcing another app away — never claimed (#75).
+    LaunchedEffect(Unit) {
+        while (true) {
+            if (sessionEnd == null) openCheck.advanceTo(Instant.now())?.let { sessionEnd = it }
+            delay(1_000)
+        }
+    }
     // At most one pause per opening (#77): the prompt engine is told while a
     // check is on screen, and a launch while the prompt shows skips the check.
-    SideEffect { intentPrompt.openCheckShowing = checkFor != null }
+    SideEffect { intentPrompt.openCheckShowing = checkFor != null || sessionEnd != null }
     // The single opening path (#8): every surface's launch flows through here.
     val openApp: (HomeAction) -> Unit = { action ->
         val rule = openCheckStore.ruleFor(action.id)
@@ -200,6 +218,31 @@ private fun HomeRoot(
                 checkFor = action
             }
         }
+        syncOpenCheck()
+    }
+
+    sessionEnd?.let { due ->
+        // Phrased at render time so a moment shown late owns the elapsed truth.
+        val overBy = (System.currentTimeMillis() - due.session.endsAt.toEpochMilli()).coerceAtLeast(0)
+        val settle = { sessionEnd = null; syncOpenCheck() }
+        // Reopening resolves through the catalog; an uninstalled app just settles.
+        val reopen = { catalog.resolve(listOf(due.session.appId)).firstOrNull()?.let(openApp) }
+        SessionEndSheet(
+            phrase = sessionEndPhrase(due.session.plannedMinutes, overBy),
+            onClose = { openCheck.onSessionEndClose(); settle() },
+            onAddFive = {
+                openCheck.onSessionEndAddFive(Instant.now())
+                settle()
+                reopen()
+            },
+            onContinue = {
+                openCheck.onSessionEndContinue(Instant.now())
+                settle()
+                reopen()
+            },
+            // Nothing fights the user closing the moment: dismissing is closing.
+            onDismiss = { openCheck.onSessionEndClose(); settle() },
+        )
     }
 
     checkFor?.let { app ->
@@ -266,10 +309,17 @@ private fun HomeRoot(
                 // Back through the same path; the grant it holds covers this launch.
                 openApp(app)
             },
+            onOpenFor = { minutes ->
+                events.log(EventType.OpenCheckProceeded)
+                openCheck.onProceededFor(app.id, Instant.now(), minutes)
+                checkFor = null
+                openApp(app)
+            },
             onDismiss = {
                 events.log(EventType.OpenCheckTurnedBack)
                 openCheck.onTurnedBack(app.id)
                 checkFor = null
+                syncOpenCheck()
             },
         )
         educationFor?.let { screen ->

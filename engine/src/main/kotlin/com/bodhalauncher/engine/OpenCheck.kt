@@ -110,8 +110,32 @@ sealed interface OpenCheckDecision {
 }
 
 /**
- * The engine's complete state. Nothing in the skeleton outlives a process, so
- * the adapter doesn't persist it yet; timed sessions (#75) will.
+ * A granted stretch of time in one checked app (#75). Always "timed session"
+ * in code and copy — never bare "session", which the glossary reserves for the
+ * device session (ADR 0001).
+ */
+data class TimedSession(
+    val appId: String,
+    val startedAt: Instant,
+    val endsAt: Instant,
+    val plannedMinutes: Long,
+)
+
+/** The time completed — the adapter presents the session-end moment (#75). */
+data class TimedSessionEnd(val session: TimedSession, val overByMillis: Long)
+
+/**
+ * The session-end moment's voice (#75): calm on time, honest when the moment
+ * could only be shown [overByMillis] after the boundary — the copy acknowledges
+ * the time that actually elapsed, never pretends the boundary held.
+ */
+fun sessionEndPhrase(plannedMinutes: Long, overByMillis: Long): String =
+    if (overByMillis < 60_000) "Your $plannedMinutes minutes are complete."
+    else "Your $plannedMinutes minutes ended ${agoPhrase(overByMillis)}."
+
+/**
+ * The engine's complete state, exposed for the adapter to persist — a pending
+ * timed session must survive Bodha being killed (#75).
  */
 data class OpenCheckState(
     /** The app a passed check granted entry to, and when it runs out. */
@@ -121,6 +145,8 @@ data class OpenCheckState(
     val recentLaunches: Map<String, List<Instant>> = emptyMap(),
     /** Per-app cooldown after a repeated-opening check fired (#72). */
     val cooldownUntil: Map<String, Instant> = emptyMap(),
+    /** The one pending timed session, if any (#75). */
+    val timedSession: TimedSession? = null,
 ) {
     companion object {
         val Initial = OpenCheckState(grantedApp = null, grantedUntil = null)
@@ -141,8 +167,10 @@ class OpenCheckEngine(initial: OpenCheckState = OpenCheckState.Initial) {
     private var grantedUntil = initial.grantedUntil
     private var recentLaunches = initial.recentLaunches
     private var cooldownUntil = initial.cooldownUntil
+    private var timedSession = initial.timedSession
 
-    fun snapshot(): OpenCheckState = OpenCheckState(grantedApp, grantedUntil, recentLaunches, cooldownUntil)
+    fun snapshot(): OpenCheckState =
+        OpenCheckState(grantedApp, grantedUntil, recentLaunches, cooldownUntil, timedSession)
 
     fun onLaunchAttempt(
         appId: String,
@@ -196,9 +224,57 @@ class OpenCheckEngine(initial: OpenCheckState = OpenCheckState.Initial) {
         return OpenCheckDecision.Proceed
     }
 
-    /** The user chose Open on the check sheet. */
+    /** The user chose Open on the check sheet; an untimed opening supersedes a pending timed session for the app. */
     fun onProceeded(appId: String, now: Instant) {
         grantedApp = appId
+        grantedUntil = now.plus(GRANT_WINDOW)
+        if (timedSession?.appId == appId) timedSession = null
+    }
+
+    /** The user chose Open for [minutes] — the boundary they set for themselves (#75). */
+    fun onProceededFor(appId: String, now: Instant, minutes: Long) {
+        onProceeded(appId, now)
+        timedSession = TimedSession(
+            appId = appId,
+            startedAt = now,
+            endsAt = now.plusSeconds(minutes * 60),
+            plannedMinutes = minutes,
+        )
+    }
+
+    /**
+     * Reports the session-end moment once the pending timed session's time has
+     * completed; due until a session-end choice settles it. Where the moment
+     * can only be shown late, [TimedSessionEnd.overByMillis] carries the truth.
+     */
+    fun advanceTo(now: Instant): TimedSessionEnd? {
+        val session = timedSession ?: return null
+        if (session.endsAt.isAfter(now)) return null
+        return TimedSessionEnd(session, overByMillis = now.toEpochMilli() - session.endsAt.toEpochMilli())
+    }
+
+    /** Session end: the user closed the app; the boundary held. */
+    fun onSessionEndClose() {
+        timedSession = null
+    }
+
+    /** Session end: five more minutes, from the moment of the choice. */
+    fun onSessionEndAddFive(now: Instant) {
+        val session = timedSession ?: return
+        timedSession = session.copy(
+            endsAt = now.plus(ADD_FIVE),
+            plannedMinutes = session.plannedMinutes + ADD_FIVE.toMinutes(),
+        )
+        // The reopening flows back through the interception point on a grant.
+        grantedApp = session.appId
+        grantedUntil = now.plus(GRANT_WINDOW)
+    }
+
+    /** Session end: keep going without a timer; the reopening is granted. */
+    fun onSessionEndContinue(now: Instant) {
+        val session = timedSession ?: return
+        timedSession = null
+        grantedApp = session.appId
         grantedUntil = now.plus(GRANT_WINDOW)
     }
 
@@ -222,5 +298,9 @@ class OpenCheckEngine(initial: OpenCheckState = OpenCheckState.Initial) {
         const val REPEATED_OPEN_THRESHOLD = 3
         val REPEATED_OPEN_WINDOW: Duration = Duration.ofMinutes(15)
         val REPEATED_OPEN_COOLDOWN: Duration = Duration.ofMinutes(30)
+
+        // Timed-session durations ship fixed in v1 (#75), Settings later (ADR 0004 precedent).
+        val TIMED_SESSION_MINUTES = listOf(5L, 10L, 20L)
+        val ADD_FIVE: Duration = Duration.ofMinutes(5)
     }
 }
