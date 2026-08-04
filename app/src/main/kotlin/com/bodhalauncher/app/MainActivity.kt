@@ -99,8 +99,11 @@ private fun HomeRoot(
         BackHandler(onBack = back)
         if (surface == HomeSurface.Library) {
             val apps = remember { catalog.installedApps() }
+            var query by remember { mutableStateOf("") }
             LibraryScreen(
-                state = resolveLibrary(LibraryInputs(apps = apps)),
+                state = resolveLibrary(LibraryInputs(apps = apps, query = query)),
+                query = query,
+                onQueryChange = { query = it },
                 onOpen = catalog::launch,
                 onBack = back,
             )

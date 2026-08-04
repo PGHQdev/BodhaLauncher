@@ -10,16 +10,19 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -35,6 +38,8 @@ import com.bodhalauncher.engine.LibraryState
 @Composable
 fun LibraryScreen(
     state: LibraryState,
+    query: String,
+    onQueryChange: (String) -> Unit,
     onOpen: (HomeAction) -> Unit,
     onBack: () -> Unit,
 ) {
@@ -84,11 +89,36 @@ fun LibraryScreen(
             letterSpacing = 2.sp,
             modifier = Modifier.padding(bottom = 20.dp),
         )
+        SearchField(query, onQueryChange)
         LazyColumn(modifier = Modifier.fillMaxSize().nestedScroll(dismissOnOverscroll)) {
             items(count = state.rows.size, key = { state.rows[it].id }) { index ->
                 AppRow(state.rows[index], onOpen)
             }
         }
+    }
+}
+
+@Composable
+private fun SearchField(query: String, onQueryChange: (String) -> Unit) {
+    val colors = LocalBodhaColors.current
+    Column(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+        BasicTextField(
+            value = query,
+            onValueChange = onQueryChange,
+            singleLine = true,
+            textStyle = TextStyle(color = colors.ink, fontSize = 16.sp),
+            cursorBrush = SolidColor(colors.ink),
+            decorationBox = { field ->
+                Box {
+                    if (query.isEmpty()) {
+                        Text(text = "Search", color = colors.inkMuted, fontSize = 16.sp)
+                    }
+                    field()
+                }
+            },
+            modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+        )
+        Box(Modifier.fillMaxWidth().height(1.dp).background(colors.hairline))
     }
 }
 
