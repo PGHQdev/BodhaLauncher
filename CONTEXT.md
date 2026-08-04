@@ -23,3 +23,7 @@ _Avoid_: intent (that's the per-session Intent Prompt choice), goal
 **Day boundary**:
 4:00am local time — where one day ends and the next begins for daily state like the intention. Late-night use before 4am belongs to the previous day.
 _Avoid_: midnight, day rollover
+
+**Reflexive trigger**:
+The default Intent Prompt trigger: a 3rd session starting within a 15-minute window, signalling autopilot use. After firing it rests for a cooldown.
+_Avoid_: unlock trigger (it counts sessions, not unlocks)
