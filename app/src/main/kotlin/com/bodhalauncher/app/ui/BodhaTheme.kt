@@ -112,11 +112,13 @@ object BodhaType {
  * A minimum rather than a size, so a control keeps drawing at whatever size it
  * draws at and only its touch area grows — the rail's letters do not move.
  *
- * **Put this innermost.** It raises the minimum passed to whatever follows it in
- * the chain, so a `padding` sitting inside it takes that padding straight back
- * off the node the screen reader actually activates — the target measures the
- * floor minus the padding and the check fails for a reason that reads like the
- * floor was never applied. `…padding(…).touchTargetFloor()`, not the reverse.
+ * **On a `BasicTextField`, put this last.** A field's click semantics live on its
+ * own inner node, below every modifier in the chain, so a `padding` between the
+ * two takes that padding straight off the node a reader activates: the target
+ * measures the floor minus the padding while the chain still reads as floored.
+ * Wrapping a field in a floored container fails for the same reason — the
+ * field's node keeps its text height. Elsewhere, where the click sits on the
+ * chain's own node, order does not matter.
  */
 val TOUCH_TARGET_MIN = 48.dp
 
