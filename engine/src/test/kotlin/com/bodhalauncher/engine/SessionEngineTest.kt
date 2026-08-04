@@ -202,6 +202,163 @@ class SessionEngineTest {
     }
 
     @Test
+    fun `snapshot and restore at any cut point replays like an unkilled engine`() {
+        val events = listOf(
+            DeviceEvent.ScreenOn(at(0)),
+            DeviceEvent.Unlocked(at(1)),
+            DeviceEvent.ScreenOff(at(60)),
+            DeviceEvent.Unlocked(at(80)),
+            DeviceEvent.ScreenOff(at(120)),
+            DeviceEvent.ScreenOn(at(200)),
+            DeviceEvent.ScreenOff(at(205)),
+            DeviceEvent.Unlocked(at(300)),
+            DeviceEvent.ScreenOff(at(360)),
+        )
+        val unkilled = run(*events.toTypedArray())
+
+        for (cut in 0..events.size) {
+            val before = SessionEngine()
+            val prefix = events.take(cut).flatMap { before.onEvent(it) }
+            val after = SessionEngine(before.snapshot())
+            val suffix = events.drop(cut).flatMap { after.onEvent(it) }
+            assertEquals(unkilled, prefix + suffix, "cut at $cut diverged")
+        }
+    }
+
+    @Test
+    fun `restart while unlocked with an active session continues it`() {
+        val engine = SessionEngine()
+        engine.onEvent(DeviceEvent.Unlocked(at(0)))
+        val restored = SessionEngine(engine.snapshot())
+
+        val onRestart = restored.onEvent(DeviceEvent.Restarted(at(500), interactive = true, keyguardLocked = false))
+        assertEquals(emptyList(), onRestart)
+
+        val ended = (restored.onEvent(DeviceEvent.ScreenOff(at(600))) + restored.advanceTo(at(700)))
+            .filterIsInstance<Transition.SessionEnded>().single()
+        assertEquals(SessionId(1), ended.session)
+    }
+
+    @Test
+    fun `restart while unlocked inside the merge window resumes the session`() {
+        val engine = SessionEngine()
+        engine.onEvent(DeviceEvent.Unlocked(at(0)))
+        engine.onEvent(DeviceEvent.ScreenOff(at(10)))
+        val restored = SessionEngine(engine.snapshot())
+
+        val transitions = restored.onEvent(DeviceEvent.Restarted(at(30), interactive = true, keyguardLocked = false))
+        assertEquals(listOf<Transition>(Transition.SessionResumed(SessionId(1), at(30))), transitions)
+    }
+
+    @Test
+    fun `restart while unlocked past the merge window ends the old session and starts a new one`() {
+        val engine = SessionEngine()
+        engine.onEvent(DeviceEvent.Unlocked(at(0)))
+        engine.onEvent(DeviceEvent.ScreenOff(at(10)))
+        val restored = SessionEngine(engine.snapshot())
+
+        val transitions = restored.onEvent(DeviceEvent.Restarted(at(500), interactive = true, keyguardLocked = false))
+        assertEquals(
+            listOf(
+                Transition.SessionEnded(SessionId(1), at(10)),
+                Transition.SessionStarted(SessionId(2), at(500)),
+            ),
+            transitions,
+        )
+    }
+
+    @Test
+    fun `restart while unlocked with no prior session starts one`() {
+        val restored = SessionEngine(SessionEngine().snapshot())
+
+        val transitions = restored.onEvent(DeviceEvent.Restarted(at(500), interactive = true, keyguardLocked = false))
+        assertEquals(1, transitions.filterIsInstance<Transition.SessionStarted>().size)
+    }
+
+    @Test
+    fun `restart on the lock screen ends an active session at the last observed point`() {
+        val engine = SessionEngine()
+        engine.onEvent(DeviceEvent.Unlocked(at(0)))
+        engine.onEvent(DeviceEvent.Unlocked(at(40)))
+        val restored = SessionEngine(engine.snapshot())
+
+        val transitions = restored.onEvent(DeviceEvent.Restarted(at(500), interactive = true, keyguardLocked = true))
+        assertEquals(listOf<Transition>(Transition.SessionEnded(SessionId(1), at(40))), transitions)
+    }
+
+    @Test
+    fun `restart on the lock screen that goes dark without an unlock is a peek`() {
+        val restored = SessionEngine(SessionEngine().snapshot())
+        restored.onEvent(DeviceEvent.Restarted(at(500), interactive = true, keyguardLocked = true))
+
+        val transitions = restored.onEvent(DeviceEvent.ScreenOff(at(505)))
+        assertEquals(listOf<Transition>(Transition.PeekObserved(at(505))), transitions)
+    }
+
+    @Test
+    fun `quick restart on the lock screen keeps the merge window open`() {
+        val engine = SessionEngine()
+        engine.onEvent(DeviceEvent.Unlocked(at(0)))
+        engine.onEvent(DeviceEvent.Unlocked(at(40)))
+        val restored = SessionEngine(engine.snapshot())
+
+        // Pocket relock + lift-to-wake: restart finds the lock screen 10s after last observation.
+        val onRestart = restored.onEvent(DeviceEvent.Restarted(at(50), interactive = true, keyguardLocked = true))
+        assertEquals(emptyList(), onRestart)
+
+        val resumed = restored.onEvent(DeviceEvent.Unlocked(at(55)))
+        assertEquals(listOf<Transition>(Transition.SessionResumed(SessionId(1), at(55))), resumed)
+    }
+
+    @Test
+    fun `restart with screen off and no keyguard reconciles like any screen-off restart`() {
+        // Lock screen set to "None": non-interactive polls as keyguardLocked = false.
+        val engine = SessionEngine()
+        engine.onEvent(DeviceEvent.Unlocked(at(0)))
+        engine.onEvent(DeviceEvent.Unlocked(at(40)))
+        val restored = SessionEngine(engine.snapshot())
+
+        val onRestart = restored.onEvent(DeviceEvent.Restarted(at(500), interactive = false, keyguardLocked = false))
+        assertEquals(listOf<Transition>(Transition.SessionEnded(SessionId(1), at(40))), onRestart)
+    }
+
+    @Test
+    fun `restart with screen off confirms an interrupted peek`() {
+        val engine = SessionEngine()
+        engine.onEvent(DeviceEvent.ScreenOn(at(0)))
+        val restored = SessionEngine(engine.snapshot())
+
+        val onRestart = restored.onEvent(DeviceEvent.Restarted(at(500), interactive = false, keyguardLocked = true))
+        assertEquals(listOf<Transition>(Transition.PeekObserved(at(0))), onRestart)
+    }
+
+    @Test
+    fun `restart with the screen off treats an active session as provisionally ended`() {
+        val engine = SessionEngine()
+        engine.onEvent(DeviceEvent.Unlocked(at(0)))
+        engine.onEvent(DeviceEvent.Unlocked(at(40)))
+        val restored = SessionEngine(engine.snapshot())
+
+        // Quick restart: still within the merge window of the last observed point.
+        val onRestart = restored.onEvent(DeviceEvent.Restarted(at(50), interactive = false, keyguardLocked = true))
+        assertEquals(emptyList(), onRestart)
+
+        val resumed = restored.onEvent(DeviceEvent.Unlocked(at(60)))
+        assertEquals(listOf<Transition>(Transition.SessionResumed(SessionId(1), at(60))), resumed)
+    }
+
+    @Test
+    fun `restart with the screen off finalizes a session whose window has passed`() {
+        val engine = SessionEngine()
+        engine.onEvent(DeviceEvent.Unlocked(at(0)))
+        engine.onEvent(DeviceEvent.ScreenOff(at(10)))
+        val restored = SessionEngine(engine.snapshot())
+
+        val onRestart = restored.onEvent(DeviceEvent.Restarted(at(500), interactive = false, keyguardLocked = true))
+        assertEquals(listOf<Transition>(Transition.SessionEnded(SessionId(1), at(10))), onRestart)
+    }
+
+    @Test
     fun `same event sequence always produces the same transitions`() {
         val events = arrayOf(
             DeviceEvent.ScreenOn(at(0)),
