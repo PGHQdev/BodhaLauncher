@@ -2,32 +2,44 @@ package com.bodhalauncher.app.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bodhalauncher.engine.HomeAction
+import com.bodhalauncher.engine.LibraryIndexEntry
 import com.bodhalauncher.engine.LibraryState
+import kotlinx.coroutines.launch
 
 /**
  * The App Library: a quiet text-first list of every launchable app (ADR 0010 —
@@ -90,10 +102,61 @@ fun LibraryScreen(
             modifier = Modifier.padding(bottom = 20.dp),
         )
         SearchField(query, onQueryChange)
-        LazyColumn(modifier = Modifier.fillMaxSize().nestedScroll(dismissOnOverscroll)) {
-            items(count = state.rows.size, key = { state.rows[it].id }) { index ->
-                AppRow(state.rows[index], onOpen)
+        val listState = rememberLazyListState()
+        val scope = rememberCoroutineScope()
+        Box(modifier = Modifier.fillMaxSize()) {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize().nestedScroll(dismissOnOverscroll),
+            ) {
+                items(count = state.rows.size, key = { state.rows[it].id }) { index ->
+                    AppRow(state.rows[index], onOpen)
+                }
             }
+            if (state.index.size > 1) {
+                AlphabetScrubber(
+                    index = state.index,
+                    onJump = { row -> scope.launch { listState.scrollToItem(row) } },
+                    modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+                )
+            }
+        }
+    }
+}
+
+/**
+ * The letter rail: drag or tap jumps the list to that letter's first app.
+ * Shows only letters the resolved rows actually contain.
+ */
+@Composable
+private fun AlphabetScrubber(
+    index: List<LibraryIndexEntry>,
+    onJump: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = LocalBodhaColors.current
+    val railHeight = remember { mutableIntStateOf(0) }
+    fun jumpTo(y: Float) {
+        if (railHeight.intValue == 0) return
+        val slot = (y / railHeight.intValue * index.size).toInt().coerceIn(0, index.size - 1)
+        onJump(index[slot].firstRow)
+    }
+    Column(
+        modifier = modifier
+            .onSizeChanged { railHeight.intValue = it.height }
+            .pointerInput(index) {
+                detectVerticalDragGestures(
+                    onDragStart = { jumpTo(it.y) },
+                    onVerticalDrag = { change, _ -> jumpTo(change.position.y) },
+                )
+            }
+            .pointerInput(index) { detectTapGestures { jumpTo(it.y) } }
+            .padding(start = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.SpaceEvenly,
+    ) {
+        index.forEach {
+            Text(text = it.letter.toString(), color = colors.inkMuted, fontSize = 11.sp)
         }
     }
 }

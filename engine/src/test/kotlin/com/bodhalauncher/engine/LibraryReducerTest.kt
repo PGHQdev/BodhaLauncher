@@ -73,6 +73,44 @@ class LibraryReducerTest {
     }
 
     @Test
+    fun `index lists only letters that have apps, with their first row`() {
+        val library = resolveLibrary(
+            LibraryInputs(apps = listOf(app("Arc"), app("Anki"), app("Camera")))
+        )
+
+        assertEquals(
+            listOf(LibraryIndexEntry('A', 0), LibraryIndexEntry('C', 2)),
+            library.index,
+        )
+    }
+
+    @Test
+    fun `labels not starting with a letter bucket under hash first`() {
+        val library = resolveLibrary(
+            LibraryInputs(apps = listOf(app("Signal"), app("1Password")))
+        )
+
+        assertEquals(
+            listOf(LibraryIndexEntry('#', 0), LibraryIndexEntry('S', 1)),
+            library.index,
+        )
+    }
+
+    @Test
+    fun `empty library has an empty index`() {
+        assertTrue(resolveLibrary(LibraryInputs()).index.isEmpty())
+    }
+
+    @Test
+    fun `index follows the filtered rows, not all apps`() {
+        val library = resolveLibrary(
+            LibraryInputs(apps = listOf(app("Arc"), app("Camera")), query = "cam")
+        )
+
+        assertEquals(listOf(LibraryIndexEntry('C', 0)), library.index)
+    }
+
+    @Test
     fun `every app passed in appears in the rows`() {
         val apps = listOf(app("A"), app("B"), app("C"), app("D"))
 
