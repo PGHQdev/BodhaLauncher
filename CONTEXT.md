@@ -103,3 +103,11 @@ _Avoid_: configurable, option (says nothing about whether it belongs)
 **Accessibility floor**:
 What every surface owes regardless of any other rule: actionable nodes at least 48dp on both axes and never unnamed, every core action reachable only by gesture also tappable, and a control too dense for per-element targets exposing one named node with per-element actions. It overrides the test above, which is why Settings lists surfaces it doesn't configure.
 _Avoid_: a11y fallback, alternative navigation
+
+**Voice**:
+Text Bodha authored and means — the clock, the intention, a question it asks, a closing line. Set in the serif. Which face a string takes is decided by who wrote it, not by how big it is.
+_Avoid_: display type, heading (says something about rank, nothing about authorship)
+
+**Machinery**:
+Operational text — controls, data, labels, and anything a third party wrote, an app's own name included. Set in the sans, which is also the inherited default. An app name is machinery even when it's the largest thing on the sheet.
+_Avoid_: UI text, body copy, chrome
