@@ -13,9 +13,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.bodhalauncher.engine.EducationScreen
 
 /**
@@ -32,22 +30,21 @@ fun EducationSheet(
 ) {
     val colors = LocalBodhaColors.current
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = colors.ground) {
-        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp)) {
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = BodhaSpacing.page)) {
             Text(
                 text = screen.feature,
                 color = colors.ink,
-                fontFamily = FontFamily.Serif,
-                fontSize = 22.sp,
-                modifier = Modifier.padding(vertical = 12.dp),
+                style = BodhaType.voiceTitle,
+                modifier = Modifier.padding(vertical = BodhaSpacing.m),
             )
             Statement(screen.dataAccessed)
             Statement(screen.processing)
             Statement(screen.withoutIt)
-            Spacer(Modifier.height(8.dp))
-            Entry("Open Android settings", onContinue)
-            Entry("Not now", onDismiss)
+            Spacer(Modifier.height(BodhaSpacing.s))
+            ActionRow("Open Android settings", onContinue)
+            ActionRow("Not now", onDismiss)
             Box(Modifier.fillMaxWidth().height(1.dp).background(colors.hairline))
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(BodhaSpacing.xl))
         }
     }
 }
@@ -57,20 +54,20 @@ private fun Statement(text: String) {
     Text(
         text = text,
         color = LocalBodhaColors.current.inkMuted,
-        fontSize = 14.sp,
-        modifier = Modifier.padding(vertical = 4.dp),
+        style = BodhaType.label,
+        modifier = Modifier.padding(vertical = BodhaSpacing.xs),
     )
 }
 
 @Composable
-private fun Entry(label: String, onClick: () -> Unit) {
+private fun ActionRow(label: String, onClick: () -> Unit) {
     val colors = LocalBodhaColors.current
     Column(modifier = Modifier.fillMaxWidth()) {
         Box(Modifier.fillMaxWidth().height(1.dp).background(colors.hairline))
         Text(
             text = label,
             color = colors.ink,
-            fontSize = 16.sp,
+            style = BodhaType.body,
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable(onClick = onClick)

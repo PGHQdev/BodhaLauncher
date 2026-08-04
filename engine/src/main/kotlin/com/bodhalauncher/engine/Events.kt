@@ -28,6 +28,9 @@ enum class EventType {
     FocusPaused,
     FocusCompleted,
     FocusAbandoned,
+    // Reserved for context suggestions (#14) so the enum doesn't churn (#25).
+    SuggestionShown,
+    SuggestionFeedback,
     PaywallShown,
     PurchaseCompleted,
     PurchaseAbandoned,

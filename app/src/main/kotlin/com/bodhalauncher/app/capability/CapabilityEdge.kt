@@ -73,4 +73,11 @@ class EducationStateStore(context: Context) {
     fun markShown(capability: Capability) {
         prefs.edit { putBoolean(capability.name, true) }
     }
+
+    /** Whether the education-then-grant outcome was already recorded (#25) — once per capability. */
+    fun grantLogged(capability: Capability): Boolean = prefs.getBoolean("${capability.name}_grant", false)
+
+    fun markGrantLogged(capability: Capability) {
+        prefs.edit { putBoolean("${capability.name}_grant", true) }
+    }
 }

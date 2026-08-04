@@ -163,6 +163,16 @@ private fun HomeRoot(
                 onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
             }
             val lastUsed = remember(allApps, usageTick) { usage.lastUsed() }
+            // The grant becomes observable only on return from system settings (#18); log it once (#25).
+            LaunchedEffect(lastUsed != null) {
+                if (lastUsed != null &&
+                    educationStore.shown(Capability.UsageAccess) &&
+                    !educationStore.grantLogged(Capability.UsageAccess)
+                ) {
+                    events.log(EventType.PermissionEnabled)
+                    educationStore.markGrantLogged(Capability.UsageAccess)
+                }
+            }
             LibraryScreen(
                 state = resolveLibrary(
                     LibraryInputs(
