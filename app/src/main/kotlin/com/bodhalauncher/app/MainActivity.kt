@@ -29,6 +29,7 @@ import com.bodhalauncher.app.capability.CapabilityEdge
 import com.bodhalauncher.app.capability.EducationStateStore
 import com.bodhalauncher.app.data.EventLogger
 import com.bodhalauncher.app.intent.IntentPromptRuntime
+import com.bodhalauncher.app.entitlement.EntitlementStore
 import com.bodhalauncher.app.opencheck.OpenCheckRuleStore
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalContext
@@ -44,7 +45,9 @@ import com.bodhalauncher.app.ui.IntentPromptSheet
 import com.bodhalauncher.app.ui.IntentionEditorDialog
 import com.bodhalauncher.app.ui.EducationSheet
 import com.bodhalauncher.app.ui.LibraryScreen
+import com.bodhalauncher.app.ui.OpenCheckRuleDialog
 import com.bodhalauncher.app.ui.OpenCheckSheet
+import com.bodhalauncher.app.ui.ProBoundaryDialog
 import com.bodhalauncher.app.ui.PlaceholderSurface
 import com.bodhalauncher.engine.Capability
 import com.bodhalauncher.engine.CapabilityResolution
@@ -55,12 +58,14 @@ import com.bodhalauncher.engine.HomeAction
 import com.bodhalauncher.engine.HomeInputs
 import com.bodhalauncher.engine.IntentCategory
 import com.bodhalauncher.engine.LibraryInputs
+import com.bodhalauncher.engine.GateDecision
 import com.bodhalauncher.engine.OpenCheckDecision
 import com.bodhalauncher.engine.OpenCheckEngine
-import com.bodhalauncher.engine.OpenCheckMode
+import com.bodhalauncher.engine.ProBoundary
 import com.bodhalauncher.engine.dayStart
 import com.bodhalauncher.engine.resolveCapability
 import com.bodhalauncher.engine.resolveOpenCheckLines
+import com.bodhalauncher.engine.resolveOpenCheckRuleWrite
 import com.bodhalauncher.engine.resolveHome
 import com.bodhalauncher.engine.resolveLibrary
 import androidx.lifecycle.Lifecycle
@@ -94,15 +99,16 @@ class MainActivity : ComponentActivity() {
         val libraryStore = LibraryStore(this)
         val groupStore = GroupStore(this)
         val openCheckStore = OpenCheckRuleStore(this)
+        val entitlementStore = EntitlementStore(this)
         catalog = AppCatalog(this)
         catalog.onAppsRemoved = { ids ->
-            ids.forEach { pinStore.unpin(it); pinStore.unhide(it) }
+            ids.forEach { pinStore.unpin(it); pinStore.unhide(it); openCheckStore.remove(it) }
             groupStore.removeApps(ids)
         }
         catalog.startWatching()
         setContent {
             BodhaTheme {
-                HomeRoot(pinStore, intentionStore, libraryStore, groupStore, openCheckStore, catalog, app.intentPrompt, app.events)
+                HomeRoot(pinStore, intentionStore, libraryStore, groupStore, openCheckStore, entitlementStore, catalog, app.intentPrompt, app.events)
             }
         }
     }
@@ -135,6 +141,7 @@ private fun HomeRoot(
     libraryStore: LibraryStore,
     groupStore: GroupStore,
     openCheckStore: OpenCheckRuleStore,
+    entitlementStore: EntitlementStore,
     catalog: AppCatalog,
     intentPrompt: IntentPromptRuntime,
     events: EventLogger,
@@ -263,6 +270,8 @@ private fun HomeRoot(
             var query by remember { mutableStateOf("") }
             var actionsFor by remember { mutableStateOf<HomeAction?>(null) }
             var groupsFor by remember { mutableStateOf<HomeAction?>(null) }
+            var openCheckFor by remember { mutableStateOf<HomeAction?>(null) }
+            var boundary by remember { mutableStateOf<ProBoundary?>(null) }
             var educationFor by remember { mutableStateOf<EducationScreen?>(null) }
             val capabilityEdge = remember { CapabilityEdge(context) }
             val educationStore = remember { EducationStateStore(context) }
@@ -360,6 +369,28 @@ private fun HomeRoot(
                     onDismiss = { groupsFor = null },
                 )
             }
+            openCheckFor?.let { app ->
+                val openCheckRules by openCheckStore.rules
+                OpenCheckRuleDialog(
+                    app = app,
+                    current = openCheckRules[app.id],
+                    onSelect = { mode ->
+                        val decision = resolveOpenCheckRuleWrite(
+                            entitlementStore.snapshot.value,
+                            existingRules = openCheckRules.size,
+                            creating = app.id !in openCheckRules,
+                        )
+                        when (decision) {
+                            GateDecision.Allowed -> openCheckStore.set(app.id, mode)
+                            is GateDecision.Capped -> boundary = decision.boundary
+                            is GateDecision.Locked -> boundary = decision.boundary
+                        }
+                    },
+                    onRemove = { openCheckStore.remove(app.id) },
+                    onDismiss = { openCheckFor = null },
+                )
+            }
+            boundary?.let { ProBoundaryDialog(boundary = it, onDismiss = { boundary = null }) }
             actionsFor?.let { app ->
                 val dismiss = { actionsFor = null }
                 val openCheckRules by openCheckStore.rules
@@ -368,7 +399,7 @@ private fun HomeRoot(
                     shortcuts = remember(app.id) { catalog.shortcuts(app.id) },
                     isPinned = app.id in pinnedIds,
                     isHidden = app.id in hidden,
-                    hasOpenCheck = app.id in openCheckRules,
+                    openCheckMode = openCheckRules[app.id],
                     onOpen = { dismiss(); openApp(app) },
                     onShortcut = { dismiss(); catalog.launchShortcut(it) },
                     onPin = { dismiss(); pinStore.pin(app.id) },
@@ -377,12 +408,7 @@ private fun HomeRoot(
                     onUnhide = { dismiss(); pinStore.unhide(app.id) },
                     onGroups = { dismiss(); groupsFor = app },
                     onPause = { dismiss(); surface = HomeSurface.Focus },
-                    // The skeleton's one rule shape (#69); modes get configurable with their tickets.
-                    onOpenCheck = {
-                        dismiss()
-                        if (app.id in openCheckRules) openCheckStore.remove(app.id)
-                        else openCheckStore.set(app.id, OpenCheckMode.Always)
-                    },
+                    onOpenCheck = { dismiss(); openCheckFor = app },
                     onAppInfo = { dismiss(); catalog.openAppInfo(app.id) },
                     onDismiss = dismiss,
                 )

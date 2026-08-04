@@ -66,3 +66,16 @@ fun resolveEntitlement(snapshot: EntitlementSnapshot, request: GatedRequest): Ga
 }
 
 private fun locked(explanation: String) = GateDecision.Locked(ProBoundary(explanation))
+
+/**
+ * Resolves an Open Check rule write (#71): only creation consults the gate —
+ * editing an existing rule is always allowed, so rules keep working and stay
+ * editable if entitlement lapses.
+ */
+fun resolveOpenCheckRuleWrite(
+    snapshot: EntitlementSnapshot,
+    existingRules: Int,
+    creating: Boolean,
+): GateDecision =
+    if (creating) resolveEntitlement(snapshot, GatedRequest.AddOpenCheckRule(existingRules))
+    else GateDecision.Allowed

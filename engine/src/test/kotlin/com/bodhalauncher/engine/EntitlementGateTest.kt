@@ -75,6 +75,65 @@ class EntitlementGateTest {
         assertEquals(GateDecision.Allowed, resolveEntitlement(stale, GatedRequest.ExternalConnectors))
     }
 
+    /** Writes through the gate the way the adapter does: allowed means the rule lands. */
+    private fun tryWrite(
+        rules: MutableMap<String, OpenCheckMode>,
+        id: String,
+        mode: OpenCheckMode,
+        snapshot: EntitlementSnapshot,
+    ): GateDecision {
+        val decision = resolveOpenCheckRuleWrite(snapshot, rules.size, creating = id !in rules)
+        if (decision == GateDecision.Allowed) rules[id] = mode
+        return decision
+    }
+
+    private fun tryAdd(rules: MutableMap<String, OpenCheckMode>, id: String, snapshot: EntitlementSnapshot): GateDecision =
+        tryWrite(rules, id, OpenCheckMode.Always, snapshot)
+
+    @Test
+    fun `a free user walks the add-rule path to the cap`() {
+        val rules = mutableMapOf<String, OpenCheckMode>()
+
+        repeat(3) { assertEquals(GateDecision.Allowed, tryAdd(rules, "app$it", free)) }
+        val fourth = tryAdd(rules, "app3", free)
+
+        val capped = assertIs<GateDecision.Capped>(fourth)
+        assertEquals("Three rules come with Bodha. Unlimited rules are part of Pro.", capped.boundary.explanation)
+        assertEquals(setOf("app0", "app1", "app2"), rules.keys)
+    }
+
+    @Test
+    fun `removing a rule frees a slot for a free user`() {
+        val rules = mutableMapOf<String, OpenCheckMode>()
+        repeat(3) { tryAdd(rules, "app$it", free) }
+
+        rules.remove("app0")
+
+        assertEquals(GateDecision.Allowed, tryAdd(rules, "app3", free))
+    }
+
+    @Test
+    fun `an entitlement lapse caps new rules but never touches existing ones`() {
+        val rules = mutableMapOf<String, OpenCheckMode>()
+        repeat(5) { tryAdd(rules, "app$it", pro) }
+
+        val afterLapse = tryAdd(rules, "app5", free)
+
+        assertIs<GateDecision.Capped>(afterLapse)
+        assertEquals(5, rules.size)
+    }
+
+    @Test
+    fun `a lapsed pro user still edits rules over the cap`() {
+        val rules = mutableMapOf<String, OpenCheckMode>()
+        repeat(5) { tryAdd(rules, "app$it", pro) }
+
+        val edit = tryWrite(rules, "app4", OpenCheckMode.Never, free)
+
+        assertEquals(GateDecision.Allowed, edit)
+        assertEquals(OpenCheckMode.Never, rules["app4"])
+    }
+
     @Test
     fun `boundary explanations carry no urgency`() {
         val capped = assertIs<GateDecision.Capped>(resolveEntitlement(free, GatedRequest.AddOpenCheckRule(3)))

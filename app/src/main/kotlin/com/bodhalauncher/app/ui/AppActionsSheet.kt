@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bodhalauncher.app.home.AppShortcut
 import com.bodhalauncher.engine.HomeAction
+import com.bodhalauncher.engine.OpenCheckMode
 
 /**
  * The app actions sheet: serif app name (the voice), sans hairline rows (the
@@ -31,7 +32,7 @@ fun AppActionsSheet(
     shortcuts: List<AppShortcut>,
     isPinned: Boolean,
     isHidden: Boolean,
-    hasOpenCheck: Boolean,
+    openCheckMode: OpenCheckMode?,
     onOpen: () -> Unit,
     onShortcut: (AppShortcut) -> Unit,
     onPin: () -> Unit,
@@ -63,8 +64,11 @@ fun AppActionsSheet(
             if (isHidden) SheetRow("Unhide", onUnhide) else SheetRow("Hide", onHide)
             SheetRow("Groups", onGroups)
             SheetRow("Pause", onPause)
-            if (hasOpenCheck) SheetRow("Remove Open Check", onOpenCheck)
-            else SheetRow("Set Open Check", onOpenCheck)
+            // Wording over glyphs (ADR 0010); the rule dialog holds edit and remove.
+            SheetRow(
+                openCheckMode?.let { "Open Check · ${openCheckModeLabel(it).lowercase()}" } ?: "Open Check",
+                onOpenCheck,
+            )
             SheetRow("App info", onAppInfo)
             Box(Modifier.fillMaxWidth().height(1.dp).background(colors.hairline))
             Spacer(Modifier.height(24.dp))
