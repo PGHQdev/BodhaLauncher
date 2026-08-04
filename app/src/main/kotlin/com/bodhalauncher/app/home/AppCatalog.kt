@@ -11,6 +11,7 @@ import android.os.Process
 import android.os.UserHandle
 import android.os.UserManager
 import android.provider.Settings
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -18,7 +19,13 @@ import androidx.core.graphics.drawable.toBitmap
 import com.bodhalauncher.engine.HomeAction
 
 /** A static or dynamic app shortcut ("New chat", "Selfie") exposed by an installed app. */
-data class AppShortcut(val shortcutId: String, val packageName: String, val label: String)
+data class AppShortcut(
+    val shortcutId: String,
+    val packageName: String,
+    val label: String,
+    /** The profile it came from; launching under any other user fails. */
+    val user: UserHandle,
+)
 
 /**
  * Resolves launchable apps across user profiles via [LauncherApps] (ADR 0002)
@@ -38,6 +45,9 @@ class AppCatalog(private val context: Context) {
 
     /** App id to Android's category title, for ids Android categorises at all. */
     val categories = mutableStateOf(queryCategories())
+
+    /** Bumps on every package event, so icon caches keyed on it pick up updates. */
+    val version = mutableIntStateOf(0)
 
     /** Fires with the ids of apps that were uninstalled, so stale state can drop out. */
     var onAppsRemoved: ((Set<String>) -> Unit)? = null
@@ -60,8 +70,6 @@ class AppCatalog(private val context: Context) {
 
     fun stopWatching() = launcherApps.unregisterCallback(callback)
 
-    fun installedApps(): List<HomeAction> = apps.value
-
     /** Resolved actions for pinned ids, keeping the user's order; stale pins drop out. */
     fun resolve(ids: List<String>): List<HomeAction> {
         val byId = apps.value.associateBy { it.id }
@@ -82,15 +90,16 @@ class AppCatalog(private val context: Context) {
 
     /** An app's shortcuts; empty unless Bodha is the default launcher (Android's rule). */
     fun shortcuts(id: String): List<AppShortcut> = try {
+        val user = handleOf(id) ?: Process.myUserHandle()
         val query = LauncherApps.ShortcutQuery()
             .setPackage(packageOf(id))
             .setQueryFlags(
                 LauncherApps.ShortcutQuery.FLAG_MATCH_MANIFEST or
                     LauncherApps.ShortcutQuery.FLAG_MATCH_DYNAMIC
             )
-        launcherApps.getShortcuts(query, handleOf(id) ?: Process.myUserHandle())
+        launcherApps.getShortcuts(query, user)
             .orEmpty()
-            .map { AppShortcut(it.id, it.`package`, (it.shortLabel ?: it.longLabel).toString()) }
+            .map { AppShortcut(it.id, it.`package`, (it.shortLabel ?: it.longLabel).toString(), user) }
             .filter { it.label.isNotEmpty() }
     } catch (_: SecurityException) {
         emptyList()
@@ -101,7 +110,7 @@ class AppCatalog(private val context: Context) {
     fun launchShortcut(shortcut: AppShortcut) {
         try {
             launcherApps.startShortcut(
-                shortcut.packageName, shortcut.shortcutId, null, null, Process.myUserHandle(),
+                shortcut.packageName, shortcut.shortcutId, null, null, shortcut.user,
             )
         } catch (_: SecurityException) {
         } catch (_: IllegalStateException) {
@@ -123,6 +132,7 @@ class AppCatalog(private val context: Context) {
     private fun refresh() {
         apps.value = queryApps()
         categories.value = queryCategories()
+        version.intValue++
     }
 
     private fun queryCategories(): Map<String, String> =

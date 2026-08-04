@@ -9,7 +9,9 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -39,6 +41,9 @@ import com.bodhalauncher.engine.IntentCategory
 import com.bodhalauncher.engine.LibraryInputs
 import com.bodhalauncher.engine.resolveHome
 import com.bodhalauncher.engine.resolveLibrary
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.delay
 import java.time.LocalDateTime
 
@@ -123,8 +128,18 @@ private fun HomeRoot(
             val layout by libraryStore.layout
             val categories by catalog.categories
             val usage = remember { UsageReader(context) }
-            // Read on entry and never stored (ADR 0009); reopening the library re-reads.
-            val lastUsed = remember(allApps) { usage.lastUsed() }
+            // Re-reads on every resume, so granting access in settings shows up on return;
+            // read on demand and never stored (ADR 0009).
+            val lifecycleOwner = LocalLifecycleOwner.current
+            var usageTick by remember { mutableIntStateOf(0) }
+            DisposableEffect(lifecycleOwner) {
+                val observer = LifecycleEventObserver { _, event ->
+                    if (event == Lifecycle.Event.ON_RESUME) usageTick++
+                }
+                lifecycleOwner.lifecycle.addObserver(observer)
+                onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+            }
+            val lastUsed = remember(allApps, usageTick) { usage.lastUsed() }
             LibraryScreen(
                 state = resolveLibrary(
                     LibraryInputs(
@@ -143,6 +158,7 @@ private fun HomeRoot(
                 onLayoutChange = libraryStore::setLayout,
                 onLayoutNoteTap = usage::openAccessSettings,
                 iconFor = { catalog.icon(it.id) },
+                iconKey = catalog.version.intValue,
                 onOpen = catalog::launch,
                 onLongPress = { actionsFor = it },
                 onPin = { pinStore.pin(it.id) },

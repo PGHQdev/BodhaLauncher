@@ -28,7 +28,7 @@ data class LibraryInputs(
     val hiddenSearchable: Boolean = false,
     /** App id to last-use epoch millis; null when usage access isn't granted. */
     val lastUsed: Map<String, Long>? = null,
-    /** The current epoch millis, for phrasing [LibraryState.rowContext]. */
+    /** The current epoch millis, for phrasing [LibraryState.lastUsedLines]. */
     val now: Long = 0,
 )
 
@@ -47,7 +47,7 @@ data class LibraryState(
     /** The hidden section: hidden apps, alphabetical; empty while a search excludes them. */
     val hiddenRows: List<HomeAction>,
     /** App id to subdued screen-time line ("Last used 8 minutes ago"); empty without usage access. */
-    val rowContext: Map<String, String>,
+    val lastUsedLines: Map<String, String>,
     /** A quiet line under the switcher when a layout can't fully deliver (Recent sans access). */
     val layoutNote: String?,
 )
@@ -84,7 +84,7 @@ fun resolveLibrary(inputs: LibraryInputs): LibraryState {
         index = index,
         sections = sections,
         hiddenRows = hiddenRows,
-        rowContext = recency.orEmpty().mapValues { (_, then) -> lastUsedLabel(inputs.now, then) },
+        lastUsedLines = recency.orEmpty().mapValues { (_, then) -> lastUsedLabel(inputs.now, then) },
         layoutNote = "Recents need usage access"
             .takeIf { inputs.layout == LibraryLayout.Recent && recency == null },
     )

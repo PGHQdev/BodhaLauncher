@@ -265,10 +265,10 @@ class LibraryReducerTest {
             )
         )
 
-        assertEquals("Last used 8 minutes ago", library.rowContext["signal"])
-        assertEquals("Last used 3 hours ago", library.rowContext["camera"])
-        assertEquals("Last used 2 days ago", library.rowContext["anki"])
-        assertEquals("Just now", library.rowContext["doom"])
+        assertEquals("Last used 8 minutes ago", library.lastUsedLines["signal"])
+        assertEquals("Last used 3 hours ago", library.lastUsedLines["camera"])
+        assertEquals("Last used 2 days ago", library.lastUsedLines["anki"])
+        assertEquals("Just now", library.lastUsedLines["doom"])
     }
 
     @Test
@@ -277,7 +277,7 @@ class LibraryReducerTest {
             LibraryInputs(apps = listOf(app("Signal")), lastUsed = null)
         )
 
-        assertTrue(library.rowContext.isEmpty())
+        assertTrue(library.lastUsedLines.isEmpty())
     }
 
     @Test

@@ -76,6 +76,8 @@ fun LibraryScreen(
     /** Opens usage-access settings; the layout note is the entry point. */
     onLayoutNoteTap: () -> Unit,
     iconFor: (HomeAction) -> ImageBitmap?,
+    /** Changes when any package changes, so cached icons refresh with their apps. */
+    iconKey: Any,
     onOpen: (HomeAction) -> Unit,
     onLongPress: (HomeAction) -> Unit,
     onPin: (HomeAction) -> Unit,
@@ -155,7 +157,7 @@ fun LibraryScreen(
                     modifier = Modifier.fillMaxSize().nestedScroll(dismissOnOverscroll),
                 ) {
                     items(count = state.rows.size, key = { state.rows[it].id }) { i ->
-                        IconCell(state.rows[i], iconFor, onOpen, onLongPress)
+                        IconCell(state.rows[i], iconKey, iconFor, onOpen, onLongPress)
                     }
                     hiddenSection(
                         state.hiddenRows, hiddenExpanded.value, showHiddenRows,
@@ -185,7 +187,7 @@ fun LibraryScreen(
                             AppRow(
                                 app, onOpen, onLongPress,
                                 onSwipeRight = onPin, onSwipeLeft = onHide,
-                                context = state.rowContext[app.id],
+                                lastUsedLine = state.lastUsedLines[app.id],
                             )
                         }
                     } else {
@@ -201,7 +203,7 @@ fun LibraryScreen(
                                 AppRow(
                                     app, onOpen, onLongPress,
                                     onSwipeRight = onPin, onSwipeLeft = onHide,
-                                    context = state.rowContext[app.id],
+                                    lastUsedLine = state.lastUsedLines[app.id],
                                 )
                             }
                         }
@@ -317,12 +319,13 @@ private fun SectionHeader(title: String) {
 @Composable
 private fun IconCell(
     app: HomeAction,
+    iconKey: Any,
     iconFor: (HomeAction) -> ImageBitmap?,
     onOpen: (HomeAction) -> Unit,
     onLongPress: (HomeAction) -> Unit,
 ) {
     val colors = LocalBodhaColors.current
-    val icon = remember(app.id) { iconFor(app) }
+    val icon = remember(app.id, iconKey) { iconFor(app) }
     Column(
         modifier = Modifier
             .combinedClickable(
@@ -423,7 +426,7 @@ private fun AppRow(
     onSwipeRight: ((HomeAction) -> Unit)? = null,
     onSwipeLeft: ((HomeAction) -> Unit)? = null,
     /** Subdued screen-time line ("Last used 8 minutes ago"); absent without usage access. */
-    context: String? = null,
+    lastUsedLine: String? = null,
 ) {
     val colors = LocalBodhaColors.current
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -449,11 +452,11 @@ private fun AppRow(
                     onClick = { onOpen(app) },
                     onLongClick = { onLongPress(app) },
                 )
-                .padding(vertical = if (context == null) 16.dp else 12.dp),
+                .padding(vertical = if (lastUsedLine == null) 16.dp else 12.dp),
         ) {
             Text(text = app.label, color = colors.ink, fontSize = 16.sp)
-            if (context != null) {
-                Text(text = context, color = colors.inkMuted, fontSize = 12.sp)
+            if (lastUsedLine != null) {
+                Text(text = lastUsedLine, color = colors.inkMuted, fontSize = 12.sp)
             }
         }
     }
