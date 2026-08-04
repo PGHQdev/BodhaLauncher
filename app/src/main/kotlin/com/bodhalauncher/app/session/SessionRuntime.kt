@@ -12,7 +12,6 @@ import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
 import android.os.Process
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.core.content.ContextCompat
 import com.bodhalauncher.engine.DeviceEvent
@@ -36,7 +35,12 @@ class SessionRuntime(private val context: Context) {
     private val keyguard = context.getSystemService(KeyguardManager::class.java)
 
     val phase = mutableStateOf<SessionPhase>(engine.snapshot().phase)
-    val recentTransitions = mutableStateListOf<Transition>()
+    private val listeners = mutableListOf<(Transition) -> Unit>()
+
+    /** Register before [start] — restart reconciliation and backfill also publish. */
+    fun addTransitionListener(listener: (Transition) -> Unit) {
+        listeners += listener
+    }
 
     fun start() {
         val power = context.getSystemService(PowerManager::class.java)
@@ -119,11 +123,10 @@ class SessionRuntime(private val context: Context) {
     private fun dispatch(event: DeviceEvent) = publish(engine.onEvent(event))
 
     private fun publish(transitions: List<Transition>) {
-        recentTransitions.addAll(transitions)
-        while (recentTransitions.size > TRANSITION_LOG_LIMIT) recentTransitions.removeAt(0)
         val snapshot = engine.snapshot()
         phase.value = snapshot.phase
         store.save(snapshot)
+        transitions.forEach { transition -> listeners.forEach { it(transition) } }
 
         handler.removeCallbacks(finalize)
         val current = snapshot.phase
@@ -135,6 +138,5 @@ class SessionRuntime(private val context: Context) {
 
     private companion object {
         const val FINALIZE_SLACK_MS = 1000L
-        const val TRANSITION_LOG_LIMIT = 20
     }
 }
