@@ -23,7 +23,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -75,7 +74,7 @@ fun HomeScreen(
             Text(
                 text = intention,
                 color = colors.ink,
-                fontFamily = FontFamily.Serif,
+                fontFamily = BodhaFaces.serif,
                 fontStyle = FontStyle.Italic,
                 fontSize = 19.sp,
                 textAlign = TextAlign.Center,
@@ -87,7 +86,7 @@ fun HomeScreen(
             Text(
                 text = "Set today's intention",
                 color = colors.inkMuted,
-                fontFamily = FontFamily.Serif,
+                fontFamily = BodhaFaces.serif,
                 fontStyle = FontStyle.Italic,
                 fontSize = 19.sp,
                 textAlign = TextAlign.Center,
@@ -129,7 +128,7 @@ private fun Clock() {
     Text(
         text = now.format(timeFormat),
         color = LocalBodhaColors.current.ink,
-        fontFamily = FontFamily.Serif,
+        fontFamily = BodhaFaces.serif,
         fontSize = 64.sp,
     )
     Text(

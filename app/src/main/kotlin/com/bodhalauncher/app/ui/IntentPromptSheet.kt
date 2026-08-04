@@ -23,7 +23,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -50,7 +49,7 @@ fun IntentPromptSheet(
             Text(
                 text = "What are you here for?",
                 color = colors.ink,
-                fontFamily = FontFamily.Serif,
+                fontFamily = BodhaFaces.serif,
                 fontSize = 22.sp,
                 modifier = Modifier.padding(vertical = 12.dp),
             )
@@ -80,7 +79,7 @@ fun IntentPromptSheet(
                     onValueChange = { freeText = it },
                     textStyle = TextStyle(
                         color = colors.ink,
-                        fontFamily = FontFamily.Serif,
+                        fontFamily = BodhaFaces.serif,
                         fontStyle = FontStyle.Italic,
                         fontSize = 16.sp,
                     ),
@@ -91,7 +90,7 @@ fun IntentPromptSheet(
                                 text = "Something else…",
                                 color = colors.inkMuted,
                                 fontSize = 16.sp,
-                                fontFamily = FontFamily.Serif,
+                                fontFamily = BodhaFaces.serif,
                                 fontStyle = FontStyle.Italic,
                             )
                         }

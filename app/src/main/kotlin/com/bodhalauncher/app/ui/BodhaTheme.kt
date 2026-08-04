@@ -6,10 +6,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
+import com.bodhalauncher.app.R
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -48,17 +52,40 @@ private val Dark = BodhaColors(
 )
 
 /**
+ * The faces behind the roles (#90): Source Serif 4 and Source Sans 3, both
+ * SIL OFL 1.1 — licences ship in `assets/licenses/`. Variable rather than
+ * static instances, so weights can be added without new files and the
+ * multilingual coverage #26 asks for stays intact.
+ */
+private val SerifVoice = FontFamily(
+    Font(R.font.source_serif_4, FontWeight.Normal),
+    Font(R.font.source_serif_4_italic, FontWeight.Normal, FontStyle.Italic),
+)
+
+private val SansMachinery = FontFamily(Font(R.font.source_sans_3, FontWeight.Normal))
+
+/**
+ * The two families, for screens that still set a face directly rather than
+ * taking a role. A transitional seam: #109 migrates those call sites onto the
+ * roles, after which nothing outside this file names a family.
+ */
+object BodhaFaces {
+    val serif = SerifVoice
+    val sans = SansMachinery
+}
+
+/**
  * Type roles (ADR 0010): serif is the voice — clock, intention, expressive
- * moments — and the sans default is the machinery. Faces are role-named so the
- * final typefaces (#26's open procurement) swap in without touching screens.
+ * moments — and sans is the machinery. Screens consume roles, never faces, so
+ * a future face swap touches only this object.
  */
 object BodhaType {
-    val voiceClock = TextStyle(fontFamily = FontFamily.Serif, fontSize = 56.sp)
-    val voiceTitle = TextStyle(fontFamily = FontFamily.Serif, fontSize = 22.sp)
-    val voiceLine = TextStyle(fontFamily = FontFamily.Serif, fontStyle = FontStyle.Italic, fontSize = 18.sp)
-    val body = TextStyle(fontSize = 16.sp)
-    val label = TextStyle(fontSize = 14.sp)
-    val caption = TextStyle(fontSize = 12.sp)
+    val voiceClock = TextStyle(fontFamily = SerifVoice, fontSize = 56.sp)
+    val voiceTitle = TextStyle(fontFamily = SerifVoice, fontSize = 22.sp)
+    val voiceLine = TextStyle(fontFamily = SerifVoice, fontStyle = FontStyle.Italic, fontSize = 18.sp)
+    val body = TextStyle(fontFamily = SansMachinery, fontSize = 16.sp)
+    val label = TextStyle(fontFamily = SansMachinery, fontSize = 14.sp)
+    val caption = TextStyle(fontFamily = SansMachinery, fontSize = 12.sp)
 }
 
 /** The spacing scale; hairlines are always 1dp. */
@@ -93,6 +120,9 @@ fun BodhaTheme(darkTheme: Boolean = isSystemInDarkTheme(), content: @Composable 
     CompositionLocalProvider(
         LocalBodhaColors provides colors,
         LocalBodhaMotion provides BodhaMotion(reduced),
+        // Sans is the machinery and therefore the default: every Text that
+        // doesn't ask for the serif voice gets it without naming a face.
+        LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = SansMachinery),
         content = content,
     )
 }

@@ -26,7 +26,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -95,7 +94,7 @@ fun OpenCheckSheetContent(
             Text(
                 text = appLabel,
                 color = colors.ink,
-                fontFamily = FontFamily.Serif,
+                fontFamily = BodhaFaces.serif,
                 fontSize = 22.sp,
             )
         }
@@ -114,7 +113,7 @@ fun OpenCheckSheetContent(
         Text(
             text = "Still want to open it?",
             color = colors.inkMuted,
-            fontFamily = FontFamily.Serif,
+            fontFamily = BodhaFaces.serif,
             fontSize = 16.sp,
             modifier = Modifier.padding(bottom = 12.dp),
         )
@@ -123,7 +122,7 @@ fun OpenCheckSheetContent(
             onValueChange = { intention = it },
             textStyle = TextStyle(
                 color = colors.ink,
-                fontFamily = FontFamily.Serif,
+                fontFamily = BodhaFaces.serif,
                 fontStyle = FontStyle.Italic,
                 fontSize = 16.sp,
             ),
@@ -134,7 +133,7 @@ fun OpenCheckSheetContent(
                         text = "What do you want to do there?",
                         color = colors.inkMuted,
                         fontSize = 16.sp,
-                        fontFamily = FontFamily.Serif,
+                        fontFamily = BodhaFaces.serif,
                         fontStyle = FontStyle.Italic,
                     )
                 }
