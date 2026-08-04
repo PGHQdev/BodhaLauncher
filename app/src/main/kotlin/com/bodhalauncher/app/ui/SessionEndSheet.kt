@@ -12,7 +12,6 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -55,7 +54,7 @@ fun SessionEndSheetContent(
         Text(
             text = phrase,
             color = colors.ink,
-            fontFamily = FontFamily.Serif,
+            fontFamily = BodhaFaces.serif,
             fontSize = 22.sp,
             modifier = Modifier.padding(vertical = 12.dp),
         )

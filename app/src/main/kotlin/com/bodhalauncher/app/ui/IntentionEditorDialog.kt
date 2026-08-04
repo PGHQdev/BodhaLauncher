@@ -22,7 +22,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -53,7 +52,7 @@ fun IntentionEditorDialog(
                 onValueChange = { text = it },
                 textStyle = TextStyle(
                     color = colors.ink,
-                    fontFamily = FontFamily.Serif,
+                    fontFamily = BodhaFaces.serif,
                     fontStyle = FontStyle.Italic,
                     fontSize = 19.sp,
                 ),
