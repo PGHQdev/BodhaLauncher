@@ -15,6 +15,8 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.bodhalauncher.app.home.AppCatalog
@@ -27,6 +29,7 @@ import com.bodhalauncher.app.capability.CapabilityEdge
 import com.bodhalauncher.app.capability.EducationStateStore
 import com.bodhalauncher.app.data.EventLogger
 import com.bodhalauncher.app.intent.IntentPromptRuntime
+import com.bodhalauncher.app.opencheck.OpenCheckRuleStore
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalContext
 import com.bodhalauncher.app.ui.ActionOptionsDialog
@@ -41,6 +44,7 @@ import com.bodhalauncher.app.ui.IntentPromptSheet
 import com.bodhalauncher.app.ui.IntentionEditorDialog
 import com.bodhalauncher.app.ui.EducationSheet
 import com.bodhalauncher.app.ui.LibraryScreen
+import com.bodhalauncher.app.ui.OpenCheckSheet
 import com.bodhalauncher.app.ui.PlaceholderSurface
 import com.bodhalauncher.engine.Capability
 import com.bodhalauncher.engine.CapabilityResolution
@@ -51,6 +55,9 @@ import com.bodhalauncher.engine.HomeAction
 import com.bodhalauncher.engine.HomeInputs
 import com.bodhalauncher.engine.IntentCategory
 import com.bodhalauncher.engine.LibraryInputs
+import com.bodhalauncher.engine.OpenCheckDecision
+import com.bodhalauncher.engine.OpenCheckEngine
+import com.bodhalauncher.engine.OpenCheckMode
 import com.bodhalauncher.engine.resolveCapability
 import com.bodhalauncher.engine.resolveHome
 import com.bodhalauncher.engine.resolveLibrary
@@ -58,6 +65,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.delay
+import java.time.Instant
 import java.time.LocalDateTime
 
 class MainActivity : ComponentActivity() {
@@ -82,6 +90,7 @@ class MainActivity : ComponentActivity() {
         val intentionStore = IntentionStore(this)
         val libraryStore = LibraryStore(this)
         val groupStore = GroupStore(this)
+        val openCheckStore = OpenCheckRuleStore(this)
         catalog = AppCatalog(this)
         catalog.onAppsRemoved = { ids ->
             ids.forEach { pinStore.unpin(it); pinStore.unhide(it) }
@@ -90,7 +99,7 @@ class MainActivity : ComponentActivity() {
         catalog.startWatching()
         setContent {
             BodhaTheme {
-                HomeRoot(pinStore, intentionStore, libraryStore, groupStore, catalog, app.intentPrompt, app.events)
+                HomeRoot(pinStore, intentionStore, libraryStore, groupStore, openCheckStore, catalog, app.intentPrompt, app.events)
             }
         }
     }
@@ -109,8 +118,12 @@ private enum class HomeSurface(val title: String) {
     Awareness("Awareness"),
     Today("Today"),
     Focus("Focus"),
-    OpenCheck("Open Check"),
 }
+
+private val homeActionSaver = listSaver<HomeAction?, String>(
+    save = { it?.let { action -> listOf(action.id, action.label) } ?: emptyList() },
+    restore = { if (it.isEmpty()) null else HomeAction(it[0], it[1]) },
+)
 
 @Composable
 private fun HomeRoot(
@@ -118,6 +131,7 @@ private fun HomeRoot(
     intentionStore: IntentionStore,
     libraryStore: LibraryStore,
     groupStore: GroupStore,
+    openCheckStore: OpenCheckRuleStore,
     catalog: AppCatalog,
     intentPrompt: IntentPromptRuntime,
     events: EventLogger,
@@ -134,7 +148,42 @@ private fun HomeRoot(
     var editingHome by remember { mutableStateOf(false) }
     var surface by remember { mutableStateOf(HomeSurface.Home) }
     val context = LocalContext.current
-    val openApp: (HomeAction) -> Unit = { events.log(EventType.AppLaunched); catalog.launch(it) }
+    val openCheck = remember { OpenCheckEngine() }
+    // Saveable so an in-flight check survives rotation; otherwise a displayed
+    // check would vanish with no outcome logged, skewing the return rate (#25).
+    var checkFor by rememberSaveable(stateSaver = homeActionSaver) { mutableStateOf<HomeAction?>(null) }
+    // The single opening path (#8): every surface's launch flows through here.
+    val openApp: (HomeAction) -> Unit = { action ->
+        when (openCheck.onLaunchAttempt(action.id, openCheckStore.ruleFor(action.id), Instant.now())) {
+            is OpenCheckDecision.Proceed -> {
+                events.log(EventType.AppLaunched)
+                catalog.launch(action)
+            }
+            is OpenCheckDecision.ShowCheck -> {
+                events.log(EventType.OpenCheckDisplayed)
+                checkFor = action
+            }
+        }
+    }
+
+    checkFor?.let { app ->
+        OpenCheckSheet(
+            app = app,
+            icon = remember(app.id, catalog.version.intValue) { catalog.icon(app.id) },
+            onOpen = {
+                events.log(EventType.OpenCheckProceeded)
+                openCheck.onProceeded(app.id, Instant.now())
+                checkFor = null
+                // Back through the same path; the grant it holds covers this launch.
+                openApp(app)
+            },
+            onDismiss = {
+                events.log(EventType.OpenCheckTurnedBack)
+                openCheck.onTurnedBack(app.id)
+                checkFor = null
+            },
+        )
+    }
 
     if (surface != HomeSurface.Home) {
         val back = { surface = HomeSurface.Home }
@@ -242,11 +291,13 @@ private fun HomeRoot(
             }
             actionsFor?.let { app ->
                 val dismiss = { actionsFor = null }
+                val openCheckRules by openCheckStore.rules
                 AppActionsSheet(
                     app = app,
                     shortcuts = remember(app.id) { catalog.shortcuts(app.id) },
                     isPinned = app.id in pinnedIds,
                     isHidden = app.id in hidden,
+                    hasOpenCheck = app.id in openCheckRules,
                     onOpen = { dismiss(); openApp(app) },
                     onShortcut = { dismiss(); catalog.launchShortcut(it) },
                     onPin = { dismiss(); pinStore.pin(app.id) },
@@ -255,7 +306,12 @@ private fun HomeRoot(
                     onUnhide = { dismiss(); pinStore.unhide(app.id) },
                     onGroups = { dismiss(); groupsFor = app },
                     onPause = { dismiss(); surface = HomeSurface.Focus },
-                    onOpenCheck = { dismiss(); surface = HomeSurface.OpenCheck },
+                    // The skeleton's one rule shape (#69); modes get configurable with their tickets.
+                    onOpenCheck = {
+                        dismiss()
+                        if (app.id in openCheckRules) openCheckStore.remove(app.id)
+                        else openCheckStore.set(app.id, OpenCheckMode.Always)
+                    },
                     onAppInfo = { dismiss(); catalog.openAppInfo(app.id) },
                     onDismiss = dismiss,
                 )
