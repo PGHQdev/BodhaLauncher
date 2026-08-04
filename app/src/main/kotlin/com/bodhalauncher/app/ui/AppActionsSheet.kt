@@ -21,8 +21,8 @@ import com.bodhalauncher.engine.HomeAction
 
 /**
  * The app actions sheet: serif app name (the voice), sans hairline rows (the
- * machinery) — ADR 0010. Every app-level operation lives here; Pause and
- * Set Open Check only route onward (Focus #9, Open Check #8 own the behavior).
+ * machinery) — ADR 0010. Every app-level operation lives here; Pause only
+ * routes onward (Focus #9 owns the behavior).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -31,6 +31,7 @@ fun AppActionsSheet(
     shortcuts: List<AppShortcut>,
     isPinned: Boolean,
     isHidden: Boolean,
+    hasOpenCheck: Boolean,
     onOpen: () -> Unit,
     onShortcut: (AppShortcut) -> Unit,
     onPin: () -> Unit,
@@ -54,24 +55,26 @@ fun AppActionsSheet(
                 fontSize = 22.sp,
                 modifier = Modifier.padding(vertical = 12.dp),
             )
-            ActionEntry("Open", onOpen)
+            SheetRow("Open", onOpen)
             shortcuts.forEach { shortcut ->
-                ActionEntry("· ${shortcut.label}") { onShortcut(shortcut) }
+                SheetRow("· ${shortcut.label}") { onShortcut(shortcut) }
             }
-            if (isPinned) ActionEntry("Unpin", onUnpin) else ActionEntry("Pin", onPin)
-            if (isHidden) ActionEntry("Unhide", onUnhide) else ActionEntry("Hide", onHide)
-            ActionEntry("Groups", onGroups)
-            ActionEntry("Pause", onPause)
-            ActionEntry("Set Open Check", onOpenCheck)
-            ActionEntry("App info", onAppInfo)
+            if (isPinned) SheetRow("Unpin", onUnpin) else SheetRow("Pin", onPin)
+            if (isHidden) SheetRow("Unhide", onUnhide) else SheetRow("Hide", onHide)
+            SheetRow("Groups", onGroups)
+            SheetRow("Pause", onPause)
+            if (hasOpenCheck) SheetRow("Remove Open Check", onOpenCheck)
+            else SheetRow("Set Open Check", onOpenCheck)
+            SheetRow("App info", onAppInfo)
             Box(Modifier.fillMaxWidth().height(1.dp).background(colors.hairline))
             Spacer(Modifier.height(24.dp))
         }
     }
 }
 
+/** A hairline-topped tappable row — the sheets' shared machinery (ADR 0010). */
 @Composable
-private fun ActionEntry(label: String, onClick: () -> Unit) {
+internal fun SheetRow(label: String, onClick: () -> Unit) {
     val colors = LocalBodhaColors.current
     Column(modifier = Modifier.fillMaxWidth()) {
         Box(Modifier.fillMaxWidth().height(1.dp).background(colors.hairline))

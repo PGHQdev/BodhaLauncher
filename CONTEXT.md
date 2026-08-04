@@ -32,6 +32,14 @@ _Avoid_: notification summary (that's the model-generated prose)
 Model-generated prose condensing notification threads. Pro, on-device model only; absent on devices without one.
 _Avoid_: digest (that's the deterministic counts card)
 
+**Open Check**:
+The user-configured pause sheet before opening a ruled app — a choice point, never a block. Per-app rules pick when it fires.
+_Avoid_: app blocker, app lock
+
+**Grant window**:
+The few seconds after passing an Open Check during which the granted launch flows back through the opening path without re-firing the check.
+_Avoid_: grace period (that connotes leniency; the grant covers exactly one opening)
+
 **Reflexive trigger**:
 The default Intent Prompt trigger: a 3rd session starting within a 15-minute window, signalling autopilot use. After firing it rests for a cooldown.
 _Avoid_: unlock trigger (it counts sessions, not unlocks)

@@ -1,11 +1,7 @@
 package com.bodhalauncher.app.ui
 
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
-import androidx.compose.ui.unit.Density
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.github.takahirom.roborazzi.captureRoboImage
 import org.junit.Rule
@@ -52,10 +48,4 @@ class DesignGalleryScreenshotTest {
         compose.setContent { LargeType { BodhaTheme(darkTheme = true) { DesignGallery() } } }
         compose.onRoot().captureRoboImage("src/test/screenshots/gallery_dark_large_type.png")
     }
-}
-
-@Composable
-private fun LargeType(content: @Composable () -> Unit) {
-    val density = LocalDensity.current.density
-    CompositionLocalProvider(LocalDensity provides Density(density, fontScale = 2f), content = content)
 }
