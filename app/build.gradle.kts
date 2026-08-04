@@ -22,10 +22,24 @@ android {
         versionName = "0.1.0"
     }
 
+    // Release signing comes from the environment (CI secrets); without it the
+    // release build stays unsigned so local and fork builds still assemble.
+    signingConfigs {
+        System.getenv("KEYSTORE_PATH")?.let { keystorePath ->
+            create("release") {
+                storeFile = file(keystorePath)
+                storePassword = System.getenv("KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("KEY_ALIAS")
+                keyPassword = System.getenv("KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.findByName("release")
         }
     }
 
