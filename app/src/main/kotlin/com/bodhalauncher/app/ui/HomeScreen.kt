@@ -1,7 +1,9 @@
 package com.bodhalauncher.app.ui
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -28,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bodhalauncher.engine.HomeAction
 import com.bodhalauncher.engine.HomeState
+import com.bodhalauncher.engine.MAX_ACTIONS
 import kotlinx.coroutines.delay
 import java.time.Duration
 import java.time.LocalDateTime
@@ -42,6 +45,9 @@ import java.time.format.DateTimeFormatter
 fun HomeScreen(
     state: HomeState,
     onAction: (HomeAction) -> Unit = {},
+    onActionLongPress: (HomeAction) -> Unit = {},
+    /** Shown while there is room for another pin; opens the app picker. */
+    onAddAction: (() -> Unit)? = null,
 ) {
     val colors = LocalBodhaColors.current
     Column(
@@ -72,7 +78,10 @@ fun HomeScreen(
         Spacer(Modifier.height(48.dp))
         Column(modifier = Modifier.fillMaxWidth()) {
             state.actions.forEach { action ->
-                ActionRow(action, onAction)
+                ActionRow(action, onAction, onActionLongPress)
+            }
+            if (onAddAction != null && state.actions.size < MAX_ACTIONS) {
+                AddRow(onAddAction)
             }
         }
         state.inboxDigest?.let {
@@ -112,8 +121,13 @@ private fun Clock() {
     )
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ActionRow(action: HomeAction, onAction: (HomeAction) -> Unit) {
+private fun ActionRow(
+    action: HomeAction,
+    onAction: (HomeAction) -> Unit,
+    onLongPress: (HomeAction) -> Unit,
+) {
     val colors = LocalBodhaColors.current
     Column(modifier = Modifier.fillMaxWidth()) {
         Box(Modifier.fillMaxWidth().height(1.dp).background(colors.hairline))
@@ -123,7 +137,27 @@ private fun ActionRow(action: HomeAction, onAction: (HomeAction) -> Unit) {
             fontSize = 16.sp,
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable { onAction(action) }
+                .combinedClickable(
+                    onClick = { onAction(action) },
+                    onLongClick = { onLongPress(action) },
+                )
+                .padding(vertical = 16.dp),
+        )
+    }
+}
+
+@Composable
+private fun AddRow(onAdd: () -> Unit) {
+    val colors = LocalBodhaColors.current
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Box(Modifier.fillMaxWidth().height(1.dp).background(colors.hairline))
+        Text(
+            text = "＋",
+            color = colors.inkMuted,
+            fontSize = 16.sp,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onAdd)
                 .padding(vertical = 16.dp),
         )
     }
