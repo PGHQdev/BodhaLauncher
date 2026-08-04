@@ -86,8 +86,8 @@ data class OpenCheckState(
     val grantedUntil: Instant?,
     /** Recent frictionless launches per app, for the repeated-opening window (#72). */
     val recentLaunches: Map<String, List<Instant>> = emptyMap(),
-    /** Per-app rest after a repeated-opening check fired (#72). */
-    val restingUntil: Map<String, Instant> = emptyMap(),
+    /** Per-app cooldown after a repeated-opening check fired (#72). */
+    val cooldownUntil: Map<String, Instant> = emptyMap(),
 ) {
     companion object {
         val Initial = OpenCheckState(grantedApp = null, grantedUntil = null)
@@ -107,9 +107,9 @@ class OpenCheckEngine(initial: OpenCheckState = OpenCheckState.Initial) {
     private var grantedApp = initial.grantedApp
     private var grantedUntil = initial.grantedUntil
     private var recentLaunches = initial.recentLaunches
-    private var restingUntil = initial.restingUntil
+    private var cooldownUntil = initial.cooldownUntil
 
-    fun snapshot(): OpenCheckState = OpenCheckState(grantedApp, grantedUntil, recentLaunches, restingUntil)
+    fun snapshot(): OpenCheckState = OpenCheckState(grantedApp, grantedUntil, recentLaunches, cooldownUntil)
 
     fun onLaunchAttempt(appId: String, rule: OpenCheckRule?, now: Instant): OpenCheckDecision {
         if (appId == grantedApp && grantedUntil?.isBefore(now) == false) {
@@ -125,15 +125,15 @@ class OpenCheckEngine(initial: OpenCheckState = OpenCheckState.Initial) {
 
     /**
      * The rolling window always rolls — launches are recorded even while the
-     * rule rests, so autopilot that outlasts the cooldown is caught on the
-     * first launch after it; the rest only suppresses firing.
+     * rule cools down, so autopilot that outlasts the cooldown is caught on
+     * the first launch after it; the cooldown only suppresses firing.
      */
     private fun onRepeatedAttempt(appId: String, now: Instant): OpenCheckDecision {
         val window = recentLaunches[appId].orEmpty()
             .filter { it.isAfter(now.minus(REPEATED_OPEN_WINDOW)) }
-        val resting = restingUntil[appId]?.isAfter(now) == true
-        if (!resting && window.size >= REPEATED_OPEN_THRESHOLD - 1) {
-            restingUntil = restingUntil + (appId to now.plus(REPEATED_OPEN_COOLDOWN))
+        val coolingDown = cooldownUntil[appId]?.isAfter(now) == true
+        if (!coolingDown && window.size >= REPEATED_OPEN_THRESHOLD - 1) {
+            cooldownUntil = cooldownUntil + (appId to now.plus(REPEATED_OPEN_COOLDOWN))
             recentLaunches = recentLaunches - appId
             return OpenCheckDecision.ShowCheck(appId, now, repeatedOpen = true)
         }
