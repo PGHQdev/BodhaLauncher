@@ -75,12 +75,20 @@ class EntitlementGateTest {
         assertEquals(GateDecision.Allowed, resolveEntitlement(stale, GatedRequest.ExternalConnectors))
     }
 
-    /** Adds through the gate the way the adapter does: allowed means the rule lands. */
-    private fun tryAdd(rules: MutableMap<String, OpenCheckMode>, id: String, snapshot: EntitlementSnapshot): GateDecision {
-        val decision = resolveEntitlement(snapshot, GatedRequest.AddOpenCheckRule(rules.size))
-        if (decision == GateDecision.Allowed) rules[id] = OpenCheckMode.Always
+    /** Writes through the gate the way the adapter does: allowed means the rule lands. */
+    private fun tryWrite(
+        rules: MutableMap<String, OpenCheckMode>,
+        id: String,
+        mode: OpenCheckMode,
+        snapshot: EntitlementSnapshot,
+    ): GateDecision {
+        val decision = resolveOpenCheckRuleWrite(snapshot, rules.size, creating = id !in rules)
+        if (decision == GateDecision.Allowed) rules[id] = mode
         return decision
     }
+
+    private fun tryAdd(rules: MutableMap<String, OpenCheckMode>, id: String, snapshot: EntitlementSnapshot): GateDecision =
+        tryWrite(rules, id, OpenCheckMode.Always, snapshot)
 
     @Test
     fun `a free user walks the add-rule path to the cap`() {
@@ -113,6 +121,17 @@ class EntitlementGateTest {
 
         assertIs<GateDecision.Capped>(afterLapse)
         assertEquals(5, rules.size)
+    }
+
+    @Test
+    fun `a lapsed pro user still edits rules over the cap`() {
+        val rules = mutableMapOf<String, OpenCheckMode>()
+        repeat(5) { tryAdd(rules, "app$it", pro) }
+
+        val edit = tryWrite(rules, "app4", OpenCheckMode.Never, free)
+
+        assertEquals(GateDecision.Allowed, edit)
+        assertEquals(OpenCheckMode.Never, rules["app4"])
     }
 
     @Test

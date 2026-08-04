@@ -21,6 +21,15 @@ import com.bodhalauncher.engine.OpenCheckMode
 import com.bodhalauncher.engine.ProBoundary
 
 /**
+ * UI copy per trigger mode, decoupled from the enum names the store persists —
+ * the exhaustive when forces every future mode to bring its own words.
+ */
+internal fun openCheckModeLabel(mode: OpenCheckMode): String = when (mode) {
+    OpenCheckMode.Always -> "Always"
+    OpenCheckMode.Never -> "Never"
+}
+
+/**
  * Edits an app's Open Check rule: pick a trigger mode, or remove the rule.
  * [current] is null when no rule exists yet — picking a mode then creates one
  * (the caller gates creation). The remaining trigger modes (#8) join
@@ -55,7 +64,7 @@ fun OpenCheckRuleDialog(
                     Box(Modifier.fillMaxWidth().height(1.dp).background(colors.hairline))
                     Text(
                         // Wording over glyphs: ADR 0010 keeps marks off the machinery rows.
-                        text = if (chosen) "${mode.name} · chosen" else mode.name,
+                        text = openCheckModeLabel(mode).let { if (chosen) "$it · chosen" else it },
                         color = if (chosen) colors.ink else colors.inkMuted,
                         fontSize = 16.sp,
                         modifier = Modifier

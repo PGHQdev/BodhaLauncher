@@ -59,14 +59,13 @@ import com.bodhalauncher.engine.HomeInputs
 import com.bodhalauncher.engine.IntentCategory
 import com.bodhalauncher.engine.LibraryInputs
 import com.bodhalauncher.engine.GateDecision
-import com.bodhalauncher.engine.GatedRequest
 import com.bodhalauncher.engine.OpenCheckDecision
 import com.bodhalauncher.engine.OpenCheckEngine
 import com.bodhalauncher.engine.ProBoundary
 import com.bodhalauncher.engine.dayStart
 import com.bodhalauncher.engine.resolveCapability
-import com.bodhalauncher.engine.resolveEntitlement
 import com.bodhalauncher.engine.resolveOpenCheckLines
+import com.bodhalauncher.engine.resolveOpenCheckRuleWrite
 import com.bodhalauncher.engine.resolveHome
 import com.bodhalauncher.engine.resolveLibrary
 import androidx.lifecycle.Lifecycle
@@ -376,14 +375,11 @@ private fun HomeRoot(
                     app = app,
                     current = openCheckRules[app.id],
                     onSelect = { mode ->
-                        // Only creation consults the gate (#22); existing rules stay
-                        // editable and working whatever the entitlement says.
-                        val decision =
-                            if (app.id in openCheckRules) GateDecision.Allowed
-                            else resolveEntitlement(
-                                entitlementStore.snapshot.value,
-                                GatedRequest.AddOpenCheckRule(existingRules = openCheckRules.size),
-                            )
+                        val decision = resolveOpenCheckRuleWrite(
+                            entitlementStore.snapshot.value,
+                            existingRules = openCheckRules.size,
+                            creating = app.id !in openCheckRules,
+                        )
                         when (decision) {
                             GateDecision.Allowed -> openCheckStore.set(app.id, mode)
                             is GateDecision.Capped -> boundary = decision.boundary
@@ -403,7 +399,7 @@ private fun HomeRoot(
                     shortcuts = remember(app.id) { catalog.shortcuts(app.id) },
                     isPinned = app.id in pinnedIds,
                     isHidden = app.id in hidden,
-                    hasOpenCheck = app.id in openCheckRules,
+                    openCheckMode = openCheckRules[app.id],
                     onOpen = { dismiss(); openApp(app) },
                     onShortcut = { dismiss(); catalog.launchShortcut(it) },
                     onPin = { dismiss(); pinStore.pin(app.id) },
