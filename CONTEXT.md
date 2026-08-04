@@ -101,8 +101,16 @@ The test a control passes to exist in Settings: the choice is the user's and not
 _Avoid_: configurable, option (says nothing about whether it belongs)
 
 **Accessibility floor**:
-What every surface owes regardless of any other rule: actionable nodes at least 48dp on both axes and never unnamed, every core action reachable only by gesture also tappable, and a control too dense for per-element targets exposing one named node with per-element actions. It overrides the test above, which is why Settings lists surfaces it doesn't configure.
+What every surface owes regardless of any other rule: actionable nodes at least 48dp on both axes and never unnamed, every core action reachable only by gesture also tappable, a control too dense for per-element targets exposing one named node with per-element actions, and a keyboard route for every outcome. It overrides the test above, which is why Settings lists surfaces it doesn't configure.
 _Avoid_: a11y fallback, alternative navigation
+
+**Keyboard route**:
+How a docked user reaches an outcome: focus, then Enter. Ranges over outcomes rather than controls, and must be at least as fast as the touch control it answers — which is why the letter rail owes none (typing beats it) and long-press owes one (nothing reaches it). A platform key may accelerate a route but is never the only one; Escape-as-back is the single exception, because back has no node to focus.
+_Avoid_: keyboard shortcut, hotkey (both suggest an invented chord)
+
+**Focus-revealed affordance**:
+A control that draws nothing at rest and appears when it takes focus. How a gesture-only action gets a node without adding anything to a screen at rest, and how that node stays real enough to meet the 48dp floor.
+_Avoid_: hidden control, invisible target (an invisible actionable node is the thing this exists instead of)
 
 **Voice**:
 Text Bodha authored and means — the clock, the intention, a question it asks, a closing line. Set in the serif. Which face a string takes is decided by who wrote it, not by how big it is.
