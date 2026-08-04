@@ -1,7 +1,9 @@
 package com.bodhalauncher.app.ui
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -57,6 +59,7 @@ fun LibraryScreen(
     query: String,
     onQueryChange: (String) -> Unit,
     onOpen: (HomeAction) -> Unit,
+    onLongPress: (HomeAction) -> Unit,
     onPin: (HomeAction) -> Unit,
     onHide: (HomeAction) -> Unit,
     onUnhide: (HomeAction) -> Unit,
@@ -120,7 +123,13 @@ fun LibraryScreen(
                 modifier = Modifier.fillMaxSize().nestedScroll(dismissOnOverscroll),
             ) {
                 items(count = state.rows.size, key = { state.rows[it].id }) { index ->
-                    AppRow(state.rows[index], onOpen, onSwipeRight = onPin, onSwipeLeft = onHide)
+                    AppRow(
+                        state.rows[index],
+                        onOpen,
+                        onLongPress,
+                        onSwipeRight = onPin,
+                        onSwipeLeft = onHide,
+                    )
                 }
                 if (state.hiddenRows.isNotEmpty()) {
                     item(key = "hidden-header") {
@@ -139,7 +148,12 @@ fun LibraryScreen(
                             count = state.hiddenRows.size,
                             key = { "hidden:" + state.hiddenRows[it].id },
                         ) { index ->
-                            AppRow(state.hiddenRows[index], onOpen, onSwipeRight = onUnhide)
+                            AppRow(
+                                state.hiddenRows[index],
+                                onOpen,
+                                onLongPress,
+                                onSwipeRight = onUnhide,
+                            )
                         }
                     }
                 }
@@ -219,10 +233,12 @@ private fun LibrarySearchField(query: String, onQueryChange: (String) -> Unit) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun AppRow(
     app: HomeAction,
     onOpen: (HomeAction) -> Unit,
+    onLongPress: (HomeAction) -> Unit,
     onSwipeRight: ((HomeAction) -> Unit)? = null,
     onSwipeLeft: ((HomeAction) -> Unit)? = null,
 ) {
@@ -249,7 +265,10 @@ private fun AppRow(
                         },
                     )
                 }
-                .clickable { onOpen(app) }
+                .combinedClickable(
+                    onClick = { onOpen(app) },
+                    onLongClick = { onLongPress(app) },
+                )
                 .padding(vertical = 16.dp),
         )
     }

@@ -22,6 +22,7 @@ import com.bodhalauncher.app.home.PinStore
 import com.bodhalauncher.app.intent.IntentPromptRuntime
 import androidx.compose.ui.platform.LocalContext
 import com.bodhalauncher.app.ui.ActionOptionsDialog
+import com.bodhalauncher.app.ui.AppActionsSheet
 import com.bodhalauncher.app.ui.AppPickerDialog
 import com.bodhalauncher.app.ui.BodhaTheme
 import com.bodhalauncher.app.ui.EditHomeDialog
@@ -75,6 +76,8 @@ private enum class HomeSurface(val title: String) {
     Library("App Library"),
     Awareness("Awareness"),
     Today("Today"),
+    Focus("Focus"),
+    OpenCheck("Open Check"),
 }
 
 @Composable
@@ -103,6 +106,7 @@ private fun HomeRoot(
         if (surface == HomeSurface.Library) {
             val apps = remember { catalog.installedApps() }
             var query by remember { mutableStateOf("") }
+            var actionsFor by remember { mutableStateOf<HomeAction?>(null) }
             val hiddenSearchable by libraryStore.hiddenSearchable
             LibraryScreen(
                 state = resolveLibrary(
@@ -116,6 +120,7 @@ private fun HomeRoot(
                 query = query,
                 onQueryChange = { query = it },
                 onOpen = catalog::launch,
+                onLongPress = { actionsFor = it },
                 onPin = { pinStore.pin(it.id) },
                 onHide = { pinStore.hide(it.id) },
                 onUnhide = { pinStore.unhide(it.id) },
@@ -123,6 +128,25 @@ private fun HomeRoot(
                 onHiddenSearchableChange = libraryStore::setHiddenSearchable,
                 onBack = back,
             )
+            actionsFor?.let { app ->
+                val dismiss = { actionsFor = null }
+                AppActionsSheet(
+                    app = app,
+                    shortcuts = remember(app.id) { catalog.shortcuts(app.id) },
+                    isPinned = app.id in pinnedIds,
+                    isHidden = app.id in hidden,
+                    onOpen = { dismiss(); catalog.launch(app) },
+                    onShortcut = { dismiss(); catalog.launchShortcut(it) },
+                    onPin = { dismiss(); pinStore.pin(app.id) },
+                    onUnpin = { dismiss(); pinStore.unpin(app.id) },
+                    onHide = { dismiss(); pinStore.hide(app.id) },
+                    onUnhide = { dismiss(); pinStore.unhide(app.id) },
+                    onPause = { dismiss(); surface = HomeSurface.Focus },
+                    onOpenCheck = { dismiss(); surface = HomeSurface.OpenCheck },
+                    onAppInfo = { dismiss(); catalog.openAppInfo(app.id) },
+                    onDismiss = dismiss,
+                )
+            }
         } else {
             PlaceholderSurface(title = surface.title, onBack = back)
         }
