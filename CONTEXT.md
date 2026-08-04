@@ -87,3 +87,11 @@ _Avoid_: modal, dialog, popup
 **Root**:
 The surface back and the system Home button land on. Home, except while a Focus session runs, when Focus is root.
 _Avoid_: home screen (Home is one surface; root is a role)
+
+**Onboarding**:
+The five-step first-run flow — promise, essentials, friction, first intention, become home. A flow, not a surface: linear, exempt from the radial model, and never shown again once complete.
+_Avoid_: setup wizard, tutorial, walkthrough
+
+**Home role**:
+Android's `ROLE_HOME` — the one grant Bodha asks for. Held or not; without it Bodha is an app you open, which is a named state rather than a broken one.
+_Avoid_: default launcher permission (it's a role, not a permission)
