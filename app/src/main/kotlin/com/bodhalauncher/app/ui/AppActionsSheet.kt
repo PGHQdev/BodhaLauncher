@@ -63,8 +63,8 @@ fun AppActionsSheet(
             if (isHidden) SheetRow("Unhide", onUnhide) else SheetRow("Hide", onHide)
             SheetRow("Groups", onGroups)
             SheetRow("Pause", onPause)
-            if (hasOpenCheck) SheetRow("Remove Open Check", onOpenCheck)
-            else SheetRow("Set Open Check", onOpenCheck)
+            // Wording over glyphs (ADR 0010); the rule dialog holds edit and remove.
+            SheetRow(if (hasOpenCheck) "Open Check · on" else "Open Check", onOpenCheck)
             SheetRow("App info", onAppInfo)
             Box(Modifier.fillMaxWidth().height(1.dp).background(colors.hairline))
             Spacer(Modifier.height(24.dp))
