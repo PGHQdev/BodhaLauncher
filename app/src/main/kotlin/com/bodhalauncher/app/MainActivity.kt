@@ -23,7 +23,11 @@ import com.bodhalauncher.app.home.IntentionStore
 import com.bodhalauncher.app.home.LibraryStore
 import com.bodhalauncher.app.home.PinStore
 import com.bodhalauncher.app.home.UsageReader
+import com.bodhalauncher.app.capability.CapabilityEdge
+import com.bodhalauncher.app.capability.EducationStateStore
+import com.bodhalauncher.app.data.EventLogger
 import com.bodhalauncher.app.intent.IntentPromptRuntime
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalContext
 import com.bodhalauncher.app.ui.ActionOptionsDialog
 import com.bodhalauncher.app.ui.AppActionsSheet
@@ -35,12 +39,19 @@ import com.bodhalauncher.app.ui.HomeGestures
 import com.bodhalauncher.app.ui.HomeScreen
 import com.bodhalauncher.app.ui.IntentPromptSheet
 import com.bodhalauncher.app.ui.IntentionEditorDialog
+import com.bodhalauncher.app.ui.EducationSheet
 import com.bodhalauncher.app.ui.LibraryScreen
 import com.bodhalauncher.app.ui.PlaceholderSurface
+import com.bodhalauncher.engine.Capability
+import com.bodhalauncher.engine.CapabilityResolution
+import com.bodhalauncher.engine.EducationEntry
+import com.bodhalauncher.engine.EducationScreen
+import com.bodhalauncher.engine.EventType
 import com.bodhalauncher.engine.HomeAction
 import com.bodhalauncher.engine.HomeInputs
 import com.bodhalauncher.engine.IntentCategory
 import com.bodhalauncher.engine.LibraryInputs
+import com.bodhalauncher.engine.resolveCapability
 import com.bodhalauncher.engine.resolveHome
 import com.bodhalauncher.engine.resolveLibrary
 import androidx.lifecycle.Lifecycle
@@ -79,7 +90,7 @@ class MainActivity : ComponentActivity() {
         catalog.startWatching()
         setContent {
             BodhaTheme {
-                HomeRoot(pinStore, intentionStore, libraryStore, groupStore, catalog, app.intentPrompt)
+                HomeRoot(pinStore, intentionStore, libraryStore, groupStore, catalog, app.intentPrompt, app.events)
             }
         }
     }
@@ -109,6 +120,7 @@ private fun HomeRoot(
     groupStore: GroupStore,
     catalog: AppCatalog,
     intentPrompt: IntentPromptRuntime,
+    events: EventLogger,
 ) {
     val pinnedIds by pinStore.pinned
     val hidden by pinStore.hidden
@@ -122,6 +134,7 @@ private fun HomeRoot(
     var editingHome by remember { mutableStateOf(false) }
     var surface by remember { mutableStateOf(HomeSurface.Home) }
     val context = LocalContext.current
+    val openApp: (HomeAction) -> Unit = { events.log(EventType.AppLaunched); catalog.launch(it) }
 
     if (surface != HomeSurface.Home) {
         val back = { surface = HomeSurface.Home }
@@ -130,6 +143,9 @@ private fun HomeRoot(
             var query by remember { mutableStateOf("") }
             var actionsFor by remember { mutableStateOf<HomeAction?>(null) }
             var groupsFor by remember { mutableStateOf<HomeAction?>(null) }
+            var educationFor by remember { mutableStateOf<EducationScreen?>(null) }
+            val capabilityEdge = remember { CapabilityEdge(context) }
+            val educationStore = remember { EducationStateStore(context) }
             val hiddenSearchable by libraryStore.hiddenSearchable
             val layout by libraryStore.layout
             val categories by catalog.categories
@@ -164,10 +180,22 @@ private fun HomeRoot(
                 query = query,
                 onQueryChange = { query = it },
                 onLayoutChange = libraryStore::setLayout,
-                onLayoutNoteTap = usage::openAccessSettings,
+                // The layout note is an explicit ask — education precedes any system screen (#18).
+                onLayoutNoteTap = {
+                    val resolution = resolveCapability(
+                        capability = Capability.UsageAccess,
+                        granted = capabilityEdge.granted(Capability.UsageAccess),
+                        educationShown = educationStore.shown(Capability.UsageAccess),
+                        entry = EducationEntry.UserRequest,
+                    )
+                    if (resolution is CapabilityResolution.Educate) {
+                        educationFor = resolution.screen
+                        educationStore.markShown(Capability.UsageAccess)
+                    }
+                },
                 iconFor = { catalog.icon(it.id) },
                 iconKey = catalog.version.intValue,
-                onOpen = catalog::launch,
+                onOpen = openApp,
                 onLongPress = { actionsFor = it },
                 onPin = { pinStore.pin(it.id) },
                 onHide = { pinStore.hide(it.id) },
@@ -180,6 +208,20 @@ private fun HomeRoot(
                 onDeleteGroup = groupStore::delete,
                 onBack = back,
             )
+            educationFor?.let { screen ->
+                EducationSheet(
+                    screen = screen,
+                    // The grant isn't known until observed on return; only the skip is terminal here.
+                    onContinue = {
+                        capabilityEdge.openSystemScreen(screen.capability)
+                        educationFor = null
+                    },
+                    onDismiss = {
+                        events.log(EventType.PermissionSkipped)
+                        educationFor = null
+                    },
+                )
+            }
             groupsFor?.let { app ->
                 GroupPickerDialog(
                     app = app,
@@ -195,7 +237,7 @@ private fun HomeRoot(
                     shortcuts = remember(app.id) { catalog.shortcuts(app.id) },
                     isPinned = app.id in pinnedIds,
                     isHidden = app.id in hidden,
-                    onOpen = { dismiss(); catalog.launch(app) },
+                    onOpen = { dismiss(); openApp(app) },
                     onShortcut = { dismiss(); catalog.launchShortcut(it) },
                     onPin = { dismiss(); pinStore.pin(app.id) },
                     onUnpin = { dismiss(); pinStore.unpin(app.id) },
@@ -213,6 +255,9 @@ private fun HomeRoot(
         }
         return
     }
+
+    // Once per arrival on Home, not per recomposition (#25).
+    LaunchedEffect(Unit) { events.log(EventType.HomeRendered) }
 
     // Ticks each minute so the intention drops at the 4am boundary (ADR 0003)
     // even when Home sits on screen with nothing else changing.
@@ -236,7 +281,7 @@ private fun HomeRoot(
     Box(modifier = Modifier.fillMaxSize()) {
         HomeScreen(
             state = state,
-            onAction = catalog::launch,
+            onAction = openApp,
             onActionLongPress = { optionsFor = it },
             onAddAction = { pickerOpen = true },
             onEditIntention = { editingIntention = true },
@@ -256,13 +301,18 @@ private fun HomeRoot(
 
         val due by intentPrompt.promptDue
         if (due != null) {
+            LaunchedEffect(due) { events.log(EventType.IntentPromptShown) }
             IntentPromptSheet(
                 onSelect = { category, text ->
+                    events.log(EventType.IntentPromptAnswered)
                     intentPrompt.select(category, text)
                     // The intent flows straight into the action.
                     if (category == IntentCategory.FindSomething) surface = HomeSurface.Search
                 },
-                onDismiss = intentPrompt::dismiss,
+                onDismiss = {
+                    events.log(EventType.IntentPromptDismissed)
+                    intentPrompt.dismiss()
+                },
             )
         }
     }

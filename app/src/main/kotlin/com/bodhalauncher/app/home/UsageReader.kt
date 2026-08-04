@@ -3,9 +3,7 @@ package com.bodhalauncher.app.home
 import android.app.AppOpsManager
 import android.app.usage.UsageStatsManager
 import android.content.Context
-import android.content.Intent
 import android.os.Process
-import android.provider.Settings
 
 /**
  * Last-use timestamps from Android's usage stats, read on demand and never
@@ -23,12 +21,6 @@ class UsageReader(private val context: Context) {
             .queryAndAggregateUsageStats(now - LOOKBACK_MILLIS, now)
             .mapValues { (_, stats) -> stats.lastTimeUsed }
             .filterValues { it > 0 }
-    }
-
-    fun openAccessSettings() {
-        context.startActivity(
-            Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        )
     }
 
     private fun hasAccess(): Boolean {
