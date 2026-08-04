@@ -2,7 +2,7 @@
 
 Intentional Android launcher. Kotlin + Jetpack Compose. Fair Source (FSL-1.1-ALv2 — each release becomes Apache-2.0 two years on); distributed on Google Play.
 
-Product and screen specs live as GitHub issues (`Spec: …`, #1–#27; roadmap and open decisions in #28). Visual reference: `bodhalauncher.png`.
+Product and screen specs live as GitHub issues (`Spec: …`, #1–#27; roadmap and open decisions in #28). Visual reference: `bodhalauncher.png` — **binding on visual vocabulary, superseded on content** (ADR 0025). What a row, a fill or a chevron means comes from the picture; what goes in them comes from the ADRs, which win wherever they speak.
 
 ## Where docs live
 
