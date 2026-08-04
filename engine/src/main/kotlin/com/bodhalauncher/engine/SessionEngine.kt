@@ -30,6 +30,20 @@ sealed interface DeviceEvent {
     ) : DeviceEvent
 }
 
+/**
+ * A UsageStats-shaped history entry (mirrors the UsageEvents.Event types ADR 0001
+ * names for backfill), kept as its own type so the engine stays Android-free.
+ */
+sealed interface UsageRecord {
+    val at: Instant
+
+    data class ScreenInteractive(override val at: Instant) : UsageRecord
+    data class ScreenNonInteractive(override val at: Instant) : UsageRecord
+
+    /** Keyguard went away — an unlock as UsageStats sees it. */
+    data class KeyguardHidden(override val at: Instant) : UsageRecord
+}
+
 /** Whether a session is currently running, provisionally ended, or absent. */
 sealed interface SessionPhase {
     data object Idle : SessionPhase
@@ -162,6 +176,30 @@ class SessionEngine(initial: EngineState = EngineState.Initial) {
         val session = SessionId(nextSessionId++)
         phase = SessionPhase.Active(session)
         return Transition.SessionStarted(session, at)
+    }
+
+    /**
+     * Repairs sessions missed during process death by replaying UsageStats-shaped
+     * history through the ordinary event rules — merge window and peek included.
+     * Records at or before [EngineState.lastObservedAt] are already recorded live
+     * and are never replayed. Deliberately conservative: when live receipt times and
+     * the UsageStats log disagree around the cutoff, events are dropped rather than
+     * risk rewriting a recorded session. Unlock detection rests on KeyguardHidden,
+     * so gaps on a device with no lock screen may repair as peeks — best-effort.
+     * Run before [DeviceEvent.Restarted] so reconciliation settles what remains.
+     */
+    fun backfill(records: List<UsageRecord>): List<Transition> {
+        val cutoff = lastObservedAt
+        return records
+            .filter { cutoff == null || it.at.isAfter(cutoff) }
+            .sortedBy { it.at }
+            .flatMap { onEvent(it.toDeviceEvent()) }
+    }
+
+    private fun UsageRecord.toDeviceEvent(): DeviceEvent = when (this) {
+        is UsageRecord.ScreenInteractive -> DeviceEvent.ScreenOn(at)
+        is UsageRecord.ScreenNonInteractive -> DeviceEvent.ScreenOff(at)
+        is UsageRecord.KeyguardHidden -> DeviceEvent.Unlocked(at)
     }
 
     /** Reports that [now] has been reached without a device event, finalizing any due end. */

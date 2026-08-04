@@ -359,6 +359,113 @@ class SessionEngineTest {
     }
 
     @Test
+    fun `backfill reconstructs sessions missed during process death`() {
+        val engine = SessionEngine()
+        engine.onEvent(DeviceEvent.Unlocked(at(0)))
+        val restored = SessionEngine(engine.snapshot())
+
+        // While dead: screen went off at 100, a full missed session ran 200–260.
+        val transitions = restored.backfill(
+            listOf(
+                UsageRecord.ScreenNonInteractive(at(100)),
+                UsageRecord.ScreenInteractive(at(200)),
+                UsageRecord.KeyguardHidden(at(201)),
+                UsageRecord.ScreenNonInteractive(at(260)),
+            )
+        )
+
+        assertEquals(
+            listOf(
+                Transition.SessionEnded(SessionId(1), at(100)),
+                Transition.SessionStarted(SessionId(2), at(201)),
+            ),
+            transitions,
+        )
+        // The last screen-off stays provisional for the restart reconciliation to settle.
+        assertEquals(SessionPhase.ProvisionalEnd(SessionId(2), at(260)), restored.snapshot().phase)
+    }
+
+    @Test
+    fun `backfilled sessions respect the merge window`() {
+        val engine = SessionEngine()
+        engine.onEvent(DeviceEvent.Unlocked(at(0)))
+        val restored = SessionEngine(engine.snapshot())
+
+        val transitions = restored.backfill(
+            listOf(
+                UsageRecord.ScreenNonInteractive(at(100)),
+                UsageRecord.KeyguardHidden(at(120)),
+            )
+        )
+
+        assertEquals(listOf<Transition>(Transition.SessionResumed(SessionId(1), at(120))), transitions)
+    }
+
+    @Test
+    fun `backfilled screen-on without unlock is a peek`() {
+        val restored = SessionEngine(SessionEngine().snapshot())
+
+        val transitions = restored.backfill(
+            listOf(
+                UsageRecord.ScreenInteractive(at(100)),
+                UsageRecord.ScreenNonInteractive(at(105)),
+            )
+        )
+
+        assertEquals(listOf<Transition>(Transition.PeekObserved(at(105))), transitions)
+    }
+
+    @Test
+    fun `backfill never rewrites what the engine already observed`() {
+        val engine = SessionEngine()
+        engine.onEvent(DeviceEvent.Unlocked(at(0)))
+        engine.onEvent(DeviceEvent.ScreenOff(at(50)))
+        val restored = SessionEngine(engine.snapshot())
+
+        // UsageStats replays history the engine already recorded live, plus one new record.
+        val transitions = restored.backfill(
+            listOf(
+                UsageRecord.KeyguardHidden(at(0)),
+                UsageRecord.ScreenNonInteractive(at(50)),
+                UsageRecord.KeyguardHidden(at(60)),
+            )
+        )
+
+        assertEquals(listOf<Transition>(Transition.SessionResumed(SessionId(1), at(60))), transitions)
+    }
+
+    @Test
+    fun `backfill with nothing new leaves the engine untouched`() {
+        val engine = SessionEngine()
+        engine.onEvent(DeviceEvent.Unlocked(at(0)))
+        val restored = SessionEngine(engine.snapshot())
+        val before = restored.snapshot()
+
+        assertEquals(emptyList(), restored.backfill(emptyList()))
+        assertEquals(emptyList(), restored.backfill(listOf(UsageRecord.KeyguardHidden(at(0)))))
+        assertEquals(before, restored.snapshot())
+    }
+
+    @Test
+    fun `backfill sorts records and composes with restart reconciliation`() {
+        val engine = SessionEngine()
+        engine.onEvent(DeviceEvent.Unlocked(at(0)))
+        val restored = SessionEngine(engine.snapshot())
+
+        restored.backfill(
+            listOf(
+                UsageRecord.KeyguardHidden(at(201)),
+                UsageRecord.ScreenNonInteractive(at(100)),
+                UsageRecord.ScreenInteractive(at(200)),
+            )
+        )
+        val onRestart = restored.onEvent(DeviceEvent.Restarted(at(210), interactive = true, keyguardLocked = false))
+
+        assertEquals(emptyList(), onRestart)
+        assertEquals(SessionPhase.Active(SessionId(2)), restored.snapshot().phase)
+    }
+
+    @Test
     fun `same event sequence always produces the same transitions`() {
         val events = arrayOf(
             DeviceEvent.ScreenOn(at(0)),

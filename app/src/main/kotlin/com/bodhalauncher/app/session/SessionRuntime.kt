@@ -1,6 +1,9 @@
 package com.bodhalauncher.app.session
 
+import android.app.AppOpsManager
 import android.app.KeyguardManager
+import android.app.usage.UsageEvents
+import android.app.usage.UsageStatsManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -8,6 +11,7 @@ import android.content.IntentFilter
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
+import android.os.Process
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.core.content.ContextCompat
@@ -15,6 +19,7 @@ import com.bodhalauncher.engine.DeviceEvent
 import com.bodhalauncher.engine.SessionEngine
 import com.bodhalauncher.engine.SessionPhase
 import com.bodhalauncher.engine.Transition
+import com.bodhalauncher.engine.UsageRecord
 import java.time.Duration
 import java.time.Instant
 
@@ -35,9 +40,11 @@ class SessionRuntime(private val context: Context) {
 
     fun start() {
         val power = context.getSystemService(PowerManager::class.java)
+        val now = Instant.now()
+        backfillFromUsageStats(now)
         dispatch(
             DeviceEvent.Restarted(
-                at = Instant.now(),
+                at = now,
                 interactive = power.isInteractive,
                 keyguardLocked = keyguard.isKeyguardLocked,
             )
@@ -52,6 +59,42 @@ class SessionRuntime(private val context: Context) {
             },
             ContextCompat.RECEIVER_NOT_EXPORTED,
         )
+    }
+
+    /** ADR 0001: backfill only when usage access is already granted — never requested here. */
+    private fun backfillFromUsageStats(now: Instant) {
+        if (!hasUsageAccess()) return
+        val from = engine.snapshot().lastObservedAt ?: return
+        // Synchronous binder query on the main thread at cold start: acceptable while
+        // the gap since lastObservedAt is normally minutes; revisit if startup traces object.
+        val usageEvents = context.getSystemService(UsageStatsManager::class.java)
+            .queryEvents(from.toEpochMilli(), now.toEpochMilli())
+        val records = buildList {
+            val event = UsageEvents.Event()
+            while (usageEvents.getNextEvent(event)) {
+                val at = Instant.ofEpochMilli(event.timeStamp)
+                when (event.eventType) {
+                    UsageEvents.Event.SCREEN_INTERACTIVE -> add(UsageRecord.ScreenInteractive(at))
+                    UsageEvents.Event.SCREEN_NON_INTERACTIVE -> add(UsageRecord.ScreenNonInteractive(at))
+                    UsageEvents.Event.KEYGUARD_HIDDEN -> add(UsageRecord.KeyguardHidden(at))
+                }
+            }
+        }
+        publish(engine.backfill(records))
+    }
+
+    private fun hasUsageAccess(): Boolean {
+        val appOps = context.getSystemService(AppOpsManager::class.java)
+        return when (appOps.unsafeCheckOpNoThrow(
+            AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), context.packageName,
+        )) {
+            AppOpsManager.MODE_ALLOWED -> true
+            // adb/policy grants can leave the op at its default; the permission decides then.
+            AppOpsManager.MODE_DEFAULT -> context.checkSelfPermission(
+                android.Manifest.permission.PACKAGE_USAGE_STATS
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            else -> false
+        }
     }
 
     private val receiver = object : BroadcastReceiver() {
