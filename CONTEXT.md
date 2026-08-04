@@ -101,5 +101,5 @@ The test a control passes to exist in Settings: the choice is the user's and not
 _Avoid_: configurable, option (says nothing about whether it belongs)
 
 **Accessibility floor**:
-The override beneath that test: every core action reachable only by gesture also appears in Settings as a tappable row. Why Settings lists surfaces it doesn't configure.
+What every surface owes regardless of any other rule: actionable nodes at least 48dp on both axes and never unnamed, every core action reachable only by gesture also tappable, and a control too dense for per-element targets exposing one named node with per-element actions. It overrides the test above, which is why Settings lists surfaces it doesn't configure.
 _Avoid_: a11y fallback, alternative navigation
