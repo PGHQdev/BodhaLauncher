@@ -70,6 +70,7 @@ private fun ActionRow(label: String, onClick: () -> Unit) {
             style = BodhaType.body,
             modifier = Modifier
                 .fillMaxWidth()
+                .touchTargetFloor()
                 .clickable(onClick = onClick)
                 .padding(vertical = 14.dp),
         )

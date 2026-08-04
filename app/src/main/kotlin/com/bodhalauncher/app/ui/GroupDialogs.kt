@@ -21,9 +21,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.bodhalauncher.engine.HomeAction
 import com.bodhalauncher.engine.LibraryGroup
@@ -57,15 +55,14 @@ fun GroupEditorDialog(
             Text(
                 text = if (existing == null) "New group" else "Group",
                 color = colors.inkMuted,
-                fontSize = 13.sp,
-                letterSpacing = 2.sp,
+                style = BodhaType.overline,
             )
             Spacer(Modifier.height(16.dp))
             BasicTextField(
                 value = name,
                 onValueChange = { name = it },
                 singleLine = true,
-                textStyle = TextStyle(color = colors.ink, fontSize = 16.sp),
+                textStyle = BodhaType.body.copy(color = colors.ink),
                 cursorBrush = SolidColor(colors.accent),
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -77,8 +74,9 @@ fun GroupEditorDialog(
                     Text(
                         text = "Delete",
                         color = colors.inkMuted,
-                        fontSize = 15.sp,
-                        modifier = Modifier.clickable { onDelete(); onDismiss() },
+                        style = BodhaType.action,
+                        modifier = Modifier.touchTargetFloor()
+                            .clickable { onDelete(); onDismiss() },
                     )
                     Spacer(Modifier.width(28.dp))
                 }
@@ -86,8 +84,8 @@ fun GroupEditorDialog(
                 Text(
                     text = "Save",
                     color = colors.accent,
-                    fontSize = 15.sp,
-                    modifier = Modifier.clickable(enabled = saveable) {
+                    style = BodhaType.action,
+                    modifier = Modifier.touchTargetFloor().clickable(enabled = saveable) {
                         onSave(trimmed)
                         onDismiss()
                     },
@@ -117,14 +115,14 @@ fun GroupPickerDialog(
             Text(
                 text = app.label,
                 color = colors.inkMuted,
-                fontSize = 13.sp,
+                style = BodhaType.overline,
                 modifier = Modifier.padding(vertical = 12.dp),
             )
             if (groups.isEmpty()) {
                 Text(
                     text = "No groups yet — create one in the Groups layout",
                     color = colors.inkMuted,
-                    fontSize = 16.sp,
+                    style = BodhaType.body,
                     modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
                 )
             }
@@ -136,9 +134,10 @@ fun GroupPickerDialog(
                         // Wording over glyphs: ADR 0010 keeps marks off the machinery rows.
                         text = if (member) "${group.name} · added" else group.name,
                         color = if (member) colors.ink else colors.inkMuted,
-                        fontSize = 16.sp,
+                        style = BodhaType.body,
                         modifier = Modifier
                             .fillMaxWidth()
+                            .touchTargetFloor()
                             .clickable { onToggle(group) }
                             .padding(vertical = 14.dp),
                     )

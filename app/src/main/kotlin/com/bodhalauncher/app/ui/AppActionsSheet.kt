@@ -14,14 +14,13 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.bodhalauncher.app.home.AppShortcut
 import com.bodhalauncher.engine.HomeAction
 import com.bodhalauncher.engine.OpenCheckMode
 
 /**
- * The app actions sheet: serif app name (the voice), sans hairline rows (the
- * machinery) — ADR 0010. Every app-level operation lives here; Pause only
+ * The app actions sheet: the app's own name in the sans, since a name Bodha did
+ * not write is machinery however large it is (ADR 0021), over sans hairline rows. Every app-level operation lives here; Pause only
  * routes onward (Focus #9 owns the behavior).
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -51,10 +50,10 @@ fun AppActionsSheet(
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = colors.ground) {
         Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp)) {
             Text(
+                // An app's own name is machinery, not Bodha's voice (ADR 0021).
                 text = app.label,
                 color = colors.ink,
-                fontFamily = BodhaFaces.serif,
-                fontSize = 22.sp,
+                style = BodhaType.title,
                 modifier = Modifier.padding(vertical = 12.dp),
             )
             SheetRow("Open", onOpen)
@@ -86,9 +85,10 @@ internal fun SheetRow(label: String, onClick: () -> Unit) {
         Text(
             text = label,
             color = colors.ink,
-            fontSize = 16.sp,
+            style = BodhaType.body,
             modifier = Modifier
                 .fillMaxWidth()
+                .touchTargetFloor()
                 .clickable(onClick = onClick)
                 .padding(vertical = 14.dp),
         )

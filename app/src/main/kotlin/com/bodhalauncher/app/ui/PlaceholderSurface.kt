@@ -11,7 +11,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 
 /** Stands in for a surface that hasn't shipped; tap anywhere (or back) returns Home. */
 @Composable
@@ -25,8 +24,9 @@ fun PlaceholderSurface(title: String, onBack: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
     ) {
-        Text(text = title, color = colors.ink, fontFamily = BodhaFaces.serif, fontSize = 28.sp)
+        // A surface name is a label, not a spoken line (ADR 0021).
+        Text(text = title, color = colors.ink, style = BodhaType.title)
         Spacer(Modifier.height(12.dp))
-        Text(text = "Coming soon", color = colors.inkMuted, fontSize = 14.sp)
+        Text(text = "Coming soon", color = colors.inkMuted, style = BodhaType.label)
     }
 }

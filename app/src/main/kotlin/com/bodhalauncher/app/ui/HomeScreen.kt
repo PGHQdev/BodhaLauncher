@@ -23,10 +23,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.bodhalauncher.engine.HomeAction
 import com.bodhalauncher.engine.HomeState
 import com.bodhalauncher.engine.MAX_ACTIONS
@@ -66,7 +64,7 @@ fun HomeScreen(
         Clock()
         state.contextLabel?.let {
             Spacer(Modifier.height(12.dp))
-            Text(text = it, color = colors.inkMuted, fontSize = 13.sp, letterSpacing = 2.sp)
+            Text(text = it, color = colors.inkMuted, style = BodhaType.overline)
         }
         val intention = state.dailyIntention
         if (intention != null) {
@@ -74,9 +72,7 @@ fun HomeScreen(
             Text(
                 text = intention,
                 color = colors.ink,
-                fontFamily = BodhaFaces.serif,
-                fontStyle = FontStyle.Italic,
-                fontSize = 19.sp,
+                style = BodhaType.voiceLine,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.clickable(enabled = onEditIntention != null) { onEditIntention?.invoke() },
             )
@@ -86,9 +82,7 @@ fun HomeScreen(
             Text(
                 text = "Set today's intention",
                 color = colors.inkMuted,
-                fontFamily = BodhaFaces.serif,
-                fontStyle = FontStyle.Italic,
-                fontSize = 19.sp,
+                style = BodhaType.voiceLine,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.clickable { onEditIntention() },
             )
@@ -104,7 +98,7 @@ fun HomeScreen(
         }
         state.inboxDigest?.let {
             Spacer(Modifier.height(28.dp))
-            Text(text = it, color = colors.inkMuted, fontSize = 14.sp)
+            Text(text = it, color = colors.inkMuted, style = BodhaType.label)
         }
         if (state.focusActive) {
             Spacer(Modifier.height(20.dp))
@@ -128,14 +122,12 @@ private fun Clock() {
     Text(
         text = now.format(timeFormat),
         color = LocalBodhaColors.current.ink,
-        fontFamily = BodhaFaces.serif,
-        fontSize = 64.sp,
+        style = BodhaType.voiceClock,
     )
     Text(
         text = now.format(dateFormat),
         color = colors.inkMuted,
-        fontSize = 14.sp,
-        letterSpacing = 1.sp,
+        style = BodhaType.label,
     )
 }
 
@@ -152,9 +144,10 @@ private fun ActionRow(
         Text(
             text = action.label,
             color = colors.ink,
-            fontSize = 16.sp,
+            style = BodhaType.body,
             modifier = Modifier
                 .fillMaxWidth()
+                .touchTargetFloor()
                 .combinedClickable(
                     onClick = { onAction(action) },
                     onLongClick = { onLongPress(action) },
@@ -172,9 +165,10 @@ private fun AddRow(onAdd: () -> Unit) {
         Text(
             text = "＋",
             color = colors.inkMuted,
-            fontSize = 16.sp,
+            style = BodhaType.body,
             modifier = Modifier
                 .fillMaxWidth()
+                .touchTargetFloor()
                 .clickable(onClick = onAdd)
                 .padding(vertical = 16.dp),
         )
@@ -188,9 +182,10 @@ private fun SearchField(onSearch: () -> Unit) {
         Text(
             text = "Search",
             color = colors.inkMuted,
-            fontSize = 16.sp,
+            style = BodhaType.body,
             // Clickable also consumes taps, so double-tap here never falls through to lock.
-            modifier = Modifier.fillMaxWidth().clickable(onClick = onSearch).padding(vertical = 12.dp),
+            modifier = Modifier.fillMaxWidth().touchTargetFloor().clickable(onClick = onSearch)
+                .padding(vertical = 12.dp),
             textAlign = TextAlign.Center,
         )
         Box(Modifier.fillMaxWidth().height(1.dp).background(colors.hairline))

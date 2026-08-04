@@ -21,10 +21,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 
 /** Temporary intention editor on Home; Today (#5) becomes the real editor. */
@@ -45,17 +42,14 @@ fun IntentionEditorDialog(
                 .background(colors.ground)
                 .padding(24.dp),
         ) {
-            Text(text = "Today", color = colors.inkMuted, fontSize = 13.sp, letterSpacing = 2.sp)
+            Text(text = "Today", color = colors.inkMuted, style = BodhaType.overline)
             Spacer(Modifier.height(16.dp))
             BasicTextField(
                 value = text,
                 onValueChange = { text = it },
-                textStyle = TextStyle(
-                    color = colors.ink,
-                    fontFamily = BodhaFaces.serif,
-                    fontStyle = FontStyle.Italic,
-                    fontSize = 19.sp,
-                ),
+                // The daily intention reads back on Home in this same role, so
+                // writing it and living with it look like one thing (ADR 0021).
+                textStyle = BodhaType.voiceLine.copy(color = colors.ink),
                 cursorBrush = SolidColor(colors.accent),
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -67,8 +61,9 @@ fun IntentionEditorDialog(
                     Text(
                         text = "Clear",
                         color = colors.inkMuted,
-                        fontSize = 15.sp,
-                        modifier = Modifier.clickable { onClear(); onDismiss() },
+                        style = BodhaType.action,
+                        modifier = Modifier.touchTargetFloor()
+                            .clickable { onClear(); onDismiss() },
                     )
                     Spacer(Modifier.width(28.dp))
                 }
@@ -76,8 +71,8 @@ fun IntentionEditorDialog(
                 Text(
                     text = "Save",
                     color = colors.accent,
-                    fontSize = 15.sp,
-                    modifier = Modifier.clickable(enabled = text.isNotBlank()) {
+                    style = BodhaType.action,
+                    modifier = Modifier.touchTargetFloor().clickable(enabled = text.isNotBlank()) {
                         onSave(text.trim())
                         onDismiss()
                     },

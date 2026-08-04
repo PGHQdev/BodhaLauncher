@@ -2,6 +2,8 @@ package com.bodhalauncher.app.ui
 
 import android.provider.Settings
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.ui.Modifier
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -65,28 +67,55 @@ private val SerifVoice = FontFamily(
 private val SansMachinery = FontFamily(Font(R.font.source_sans_3, FontWeight.Normal))
 
 /**
- * The two families, for screens that still set a face directly rather than
- * taking a role. A transitional seam: #109 migrates those call sites onto the
- * roles, after which nothing outside this file names a family.
+ * The type scale: eleven roles over nine sizes (ADR 0021), absorbed from what
+ * the screens already did rather than designed as a ladder — 15sp was exactly
+ * the footer actions, 13sp-with-tracking exactly the overlines.
+ *
+ * Which face a string takes is decided by **authorship, not rank**: voice is
+ * text Bodha wrote and means, machinery is operational text and anything a
+ * third party wrote. So an app's own name is machinery even as the largest
+ * thing on a sheet, which is why [title] and [voiceTitle] share a size.
+ *
+ * Italic and letter-spacing are part of a role, never added at a call site.
+ * Colour is not: [action] is the accent for Save and muted ink for Delete —
+ * same rank, opposite emphasis — so colour tracks emphasis and state while
+ * size and face track rank. Sites read colour from [LocalBodhaColors].
+ *
+ * Nothing outside this file names a family; a face swap touches only here.
  */
-object BodhaFaces {
-    val serif = SerifVoice
-    val sans = SansMachinery
+object BodhaType {
+    // Voice — the serif.
+    val voiceClock = TextStyle(fontFamily = SerifVoice, fontSize = 64.sp)
+    val voiceTitle = TextStyle(fontFamily = SerifVoice, fontSize = 22.sp)
+    /** The daily intention as ADR 0010 draws it: a centered serif italic line. */
+    val voiceLine = TextStyle(fontFamily = SerifVoice, fontStyle = FontStyle.Italic, fontSize = 19.sp)
+    /** Bodha at more than a line's length; carries its own line height. */
+    val voicePassage = TextStyle(fontFamily = SerifVoice, fontSize = 18.sp, lineHeight = 28.sp)
+    /** The intention while it is being typed — the same voice, a smaller moment. */
+    val voiceInput = TextStyle(fontFamily = SerifVoice, fontStyle = FontStyle.Italic, fontSize = 16.sp)
+
+    // Machinery — the sans.
+    val title = TextStyle(fontFamily = SansMachinery, fontSize = 22.sp)
+    val body = TextStyle(fontFamily = SansMachinery, fontSize = 16.sp)
+    /** Footer actions, and only those: Save, Delete, Clear, Go. */
+    val action = TextStyle(fontFamily = SansMachinery, fontSize = 15.sp)
+    val label = TextStyle(fontFamily = SansMachinery, fontSize = 14.sp)
+    val overline = TextStyle(fontFamily = SansMachinery, fontSize = 13.sp, letterSpacing = 2.sp)
+    val caption = TextStyle(fontFamily = SansMachinery, fontSize = 12.sp)
 }
 
 /**
- * Type roles (ADR 0010): serif is the voice — clock, intention, expressive
- * moments — and sans is the machinery. Screens consume roles, never faces, so
- * a future face swap touches only this object.
+ * The accessibility floor's touch-target minimum (ADR 0020): 48dp on both axes,
+ * no exceptions and no exception list. Compose applies this for you only inside
+ * Material components, so anything hand-rolling its click handling asks here.
+ *
+ * A minimum rather than a size, so a control keeps drawing at whatever size it
+ * draws at and only its touch area grows — the rail's letters do not move.
  */
-object BodhaType {
-    val voiceClock = TextStyle(fontFamily = SerifVoice, fontSize = 56.sp)
-    val voiceTitle = TextStyle(fontFamily = SerifVoice, fontSize = 22.sp)
-    val voiceLine = TextStyle(fontFamily = SerifVoice, fontStyle = FontStyle.Italic, fontSize = 18.sp)
-    val body = TextStyle(fontFamily = SansMachinery, fontSize = 16.sp)
-    val label = TextStyle(fontFamily = SansMachinery, fontSize = 14.sp)
-    val caption = TextStyle(fontFamily = SansMachinery, fontSize = 12.sp)
-}
+val TOUCH_TARGET_MIN = 48.dp
+
+fun Modifier.touchTargetFloor(): Modifier =
+    defaultMinSize(minWidth = TOUCH_TARGET_MIN, minHeight = TOUCH_TARGET_MIN)
 
 /** The spacing scale; hairlines are always 1dp. */
 object BodhaSpacing {

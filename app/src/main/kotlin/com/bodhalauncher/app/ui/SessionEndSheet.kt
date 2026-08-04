@@ -13,7 +13,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 
 /**
  * The session-end moment (#75): the boundary the user set for themselves,
@@ -54,8 +53,7 @@ fun SessionEndSheetContent(
         Text(
             text = phrase,
             color = colors.ink,
-            fontFamily = BodhaFaces.serif,
-            fontSize = 22.sp,
+            style = BodhaType.voiceTitle,
             modifier = Modifier.padding(vertical = 12.dp),
         )
         SheetRow("Close the app", onClose)
