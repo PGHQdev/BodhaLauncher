@@ -1,0 +1,64 @@
+// PROTOTYPE probes for #115. Each block is labelled with what the rule *should* do.
+
+package probes
+
+// --- SHOULD FLAG: the case the rule exists for. A new surface hand-rolls a
+// gesture and publishes nothing. This is #111 and #114 all over again.
+@Composable
+fun NewSurface(onOpen: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .pointerInput(Unit) { detectTapGestures { onOpen() } },
+    )
+}
+
+// --- SHOULD NOT FLAG: decorative. A scrim that swallows taps so they do not
+// fall through to what is behind it. It exposes nothing because there is
+// nothing to expose.
+@Composable
+fun Scrim() {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } },
+    )
+}
+
+// --- SHOULD NOT FLAG: drag-to-dismiss on a sheet. Back already dismisses it,
+// so the gesture is a shortcut, not the only route.
+@Composable
+fun DismissableSheet(onDismiss: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .pointerInput(Unit) { detectVerticalDragGestures { _, dy -> if (dy > 40) onDismiss() } },
+    ) { SheetBody() }
+}
+
+// --- SHOULD NOT FLAG: semantics live on the parent, the gesture on the child.
+// A perfectly reachable node, split across two chains.
+@Composable
+fun SemanticsOnParent(onJump: () -> Unit) {
+    Box(modifier = Modifier.semantics { contentDescription = "Jump" }) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(Unit) { detectTapGestures { onJump() } },
+        )
+    }
+}
+
+// --- SHOULD NOT FLAG: the gesture lives in a Modifier extension, and every
+// caller adds the semantics. This is one refactor away from HomeGestures.
+fun Modifier.swipeToOpen(onOpen: () -> Unit): Modifier =
+    this.pointerInput(onOpen) { detectHorizontalDragGestures { _, _ -> onOpen() } }
+
+@Composable
+fun CallerAddsSemantics(onOpen: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .semantics { customActions = listOf(CustomAccessibilityAction("Open") { onOpen(); true }) }
+            .swipeToOpen(onOpen),
+    )
+}
