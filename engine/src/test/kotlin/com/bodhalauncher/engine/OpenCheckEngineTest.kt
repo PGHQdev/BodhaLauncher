@@ -223,8 +223,8 @@ class OpenCheckEngineTest {
 
         val due = engine.advanceTo(at(600))
 
-        assertEquals("app", due?.session?.appId)
-        assertEquals(10, due?.session?.plannedMinutes)
+        assertEquals("app", due?.timedSession?.appId)
+        assertEquals(10, due?.timedSession?.plannedMinutes)
         assertEquals(0, due?.overByMillis)
     }
 
@@ -245,20 +245,20 @@ class OpenCheckEngineTest {
 
         val restored = OpenCheckEngine(engine.snapshot())
 
-        assertEquals("app", restored.advanceTo(at(600))?.session?.appId)
+        assertEquals("app", restored.advanceTo(at(600))?.timedSession?.appId)
     }
 
     @Test
     fun `add five extends from the moment of choice`() {
         val engine = OpenCheckEngine()
         engine.onProceededFor("app", t0, minutes = 10)
-        assertEquals("app", engine.advanceTo(at(600))?.session?.appId)
+        assertEquals("app", engine.advanceTo(at(600))?.timedSession?.appId)
 
         engine.onSessionEndAddFive(at(660))
 
         assertEquals(null, engine.advanceTo(at(660 + 299)))
         val due = engine.advanceTo(at(660 + 300))
-        assertEquals(15, due?.session?.plannedMinutes)
+        assertEquals(15, due?.timedSession?.plannedMinutes)
     }
 
     @Test

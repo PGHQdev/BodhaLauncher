@@ -166,7 +166,8 @@ private fun WindowEditor(current: ScheduleWindow?, onSave: (ScheduleWindow) -> U
             text = "Save",
             color = colors.accent,
             fontSize = 15.sp,
-            modifier = Modifier.clickable(enabled = startMinute != null && endMinute != null) {
+            // Equal times would be an empty window — a silently inert rule; Always is the mode for that.
+            modifier = Modifier.clickable(enabled = startMinute != null && endMinute != null && startMinute != endMinute) {
                 onSave(ScheduleWindow(startMinute!!, endMinute!!))
             },
         )

@@ -30,21 +30,20 @@ class IntentRecordStore(context: Context) {
      * never anywhere else — the event log carries no text by construction.
      */
     fun appendOpenCheckIntention(text: String) {
-        val record = JSONObject()
-            .put("category", CATEGORY_OPEN_CHECK)
-            .put("text", text)
-            .put("at", Instant.now().toEpochMilli())
-            .put("trigger", TRIGGER_OPEN_CHECK)
-        file.appendText(record.toString() + "\n")
+        append(CATEGORY_OPEN_CHECK, text, TRIGGER_OPEN_CHECK, session = null)
     }
 
     private fun append(decision: PromptDecision, category: String, text: String?) {
+        append(category, text, decision.trigger.name, decision.session.value)
+    }
+
+    private fun append(category: String, text: String?, trigger: String, session: Any?) {
         val record = JSONObject()
             .put("category", category)
             .putOpt("text", text)
             .put("at", Instant.now().toEpochMilli())
-            .put("trigger", decision.trigger.name)
-            .put("session", decision.session.value)
+            .put("trigger", trigger)
+            .putOpt("session", session)
         file.appendText(record.toString() + "\n")
     }
 

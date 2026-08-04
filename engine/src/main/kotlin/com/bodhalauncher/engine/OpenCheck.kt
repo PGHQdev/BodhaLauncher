@@ -122,7 +122,7 @@ data class TimedSession(
 )
 
 /** The time completed — the adapter presents the session-end moment (#75). */
-data class TimedSessionEnd(val session: TimedSession, val overByMillis: Long)
+data class TimedSessionEnd(val timedSession: TimedSession, val overByMillis: Long)
 
 /**
  * The session-end moment's voice (#75): calm on time, honest when the moment
@@ -226,8 +226,7 @@ class OpenCheckEngine(initial: OpenCheckState = OpenCheckState.Initial) {
 
     /** The user chose Open on the check sheet; an untimed opening supersedes a pending timed session for the app. */
     fun onProceeded(appId: String, now: Instant) {
-        grantedApp = appId
-        grantedUntil = now.plus(GRANT_WINDOW)
+        grant(appId, now)
         if (timedSession?.appId == appId) timedSession = null
     }
 
@@ -266,21 +265,24 @@ class OpenCheckEngine(initial: OpenCheckState = OpenCheckState.Initial) {
             plannedMinutes = session.plannedMinutes + ADD_FIVE.toMinutes(),
         )
         // The reopening flows back through the interception point on a grant.
-        grantedApp = session.appId
-        grantedUntil = now.plus(GRANT_WINDOW)
+        grant(session.appId, now)
     }
 
     /** Session end: keep going without a timer; the reopening is granted. */
     fun onSessionEndContinue(now: Instant) {
         val session = timedSession ?: return
         timedSession = null
-        grantedApp = session.appId
-        grantedUntil = now.plus(GRANT_WINDOW)
+        grant(session.appId, now)
     }
 
     /** The user went back (or dismissed the sheet). */
     fun onTurnedBack(appId: String) {
         if (appId == grantedApp) clearGrant()
+    }
+
+    private fun grant(appId: String, now: Instant) {
+        grantedApp = appId
+        grantedUntil = now.plus(GRANT_WINDOW)
     }
 
     private fun clearGrant() {

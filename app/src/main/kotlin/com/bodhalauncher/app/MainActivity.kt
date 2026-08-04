@@ -177,20 +177,20 @@ private fun HomeRoot(
     // Saveable so an in-flight check survives rotation; otherwise a displayed
     // check would vanish with no outcome logged, skewing the return rate (#25).
     var checkFor by rememberSaveable(stateSaver = homeActionSaver) { mutableStateOf<HomeAction?>(null) }
-    var sessionEnd by remember { mutableStateOf<TimedSessionEnd?>(null) }
+    var sessionEndDue by remember { mutableStateOf<TimedSessionEnd?>(null) }
     // The session-end moment appears only where policy allows Bodha on screen:
     // if the launcher was elsewhere at expiry, it shows on the next visibility,
     // and the phrase (computed at render) owns the time that actually elapsed.
     // No overlay, no forcing another app away — never claimed (#75).
     LaunchedEffect(Unit) {
         while (true) {
-            if (sessionEnd == null) openCheck.advanceTo(Instant.now())?.let { sessionEnd = it }
+            if (sessionEndDue == null) openCheck.advanceTo(Instant.now())?.let { sessionEndDue = it }
             delay(1_000)
         }
     }
     // At most one pause per opening (#77): the prompt engine is told while a
     // check is on screen, and a launch while the prompt shows skips the check.
-    SideEffect { intentPrompt.openCheckShowing = checkFor != null || sessionEnd != null }
+    SideEffect { intentPrompt.openCheckShowing = checkFor != null || sessionEndDue != null }
     // The single opening path (#8): every surface's launch flows through here.
     val openApp: (HomeAction) -> Unit = { action ->
         val rule = openCheckStore.ruleFor(action.id)
@@ -223,14 +223,14 @@ private fun HomeRoot(
         syncOpenCheck()
     }
 
-    sessionEnd?.let { due ->
+    sessionEndDue?.let { due ->
         // Phrased at render time so a moment shown late owns the elapsed truth.
-        val overBy = (System.currentTimeMillis() - due.session.endsAt.toEpochMilli()).coerceAtLeast(0)
-        val settle = { sessionEnd = null; syncOpenCheck() }
+        val overBy = (System.currentTimeMillis() - due.timedSession.endsAt.toEpochMilli()).coerceAtLeast(0)
+        val settle = { sessionEndDue = null; syncOpenCheck() }
         // Reopening resolves through the catalog; an uninstalled app just settles.
-        val reopen = { catalog.resolve(listOf(due.session.appId)).firstOrNull()?.let(openApp) }
+        val reopen = { catalog.resolve(listOf(due.timedSession.appId)).firstOrNull()?.let(openApp) }
         SessionEndSheet(
-            phrase = sessionEndPhrase(due.session.plannedMinutes, overBy),
+            phrase = sessionEndPhrase(due.timedSession.plannedMinutes, overBy),
             onClose = { openCheck.onSessionEndClose(); settle() },
             onAddFive = {
                 openCheck.onSessionEndAddFive(Instant.now())
