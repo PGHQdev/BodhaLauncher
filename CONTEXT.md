@@ -44,6 +44,10 @@ _Avoid_: grace period (that connotes leniency; the grant covers exactly one open
 The default Intent Prompt trigger: a 3rd session starting within a 15-minute window, signalling autopilot use. After firing it rests for a cooldown.
 _Avoid_: unlock trigger (it counts sessions, not unlocks)
 
+**Per-query default**:
+The user's explicit choice of which result wins for one query string. Set from a result's long-press, reversible there, and the second ranking tier.
+_Avoid_: preferred app, favourite, shortcut
+
 **Launch log**:
 Bodha's own record of launches it mediates — app identity and timestamp, nothing else. The spine of Awareness's per-app views; needs no permission and keeps full history, unlike the system's few-day usage events.
 _Avoid_: usage stats (that's the system's), history, analytics (nothing is transmitted)
