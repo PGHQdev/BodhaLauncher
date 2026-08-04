@@ -1,0 +1,537 @@
+<title>Bodha — Screen Index (HTML rendition of bodhalauncher.png)</title>
+<style>
+  /* PROTOTYPE — wipe me. Issue #127.
+     An HTML rendition of every screen in bodhalauncher.png, built so the visual
+     language can be inspected and argued with rather than squinted at.
+     Palette is the real one from BodhaTheme.kt. Dark is EXTRAPOLATED — the
+     reference is light only. Clay and slate are APPROXIMATED — ADR 0019 settles
+     three free accents, only sage is built. App icons are neutral placeholders:
+     the brand marks are not the language, the row structure is. */
+  :root {
+    --ground:#F6F1E7; --ink:#2B261F; --muted:#7A7263; --accent:#7D8C6F;
+    --hairline:rgba(43,38,31,.14); --card:#FBF8F1; --cardline:rgba(43,38,31,.10);
+    --chip:#F0EADC; --tint:rgba(125,140,111,.18); --error:#9C4A38;
+    --page:#EFE9DD;
+  }
+  :root[data-theme="dark"]{
+    --ground:#221F1A; --ink:#EAE3D6; --muted:#9A9184; --accent:#93A284;
+    --hairline:rgba(234,227,214,.16); --card:#2A2721; --cardline:rgba(234,227,214,.10);
+    --chip:#332F27; --tint:rgba(147,162,132,.20); --error:#C4796A;
+    --page:#1A1814;
+  }
+  :root[data-accent="clay"]{ --accent:#A8785E; --tint:rgba(168,120,94,.18) }
+  :root[data-accent="slate"]{ --accent:#6C7C8C; --tint:rgba(108,124,140,.18) }
+  :root[data-theme="dark"][data-accent="clay"]{ --accent:#BC8F76; --tint:rgba(188,143,118,.20) }
+  :root[data-theme="dark"][data-accent="slate"]{ --accent:#869AAC; --tint:rgba(134,154,172,.20) }
+
+  *{box-sizing:border-box}
+  body{
+    margin:0;background:var(--page);color:var(--ink);
+    font-family:"Source Sans 3",system-ui,-apple-system,sans-serif;
+    padding:2.6rem 1rem 6.5rem;
+  }
+  .serif{font-family:"Source Serif 4","Iowan Old Style",Palatino,Georgia,serif}
+  header.page{text-align:center;margin-bottom:2.4rem}
+  header.page h1{font-family:"Source Serif 4","Iowan Old Style",Palatino,Georgia,serif;
+    font-size:3rem;font-weight:400;margin:0 0 .35rem;letter-spacing:-.01em}
+  header.page .rule{display:flex;align-items:center;gap:1rem;justify-content:center;
+    color:var(--muted);font-size:.95rem}
+  header.page .rule::before,header.page .rule::after{content:"";height:1px;width:4rem;background:var(--hairline)}
+  header.page p.sub{color:var(--muted);font-size:.82rem;margin:.9rem 0 0}
+
+  .grid{display:flex;flex-wrap:wrap;gap:2.6rem 2rem;justify-content:center;max-width:88rem;margin:0 auto}
+  figure{margin:0;width:19.5rem}
+  figcaption{text-align:center;font-family:"Source Serif 4",Georgia,serif;
+    font-size:1.05rem;margin-bottom:.7rem;color:var(--ink)}
+  .phone{border-radius:2.1rem;padding:.5rem;background:#141310;
+    box-shadow:0 16px 44px rgba(0,0,0,.16)}
+  .screen{border-radius:1.7rem;height:38.5rem;background:var(--ground);color:var(--ink);
+    overflow:hidden;display:flex;flex-direction:column;position:relative}
+  .statusbar{display:flex;justify-content:space-between;align-items:center;
+    padding:.7rem 1.1rem .2rem;font-size:.7rem;color:var(--ink);flex:0 0 auto}
+  .statusbar .dot{width:.5rem;height:.5rem;border-radius:50%;background:#141310}
+  .statusbar .right{display:flex;gap:.28rem;align-items:center;opacity:.85}
+  .body{flex:1 1 auto;padding:.5rem 1rem 1rem;display:flex;flex-direction:column;overflow:hidden}
+
+  svg.i{width:1.1rem;height:1.1rem;fill:none;stroke:currentColor;stroke-width:1.6;
+    stroke-linecap:round;stroke-linejoin:round;flex:0 0 auto}
+  svg.i.sm{width:.9rem;height:.9rem}
+  svg.i.lg{width:1.5rem;height:1.5rem}
+
+  /* --- shared components of the language --- */
+  .card{background:var(--card);border:1px solid var(--cardline);border-radius:.85rem}
+  .rowcard{display:flex;align-items:center;gap:.7rem;padding:.6rem .65rem;min-height:3rem}
+  .chip{width:2.1rem;height:2.1rem;border-radius:.6rem;background:var(--chip);
+    display:flex;align-items:center;justify-content:center;flex:0 0 auto;color:var(--ink)}
+  .listrow{display:flex;align-items:center;gap:.75rem;padding:.62rem .1rem;
+    border-bottom:1px solid var(--hairline);min-height:3rem}
+  .grow{flex:1 1 auto;min-width:0}
+  .t{font-size:.92rem;line-height:1.25}
+  .s{font-size:.76rem;color:var(--muted);line-height:1.3;margin-top:.08rem}
+  .rowcard .s{white-space:nowrap}
+  .rowcard>.grow{min-width:0}
+  .rowcard>.trail{display:flex;align-items:center;gap:.35rem;flex:0 0 auto;white-space:nowrap}
+  .rowcard>.trail .s{font-size:.7rem}
+  .overline{font-size:.72rem;color:var(--muted);margin:.85rem 0 .38rem}
+  .field{display:flex;align-items:center;gap:.6rem;border:1px solid var(--cardline);
+    background:var(--card);border-radius:1.4rem;padding:.62rem .85rem;color:var(--muted);font-size:.88rem}
+  .pill{display:flex;align-items:center;justify-content:center;gap:.5rem;
+    border:1px solid var(--cardline);background:var(--card);border-radius:1.4rem;
+    padding:.62rem .9rem;font-size:.88rem;position:relative}
+  .pill .lead{position:absolute;left:.85rem;display:flex}
+  .pill.solid{background:var(--accent);border-color:var(--accent);color:var(--ground);font-weight:600}
+  .pill.tinted{background:var(--tint);border-color:transparent}
+  .stack{display:flex;flex-direction:column;gap:.42rem}
+  .spacer{flex:1 1 auto}
+  .center{text-align:center}
+  .dots{display:flex;gap:.34rem;justify-content:center;margin:.7rem 0 .55rem}
+  .dots i{width:.36rem;height:.36rem;border-radius:50%;background:var(--hairline);display:block}
+  .dots i.on{background:var(--accent)}
+  .appicon{width:2rem;height:2rem;border-radius:.55rem;flex:0 0 auto;
+    display:flex;align-items:center;justify-content:center;font-size:.8rem;font-weight:700;color:#fff}
+  .round{border-radius:50%}
+  .hair{height:1px;background:var(--hairline);margin:.7rem 0}
+  .hero{height:11.5rem;margin:-.5rem -1rem .0;position:relative;overflow:hidden;
+    background:linear-gradient(180deg,var(--chip),var(--ground))}
+  .sheet{background:var(--card);border-radius:1.2rem 1.2rem 0 0;margin:0 -1rem -1rem;
+    padding:.8rem 1rem 1rem;flex:1 1 auto;display:flex;flex-direction:column;
+    border-top:1px solid var(--cardline)}
+  .handle{width:2.2rem;height:.22rem;border-radius:1rem;background:var(--hairline);margin:0 auto .8rem}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:.5rem}
+  .grid2 .pill{font-size:.79rem;padding:.6rem .4rem;text-align:center;white-space:nowrap}
+  .rail{position:absolute;right:.35rem;top:5.2rem;bottom:1.2rem;display:flex;
+    flex-direction:column;justify-content:space-between;font-size:.56rem;color:var(--muted)}
+  .timeline{position:relative;padding-left:1.1rem}
+  .timeline::before{content:"";position:absolute;left:.24rem;top:.55rem;bottom:.55rem;
+    width:1px;background:var(--hairline)}
+  .tl{display:flex;align-items:baseline;gap:.7rem;padding:.4rem 0;position:relative}
+  .tl::before{content:"";position:absolute;left:-1.02rem;top:.72rem;width:.42rem;height:.42rem;
+    border-radius:50%;background:var(--ink)}
+  .avatars{display:flex;gap:.3rem;padding:.1rem 0 .1rem 2.85rem}
+  .avatars span{width:1.5rem;height:1.5rem;border-radius:50%;background:var(--chip);
+    border:1px solid var(--cardline)}
+  .radio{width:1.05rem;height:1.05rem;border-radius:50%;border:1.5px solid var(--hairline);flex:0 0 auto}
+  .radio.on{border-color:var(--accent);background:var(--accent);box-shadow:inset 0 0 0 3px var(--card)}
+  .bar{height:.28rem;border-radius:1rem;background:var(--hairline);overflow:hidden;margin:.7rem 0 1rem}
+  .bar i{display:block;height:100%;width:70%;background:var(--accent)}
+  .mini{display:flex;flex-direction:column;align-items:center;gap:.3rem;
+    padding:.55rem .3rem;font-size:.68rem;color:var(--muted)}
+
+  .toolbar{position:fixed;left:0;right:0;bottom:0;z-index:9;background:var(--page);
+    border-top:1px solid var(--hairline);padding:.7rem 1rem;display:flex;gap:1.4rem;
+    justify-content:center;flex-wrap:wrap;align-items:center}
+  .toolbar .lbl{font-size:.62rem;text-transform:uppercase;letter-spacing:.13em;color:var(--muted);margin-right:.35rem}
+  .toolbar .grp{display:flex;gap:.35rem;align-items:center}
+  button{font:inherit;font-size:.8rem;padding:.34rem .7rem;cursor:pointer;background:transparent;
+    color:var(--ink);border:1px solid var(--hairline);border-radius:.4rem}
+  button[aria-pressed="true"]{border-color:var(--accent);color:var(--accent)}
+  .caveat{max-width:44rem;margin:2.6rem auto 0;color:var(--muted);font-size:.82rem;line-height:1.6}
+  .caveat b{color:var(--ink)}
+</style>
+
+<svg style="display:none">
+  <symbol id="pencil" viewBox="0 0 24 24"><path d="M4 20h4L20 8l-4-4L4 16v4z"/></symbol>
+  <symbol id="cal" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></symbol>
+  <symbol id="phone" viewBox="0 0 24 24"><path d="M5 3h4l2 5-3 2a12 12 0 006 6l2-3 5 2v4a2 2 0 01-2 2A17 17 0 013 5a2 2 0 012-2z"/></symbol>
+  <symbol id="cam" viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="13" rx="2"/><circle cx="12" cy="13" r="3.4"/><path d="M8 7l1.5-2h5L16 7"/></symbol>
+  <symbol id="bell" viewBox="0 0 24 24"><path d="M18 16V11a6 6 0 10-12 0v5l-2 3h16l-2-3z"/><path d="M10 21h4"/></symbol>
+  <symbol id="search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></symbol>
+  <symbol id="leaf" viewBox="0 0 24 24"><path d="M12 21c0-7 3-12 9-15-1 9-4 13-9 15z"/><path d="M12 21C7 18 4 13 3 5c5 2 8 6 9 12z"/></symbol>
+  <symbol id="sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></symbol>
+  <symbol id="chev" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></symbol>
+  <symbol id="chevl" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
+  <symbol id="check" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 12l3 3 5-6"/></symbol>
+  <symbol id="doc" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/></symbol>
+  <symbol id="x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="chat" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4V5z"/></symbol>
+  <symbol id="up" viewBox="0 0 24 24"><path d="M7 17L17 7M9 7h8v8"/></symbol>
+  <symbol id="moon" viewBox="0 0 24 24"><path d="M20 14a8 8 0 11-10-10 7 7 0 0010 10z"/></symbol>
+  <symbol id="filter" viewBox="0 0 24 24"><path d="M4 6h16M7 12h10M10 18h4"/></symbol>
+  <symbol id="share" viewBox="0 0 24 24"><path d="M12 15V4M8 8l4-4 4 4"/><path d="M5 13v6h14v-6"/></symbol>
+  <symbol id="book" viewBox="0 0 24 24"><path d="M4 5a3 3 0 013-3h5v18H7a3 3 0 00-3 3V5z"/><path d="M20 5a3 3 0 00-3-3h-5v18h5a3 3 0 013 3V5z"/></symbol>
+  <symbol id="trend" viewBox="0 0 24 24"><path d="M3 16l5-6 4 4 4-7 5 5"/></symbol>
+  <symbol id="info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 8h.01"/></symbol>
+  <symbol id="home" viewBox="0 0 24 24"><path d="M4 11l8-7 8 7"/><path d="M6 10v10h12V10"/></symbol>
+  <symbol id="car" viewBox="0 0 24 24"><path d="M4 16h16v-4l-2-5H6l-2 5v4z"/><circle cx="7.5" cy="17.5" r="1.5"/><circle cx="16.5" cy="17.5" r="1.5"/></symbol>
+  <symbol id="star" viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="person" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0114 0"/></symbol>
+  <symbol id="palette" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="9" cy="10" r="1.3"/><circle cx="15" cy="10" r="1.3"/></symbol>
+  <symbol id="plug" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></symbol>
+  <symbol id="lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 018 0v3"/></symbol>
+  <symbol id="badge" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12h8"/></symbol>
+  <symbol id="pause" viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"/></symbol>
+  <symbol id="stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1.5" fill="currentColor"/></symbol>
+  <symbol id="send" viewBox="0 0 24 24"><path d="M4 12l16-7-7 16-2-7-7-2z"/></symbol>
+  <symbol id="wifi" viewBox="0 0 24 24"><path d="M2 8a15 15 0 0120 0M5.5 12a10 10 0 0113 0M9 15.5a5 5 0 016 0"/><circle cx="12" cy="19" r="1" fill="currentColor"/></symbol>
+  <symbol id="sig" viewBox="0 0 24 24"><path d="M3 20h18L3 20zM21 4v16" /><path d="M3 20L21 4v16z" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="batt" viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2" fill="currentColor" stroke="none"/></symbol>
+</svg>
+
+<main>
+  <header class="page">
+    <h1>Bodha</h1>
+    <div class="rule">Intentional Launcher — Screen Index</div>
+    <p class="sub">HTML rendition of <code>bodhalauncher.png</code> · prototype for issue #127</p>
+  </header>
+  <div class="grid" id="grid"></div>
+  <div class="caveat" id="caveat"></div>
+</main>
+
+<div class="toolbar">
+  <div class="grp"><span class="lbl">Theme</span><span id="tb"></span></div>
+  <div class="grp"><span class="lbl">Accent</span><span id="ab"></span></div>
+</div>
+
+<script>
+const ic = (n, cls="i") => `<svg class="${cls}"><use href="#${n}"/></svg>`;
+const status = () => `<div class="statusbar"><span>9:41</span><span class="dot"></span>
+  <span class="right">${ic("wifi","i sm")}${ic("sig","i sm")}${ic("batt","i sm")}</span></div>`;
+
+const appIcon = (letter, colour, round) =>
+  `<span class="appicon ${round?"round":""}" style="background:${colour}">${letter}</span>`;
+
+const rowcard = (icon, title, sub, trail) => `
+  <div class="card rowcard">
+    ${icon ? `<span class="chip">${ic(icon)}</span>` : ""}
+    <span class="grow"><span class="t">${title}</span>${sub?`<div class="s">${sub}</div>`:""}</span>
+    ${trail || ""}
+  </div>`;
+
+const listrow = (lead, title, sub, trail) => `
+  <div class="listrow">${lead}
+    <span class="grow"><span class="t">${title}</span>${sub?`<div class="s">${sub}</div>`:""}</span>
+    ${trail||""}</div>`;
+
+const SCREENS = [
+["1. Home", `
+  <div class="body">
+    <div style="display:flex;justify-content:flex-end;color:var(--accent);margin:.2rem .1rem -1.4rem">${ic("leaf")}</div>
+    <div class="center" style="margin-top:.9rem">
+      <div class="serif" style="font-size:3.3rem;line-height:1">9:41</div>
+      <div class="serif" style="font-size:1rem;color:var(--muted);margin-top:.15rem">Tue, May 14</div>
+    </div>
+    <div class="card" style="padding:.7rem .8rem;margin-top:1.2rem">
+      <div class="t">Today — Finish Bodha prototype</div>
+      <div style="display:flex;align-items:center;gap:.45rem;margin-top:.4rem;color:var(--accent)">
+        ${ic("cal","i sm")}<span class="s" style="color:var(--ink)">Work</span></div>
+    </div>
+    <div class="stack" style="margin-top:.55rem">
+      ${rowcard("pencil","Continue writing")}
+      ${rowcard("cal","Next meeting · 11:30")}
+      ${rowcard("phone","Call Mom")}
+      ${rowcard("cam","Camera")}
+      ${rowcard("bell","Nothing urgent","You're all caught up.")}
+    </div>
+    <div class="dots"><i class="on"></i><i></i></div>
+    <div class="field">${ic("search")}<span>Search apps, contacts, actions</span></div>
+  </div>`],
+
+["2. Intent", `
+  <div class="body" style="padding-bottom:0">
+    <div class="hero">
+      <svg viewBox="0 0 200 130" style="width:100%;height:100%">
+        <g fill="none" stroke="#8B9C7B" stroke-width="1.5" opacity=".75">
+          <path d="M105 118C100 80 108 48 130 28"/>
+          <path d="M105 118C96 92 80 72 62 64"/>
+        </g>
+        <g fill="#9DAE8C" opacity=".7">
+          <ellipse cx="118" cy="52" rx="11" ry="4.5" transform="rotate(-35 118 52)"/>
+          <ellipse cx="126" cy="40" rx="10" ry="4" transform="rotate(-35 126 40)"/>
+          <ellipse cx="112" cy="68" rx="10" ry="4" transform="rotate(-30 112 68)"/>
+          <ellipse cx="90" cy="76" rx="9" ry="4" transform="rotate(25 90 76)"/>
+          <ellipse cx="76" cy="70" rx="8" ry="3.5" transform="rotate(20 76 70)"/>
+        </g>
+        <g fill="#A9A396" opacity=".85">
+          <ellipse cx="152" cy="112" rx="21" ry="7"/>
+          <ellipse cx="152" cy="100" rx="15" ry="6"/>
+          <ellipse cx="152" cy="90" rx="10" ry="4.5"/>
+        </g>
+      </svg>
+    </div>
+    <div class="sheet">
+      <div class="handle"></div>
+      <div class="serif center" style="font-size:1.55rem;line-height:1.25">What are you<br>here for?</div>
+      <div class="grid2" style="margin-top:1rem">
+        <div class="pill">Continue something</div><div class="pill">Communicate</div>
+        <div class="pill">Capture</div><div class="pill">Find something</div>
+        <div class="pill">Browse</div><div class="pill">Just looking</div>
+      </div>
+      <div class="spacer"></div>
+      <div class="field" style="justify-content:space-between"><span>Something else…</span>${ic("pencil")}</div>
+    </div>
+  </div>`],
+
+["3. Today", `
+  <div class="body">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin:.3rem 0 .8rem">
+      <span class="serif" style="font-size:1.7rem">Today</span>${ic("sun","i lg")}</div>
+    <div class="pill tinted" style="justify-content:flex-start;padding:.75rem .9rem">Today — Finish Bodha prototype</div>
+    <div class="overline">Next event</div>
+    ${rowcard("cal","11:30","Design review",`<span style="color:var(--muted)">${ic("chev")}</span>`)}
+    <div class="overline">Next task</div>
+    ${rowcard("check","Review onboarding flow","",`<span style="color:var(--muted)">${ic("chev")}</span>`)}
+    <div class="overline">Resume</div>
+    ${rowcard("doc","PRD","Last opened 24 min ago",`<span style="color:var(--muted)">${ic("chev")}</span>`)}
+    <div class="spacer"></div>
+    <div class="center s" style="margin-bottom:.5rem">Clarity is the first step.</div>
+  </div>`],
+
+["4. Search", `
+  <div class="body">
+    <div class="field" style="color:var(--ink);margin:.4rem 0 .5rem">
+      ${ic("search")}<span class="grow">mom</span>${ic("x")}</div>
+    ${listrow(appIcon("","#A9A396",true),"Call Mom","Mobile",`${ic("phone")}`)}
+    ${listrow(appIcon("","#4C7A5A",true),"Message Mom","Open conversation",`${ic("chat")}`)}
+    ${listrow(appIcon("","#C7803F",true),"Photos with Mom","Google Photos",`${ic("up")}`)}
+    ${listrow(`<span class="chip">${ic("cal")}</span>`,"Next meeting — 11:30","Design review",`<span style="color:var(--muted)">${ic("chev")}</span>`)}
+    ${listrow(`<span class="chip">${ic("moon")}</span>`,"Turn on Focus","Writing · 45 min",`<span style="color:var(--muted)">${ic("chev")}</span>`)}
+    <div class="spacer"></div>
+    <div class="hair"></div>
+    <div style="display:flex;align-items:center;padding:.3rem .1rem">
+      <span class="grow t">See more results for “mom”</span>
+      <span style="color:var(--muted)">${ic("chev")}</span></div>
+  </div>`],
+
+["5. Library", `
+  <div class="body">
+    <div class="field" style="margin:.4rem 0 .3rem">${ic("search")}<span>Search apps</span></div>
+    ${listrow(appIcon("C","#3A3630"),"Camera")}
+    ${listrow(appIcon("C","#4A5C7A"),"Calendar")}
+    ${listrow(appIcon("C","#C9552F"),"Chrome")}
+    ${listrow(appIcon("G","#B23B2E"),"Gmail")}
+    ${listrow(appIcon("I","#9B4B7A"),"Instagram","Last used 8 minutes ago")}
+    ${listrow(appIcon("M","#4C7A5A"),"Maps")}
+    ${listrow(appIcon("M","#3F6BAF"),"Messages")}
+    ${listrow(appIcon("N","#C79A3F"),"Notes")}
+    ${listrow(appIcon("S","#6B4B7A"),"Slack")}
+    ${listrow(appIcon("S","#3F8A5A"),"Spotify")}
+    <div class="rail">${"#ABCDEFGHIJKLMNOPQRSTVWXYZ".split("").map(c=>`<span>${c}</span>`).join("")}</div>
+  </div>`],
+
+["6. Open Check", `
+  <div class="body center">
+    <div style="margin:1.6rem 0 .8rem;display:flex;justify-content:center">
+      <span class="appicon" style="width:3.4rem;height:3.4rem;border-radius:1rem;background:#9B4B7A;font-size:1.3rem">I</span></div>
+    <div class="serif" style="font-size:1.7rem">Instagram</div>
+    <div class="s" style="margin-top:.4rem">Last opened 8 minutes ago</div>
+    <div class="s">Used 34 minutes today</div>
+    <div class="hair" style="margin:1rem 0"></div>
+    <div class="t" style="font-weight:600;margin-bottom:.7rem">Still want to open it?</div>
+    <div class="stack">
+      <div class="field">What do you want to do there?</div>
+      <div class="pill solid">Open</div>
+      <div class="pill">Open for 10 minutes</div>
+      <div class="pill">Go back</div>
+    </div>
+  </div>`],
+
+["7. Focus", `
+  <div class="body">
+    <div style="color:var(--muted)">${ic("chevl")}</div>
+    <div class="center" style="color:var(--accent);margin-top:.2rem">${ic("leaf","i lg")}</div>
+    <div class="serif center" style="font-size:1.9rem;margin-top:.2rem">Writing</div>
+    <div class="center" style="margin-top:.15rem">
+      <span class="serif" style="font-size:1.35rem">42</span>
+      <span style="font-size:1rem"> minutes remaining</span></div>
+    <div class="bar"><i></i></div>
+    <div class="stack">
+      <div class="pill solid">Continue writing</div>
+      <div class="pill"><span class="lead">${ic("search","i sm")}</span>Search</div>
+      <div class="pill"><span class="lead">${ic("pause","i sm")}</span>Pause focus</div>
+      <div class="pill" style="color:var(--error)"><span class="lead">${ic("stop","i sm")}</span>End focus</div>
+    </div>
+    <div class="spacer"></div>
+    <div class="overline">Allowed apps</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.45rem">
+      <div class="card mini">${ic("chat")}Messages</div>
+      <div class="card mini">${ic("phone")}Phone</div>
+      <div class="card mini">${ic("cal")}Calendar</div>
+    </div>
+  </div>`],
+
+["8. Notifications", `
+  <div class="body">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin:.3rem 0 .6rem">
+      <span><span class="serif" style="font-size:1.6rem">Notifications</span>
+      <div class="s">A calm summary</div></span>${ic("filter")}</div>
+    <div class="card" style="padding:.55rem .7rem">
+      <div class="overline" style="margin:0 0 .2rem">People</div>
+      <div style="display:flex;align-items:center;gap:.7rem">
+        <span class="chip">${ic("chat")}</span><span class="grow t">3 people reached out</span>
+        <span style="color:var(--muted)">${ic("chev")}</span></div>
+      <div class="avatars"><span></span><span></span><span></span><span></span></div>
+    </div>
+    <div style="height:.45rem"></div>
+    <div class="card" style="padding:.55rem .7rem">
+      <div class="overline" style="margin:0 0 .2rem">Time-sensitive</div>
+      <div style="display:flex;align-items:center;gap:.7rem">
+        <span class="chip">${ic("chat")}</span>
+        <span class="grow"><span class="t">1 item needs attention</span>
+        <div class="s">Alex: Can you share the update?</div></span>
+        <span style="color:var(--muted)">${ic("chev")}</span></div>
+    </div>
+    <div style="height:.45rem"></div>
+    <div class="card" style="padding:.55rem .7rem">
+      <div class="overline" style="margin:0 0 .2rem">Work</div>
+      <div style="display:flex;align-items:center;gap:.7rem">
+        <span class="chip">${ic("bell")}</span>
+        <span class="grow"><span class="t">Nothing urgent</span><div class="s">You're all clear.</div></span>
+        <span style="color:var(--muted)">${ic("chev")}</span></div>
+    </div>
+    <div style="height:.45rem"></div>
+    <div class="card" style="padding:.55rem .7rem">
+      <div class="overline" style="margin:0 0 .2rem">Updates</div>
+      <div style="display:flex;align-items:center;gap:.7rem">
+        <span class="chip">${ic("badge")}</span>
+        <span class="grow"><span class="t">2 new updates</span><div class="s">Bodha · Play Store</div></span>
+        <span style="color:var(--muted)">${ic("chev")}</span></div>
+    </div>
+    <div class="spacer"></div>
+    <div class="pill tinted">View all notifications</div>
+  </div>`],
+
+["9. Awareness", `
+  <div class="body">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin:.3rem 0 .9rem">
+      <span><span class="serif" style="font-size:1.6rem">Today</span>
+      <div class="s">Your timeline</div></span>${ic("cal","i lg")}</div>
+    <div class="timeline">
+      <div class="tl"><span class="s" style="width:3rem">09:10</span><span class="grow t">WhatsApp</span><span class="s">2 min</span></div>
+      <div class="tl"><span class="s" style="width:3rem">09:18</span><span class="grow t">Instagram</span><span class="s">43 sec</span></div>
+      <div class="tl"><span class="s" style="width:3rem">09:20</span><span class="grow t">Camera</span><span class="s">1 min</span></div>
+      <div class="tl"><span class="s" style="width:3rem">09:32</span><span class="grow"><span class="t">Chrome</span><div class="s">Research</div></span><span class="s">6 min</span></div>
+      <div class="tl"><span class="s" style="width:3rem">10:05</span><span class="grow t">Maps</span><span class="s">4 min</span></div>
+    </div>
+    <div class="spacer"></div>
+    <div class="card" style="padding:.7rem .8rem">
+      <div class="overline" style="margin:0 0 .35rem">Patterns</div>
+      <div style="display:flex;align-items:center"><span class="grow t">Instagram opened 12 times</span>
+        <span style="color:var(--muted)">${ic("chev")}</span></div>
+      <div class="t" style="margin-top:.5rem">27 phone sessions, 14 intentional</div>
+    </div>
+  </div>`],
+
+["10. Reflection", `
+  <div class="body">
+    <div style="display:flex;justify-content:space-between;color:var(--muted)">${ic("chevl")}${ic("share")}</div>
+    <div style="height:6.5rem;margin:0 -1rem">
+      <svg viewBox="0 0 200 90" style="width:100%;height:100%">
+        <circle cx="58" cy="34" r="20" fill="#EADFC8"/>
+        <path d="M120 62c10-16 18-22 26-30 8 8 16 14 26 30z" fill="#D9D3C4" opacity=".8"/>
+        <path d="M96 64c8-12 14-17 20-23 6 6 12 11 19 23z" fill="#CFC8B8" opacity=".7"/>
+        <g fill="#A9A396"><ellipse cx="58" cy="60" rx="26" ry="7"/>
+          <ellipse cx="58" cy="50" rx="19" ry="6"/><ellipse cx="58" cy="41" rx="13" ry="5"/></g>
+        <path d="M0 70h200" stroke="#D9D3C4" stroke-width="1" fill="none"/>
+      </svg>
+    </div>
+    <div class="serif center" style="font-size:1.5rem;line-height:1.3;margin-top:.3rem">
+      You mostly used<br>your phone for<br>work today.</div>
+    <div class="center s" style="margin-top:.7rem">Instagram opened 12 times,<br>18 minutes total.</div>
+    <div class="center s" style="margin-top:.4rem">Longest focused period:<br>47 minutes.</div>
+    <div class="spacer"></div>
+    <div class="card" style="padding:0 .75rem">
+      ${listrow(ic("trend"),"Review timeline","",`<span style="color:var(--muted)">${ic("chev")}</span>`)}
+      ${listrow(ic("star"),"Adjust one habit","",`<span style="color:var(--muted)">${ic("chev")}</span>`)}
+      <div class="listrow" style="border-bottom:none">${ic("check")}
+        <span class="grow t">Add a note</span><span style="color:var(--muted)">${ic("chev")}</span></div>
+    </div>
+  </div>`],
+
+["11. AI Assist", `
+  <div class="body">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin:.3rem 0 .8rem">
+      <span class="serif" style="font-size:1.6rem">AI Assist</span>${ic("info")}</div>
+    <div class="stack">
+      ${rowcard("book","Resume reading<br>page 37")}
+      ${rowcard("trend","You've switched apps<br>5 times. Looking for<br>something?")}
+      ${rowcard("cal","Meeting starts in<br>12 minutes. Open notes?")}
+    </div>
+    <div style="display:flex;justify-content:center;margin-top:1rem">
+      <div class="pill" style="padding:.45rem .8rem;color:var(--muted);font-size:.8rem;gap:.45rem">
+        ${ic("info","i sm")} Why am I seeing this? ${ic("chev","i sm")}</div>
+    </div>
+    <div class="spacer"></div>
+    <div class="card" style="display:flex;align-items:center;gap:.6rem;padding:.5rem .5rem .5rem .9rem">
+      <span class="grow t">Book dentist</span>
+      <span class="appicon round" style="background:var(--accent);width:2.2rem;height:2.2rem">${ic("send","i sm")}</span>
+    </div>
+  </div>`],
+
+["12. Context", `
+  <div class="body">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin:.3rem 0 .7rem">
+      <span class="serif" style="font-size:1.6rem">Current context</span>${ic("info")}</div>
+    ${listrow(ic("sun"),"Automatic","",`<span class="radio"></span>`)}
+    <div class="listrow" style="background:var(--tint);border-radius:.7rem;border-bottom:none;padding:.62rem .6rem;margin:.15rem 0">
+      ${ic("doc")}<span class="grow"><span class="t">Work</span><div class="s">Useful right now</div></span>
+      <span class="radio on"></span></div>
+    ${listrow(ic("home"),"Home","",`<span class="radio"></span>`)}
+    ${listrow(ic("car"),"Commute","",`<span class="radio"></span>`)}
+    ${listrow(ic("star"),"Travel","",`<span class="radio"></span>`)}
+    ${listrow(ic("moon"),"Evening","",`<span class="radio"></span>`)}
+    ${listrow(ic("person"),"Custom","",`<span class="radio"></span>`)}
+    <div class="spacer"></div>
+    <div class="overline">Useful right now</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.45rem">
+      <div class="card mini">${ic("cal")}Calendar</div>
+      <div class="card mini">${ic("chat")}Slack</div>
+      <div class="card mini">${ic("doc")}Notes</div>
+    </div>
+  </div>`],
+
+["13. Settings", `
+  <div class="body">
+    <div class="serif" style="font-size:1.6rem;margin:.3rem 0 .8rem">Settings</div>
+    <div class="stack">
+      ${rowcard("palette","Appearance","",`<span class="trail"><span class="s">Warm Light</span>
+        <span style="width:1.3rem;height:.85rem;border-radius:.22rem;background:#EADFC8;border:1px solid var(--cardline)"></span>
+        <span style="color:var(--muted)">${ic("chev")}</span></span>`)}
+      ${rowcard("home","Home","",`<span style="color:var(--muted)">${ic("chev")}</span>`)}
+      ${rowcard("plug","Intentionality","",`<span style="color:var(--muted)">${ic("chev")}</span>`)}
+      ${rowcard("star","Intelligence","",`<span style="color:var(--muted)">${ic("chev")}</span>`)}
+      ${rowcard("badge","Integrations","",`<span style="color:var(--muted)">${ic("chev")}</span>`)}
+      ${rowcard("lock","Privacy","",`<span style="color:var(--muted)">${ic("chev")}</span>`)}
+      ${rowcard("info","Subscription","",`<span class="trail"><span class="s">Bodha Pro</span>
+        <span style="color:var(--muted)">${ic("chev")}</span></span>`)}
+    </div>
+  </div>`],
+];
+
+document.getElementById("grid").innerHTML = SCREENS.map(([cap, body]) =>
+  `<figure><figcaption>${cap}</figcaption>
+    <div class="phone"><div class="screen">${status()}${body}</div></div></figure>`).join("");
+
+document.getElementById("caveat").innerHTML = `
+  <b>What is faithful and what is not.</b> The palette is the real one from
+  <code>BodhaTheme.kt</code>; serif and sans map to the shipped Source Serif 4 and
+  Source Sans 3 with system fallbacks. <b>Dark is extrapolated</b> — the reference is
+  light only — and clay and slate are approximated, since ADR 0019 settles three free
+  accents but only sage exists in code. App icons are neutral placeholders on purpose:
+  the brand marks are not the design language, the row structure is. The Intent and
+  Reflection artwork is redrawn as flat SVG rather than reproduced.
+  <br><br>
+  <b>What the index makes arguable.</b> Two row idioms coexist and the reference is
+  consistent about which goes where — <i>cards</i> for content blocks a user acts on
+  once (Home actions, Today's slots, Settings, AI Assist) and <i>hairline rows</i> for
+  lists that scroll (Search results, Library apps, Context modes). Fill already carries
+  two meanings: tinted for the current or summarising thing (Today's intention, the
+  selected context mode, "View all notifications"), solid sage for the one primary
+  action on a screen (Open, Continue writing, send). Neither exists in the built app,
+  and any later decision that reaches for fill is choosing for or against a vocabulary
+  that is already spent here.`;
+
+const mk = (host, items, attr, initial, onPick) => {
+  host.innerHTML = items.map(i => `<button data-${attr}="${i}">${i}</button>`).join("");
+  [...host.children].forEach(b => {
+    b.setAttribute("aria-pressed", b.dataset[attr] === initial);
+    b.onclick = () => { [...host.children].forEach(x => x.setAttribute("aria-pressed","false"));
+      b.setAttribute("aria-pressed","true"); onPick(b.dataset[attr]); };
+  });
+};
+mk(document.getElementById("tb"), ["light","dark"], "t", "light",
+   v => document.documentElement.dataset.theme = v);
+mk(document.getElementById("ab"), ["sage","clay","slate"], "a", "sage",
+   v => document.documentElement.dataset.accent = v);
+document.documentElement.dataset.theme = "light";
+document.documentElement.dataset.accent = "sage";
+</script>
