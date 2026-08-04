@@ -105,6 +105,7 @@ private fun HomeRoot(
                 query = query,
                 onQueryChange = { query = it },
                 onOpen = catalog::launch,
+                onPin = { pinStore.pin(it.id) },
                 onBack = back,
             )
         } else {

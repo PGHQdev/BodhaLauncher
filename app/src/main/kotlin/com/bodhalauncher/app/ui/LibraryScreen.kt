@@ -2,6 +2,7 @@ package com.bodhalauncher.app.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -53,6 +54,7 @@ fun LibraryScreen(
     query: String,
     onQueryChange: (String) -> Unit,
     onOpen: (HomeAction) -> Unit,
+    onPin: (HomeAction) -> Unit,
     onBack: () -> Unit,
 ) {
     val colors = LocalBodhaColors.current
@@ -110,7 +112,7 @@ fun LibraryScreen(
                 modifier = Modifier.fillMaxSize().nestedScroll(dismissOnOverscroll),
             ) {
                 items(count = state.rows.size, key = { state.rows[it].id }) { index ->
-                    AppRow(state.rows[index], onOpen)
+                    AppRow(state.rows[index], onOpen, onPin)
                 }
             }
             if (state.index.size > 1) {
@@ -186,7 +188,7 @@ private fun SearchField(query: String, onQueryChange: (String) -> Unit) {
 }
 
 @Composable
-private fun AppRow(app: HomeAction, onOpen: (HomeAction) -> Unit) {
+private fun AppRow(app: HomeAction, onOpen: (HomeAction) -> Unit, onPin: (HomeAction) -> Unit) {
     val colors = LocalBodhaColors.current
     Column(modifier = Modifier.fillMaxWidth()) {
         Box(Modifier.fillMaxWidth().height(1.dp).background(colors.hairline))
@@ -196,6 +198,15 @@ private fun AppRow(app: HomeAction, onOpen: (HomeAction) -> Unit) {
             fontSize = 16.sp,
             modifier = Modifier
                 .fillMaxWidth()
+                .pointerInput(app) {
+                    val threshold = 72.dp.toPx()
+                    var drag = 0f
+                    detectHorizontalDragGestures(
+                        onDragStart = { drag = 0f },
+                        onHorizontalDrag = { _, amount -> drag += amount },
+                        onDragEnd = { if (drag > threshold) onPin(app) },
+                    )
+                }
                 .clickable { onOpen(app) }
                 .padding(vertical = 16.dp),
         )
