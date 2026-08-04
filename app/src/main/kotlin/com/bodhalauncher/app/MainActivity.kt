@@ -28,11 +28,14 @@ import com.bodhalauncher.app.ui.HomeGestures
 import com.bodhalauncher.app.ui.HomeScreen
 import com.bodhalauncher.app.ui.IntentPromptSheet
 import com.bodhalauncher.app.ui.IntentionEditorDialog
+import com.bodhalauncher.app.ui.LibraryScreen
 import com.bodhalauncher.app.ui.PlaceholderSurface
 import com.bodhalauncher.engine.HomeAction
 import com.bodhalauncher.engine.HomeInputs
 import com.bodhalauncher.engine.IntentCategory
+import com.bodhalauncher.engine.LibraryInputs
 import com.bodhalauncher.engine.resolveHome
+import com.bodhalauncher.engine.resolveLibrary
 import kotlinx.coroutines.delay
 import java.time.LocalDateTime
 
@@ -92,8 +95,18 @@ private fun HomeRoot(
     val context = LocalContext.current
 
     if (surface != HomeSurface.Home) {
-        BackHandler { surface = HomeSurface.Home }
-        PlaceholderSurface(title = surface.title, onBack = { surface = HomeSurface.Home })
+        val back = { surface = HomeSurface.Home }
+        BackHandler(onBack = back)
+        if (surface == HomeSurface.Library) {
+            val apps = remember { catalog.installedApps() }
+            LibraryScreen(
+                state = resolveLibrary(LibraryInputs(apps = apps)),
+                onOpen = catalog::launch,
+                onBack = back,
+            )
+        } else {
+            PlaceholderSurface(title = surface.title, onBack = back)
+        }
         return
     }
 
