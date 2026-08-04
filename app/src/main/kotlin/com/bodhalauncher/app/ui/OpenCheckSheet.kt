@@ -23,19 +23,19 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.bodhalauncher.engine.HomeAction
 import com.bodhalauncher.engine.OpenCheckEngine
 import com.bodhalauncher.engine.OpenCheckLines
 
 /**
  * The Open Check (#8): a gentle pause before a checked app, never a wall.
- * Serif question (the voice), sans rows (the machinery) — ADR 0010. No
+ * Serif question (the voice), sans app name and rows (the machinery) — ADR 0010
+ * and ADR 0021. No
  * countdown, no guilt copy, no red, nothing pre-focused; swipe-down,
  * tap-outside and the back gesture all turn back.
  */
@@ -92,10 +92,10 @@ fun OpenCheckSheetContent(
                 Spacer(Modifier.width(12.dp))
             }
             Text(
+                // An app's own name is machinery, not Bodha's voice (ADR 0021).
                 text = appLabel,
                 color = colors.ink,
-                fontFamily = BodhaFaces.serif,
-                fontSize = 22.sp,
+                style = BodhaType.title,
             )
         }
         lines.lastOpened?.let { ContextLine(it) }
@@ -104,8 +104,9 @@ fun OpenCheckSheetContent(
             Text(
                 text = "Context needs usage access",
                 color = colors.inkMuted,
-                fontSize = 12.sp,
+                style = BodhaType.caption,
                 modifier = Modifier
+                    .touchTargetFloor()
                     .clickable(onClick = onContextNoteTap)
                     .padding(bottom = 8.dp),
             )
@@ -113,33 +114,29 @@ fun OpenCheckSheetContent(
         Text(
             text = "Still want to open it?",
             color = colors.inkMuted,
-            fontFamily = BodhaFaces.serif,
-            fontSize = 16.sp,
+            style = BodhaType.voicePassage,
             modifier = Modifier.padding(bottom = 12.dp),
         )
         BasicTextField(
             value = intention,
             onValueChange = { intention = it },
-            textStyle = TextStyle(
-                color = colors.ink,
-                fontFamily = BodhaFaces.serif,
-                fontStyle = FontStyle.Italic,
-                fontSize = 16.sp,
-            ),
+            textStyle = BodhaType.voiceInput.copy(color = colors.ink),
             cursorBrush = SolidColor(colors.accent),
             decorationBox = { field ->
                 if (intention.isEmpty()) {
                     Text(
                         text = "What do you want to do there?",
                         color = colors.inkMuted,
-                        fontSize = 16.sp,
-                        fontFamily = BodhaFaces.serif,
-                        fontStyle = FontStyle.Italic,
+                        style = BodhaType.voiceInput,
                     )
                 }
                 field()
             },
-            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .semantics { contentDescription = "What you want to do there" }
+                .padding(bottom = 12.dp)
+                .touchTargetFloor(),
         )
         SheetRow("Open") { onOpen(typed()) }
         OpenCheckEngine.TIMED_SESSION_MINUTES.forEach { minutes ->
@@ -157,7 +154,7 @@ private fun ContextLine(text: String) {
     Text(
         text = text,
         color = colors.inkMuted,
-        fontSize = 14.sp,
+        style = BodhaType.label,
         modifier = Modifier.padding(bottom = 4.dp),
     )
 }

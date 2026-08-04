@@ -21,11 +21,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.bodhalauncher.engine.IntentCategory
 
 /**
@@ -49,8 +48,7 @@ fun IntentPromptSheet(
             Text(
                 text = "What are you here for?",
                 color = colors.ink,
-                fontFamily = BodhaFaces.serif,
-                fontSize = 22.sp,
+                style = BodhaType.voiceTitle,
                 modifier = Modifier.padding(vertical = 12.dp),
             )
             Spacer(Modifier.height(8.dp))
@@ -60,9 +58,10 @@ fun IntentPromptSheet(
                     Text(
                         text = label,
                         color = colors.ink,
-                        fontSize = 16.sp,
+                        style = BodhaType.body,
                         modifier = Modifier
                             .fillMaxWidth()
+                            .touchTargetFloor()
                             // Any typed text rides along — the record keeps category + optional text.
                             .clickable { onSelect(category, freeText.trim().takeIf { it.isNotEmpty() }) }
                             .padding(vertical = 14.dp),
@@ -77,34 +76,31 @@ fun IntentPromptSheet(
                 BasicTextField(
                     value = freeText,
                     onValueChange = { freeText = it },
-                    textStyle = TextStyle(
-                        color = colors.ink,
-                        fontFamily = BodhaFaces.serif,
-                        fontStyle = FontStyle.Italic,
-                        fontSize = 16.sp,
-                    ),
+                    textStyle = BodhaType.voiceInput.copy(color = colors.ink),
                     cursorBrush = SolidColor(colors.accent),
                     decorationBox = { field ->
                         if (freeText.isEmpty()) {
                             Text(
                                 text = "Something else…",
                                 color = colors.inkMuted,
-                                fontSize = 16.sp,
-                                fontFamily = BodhaFaces.serif,
-                                fontStyle = FontStyle.Italic,
+                                style = BodhaType.voiceInput,
                             )
                         }
                         field()
                     },
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .semantics { contentDescription = "Something else" }
+                        .touchTargetFloor(),
                 )
                 if (freeText.isNotBlank()) {
                     Spacer(Modifier.width(16.dp))
                     Text(
                         text = "Go",
                         color = colors.accent,
-                        fontSize = 15.sp,
-                        modifier = Modifier.clickable { onSelect(null, freeText.trim()) },
+                        style = BodhaType.action,
+                        modifier = Modifier.touchTargetFloor()
+                            .clickable { onSelect(null, freeText.trim()) },
                     )
                 }
             }

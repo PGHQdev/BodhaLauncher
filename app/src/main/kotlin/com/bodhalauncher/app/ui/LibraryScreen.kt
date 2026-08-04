@@ -4,6 +4,8 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -37,6 +39,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.SolidColor
@@ -44,14 +48,16 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.bodhalauncher.engine.HomeAction
 import com.bodhalauncher.engine.LibraryIndexEntry
 import com.bodhalauncher.engine.LibraryLayout
@@ -136,8 +142,7 @@ fun LibraryScreen(
         Text(
             text = "Apps",
             color = colors.inkMuted,
-            fontSize = 14.sp,
-            letterSpacing = 2.sp,
+            style = BodhaType.overline,
             modifier = Modifier.padding(bottom = 20.dp),
         )
         LibrarySearchField(query, onQueryChange)
@@ -146,8 +151,9 @@ fun LibraryScreen(
             Text(
                 text = note,
                 color = colors.inkMuted,
-                fontSize = 12.sp,
+                style = BodhaType.caption,
                 modifier = Modifier
+                    .touchTargetFloor()
                     .clickable(onClick = onLayoutNoteTap)
                     .padding(bottom = 12.dp),
             )
@@ -311,15 +317,24 @@ private fun androidx.compose.foundation.lazy.grid.LazyGridScope.hiddenSection(
 }
 
 @Composable
-private fun LayoutSwitcher(current: LibraryLayout, onChange: (LibraryLayout) -> Unit) {
+internal fun LayoutSwitcher(current: LibraryLayout, onChange: (LibraryLayout) -> Unit) {
     val colors = LocalBodhaColors.current
-    Row(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+    // Scrolls rather than squeezes: five labels at the 48dp floor need ~332dp, which
+    // a 360dp phone does not have once the page padding is off (ADR 0020 — the floor
+    // wins, so the row gives way instead of the targets).
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(bottom = 12.dp)
+    ) {
         layoutLabels.forEach { (layout, label) ->
             Text(
                 text = label,
                 color = if (layout == current) colors.ink else colors.inkMuted,
-                fontSize = 13.sp,
+                style = BodhaType.label,
                 modifier = Modifier
+                    .touchTargetFloor()
                     .clickable { onChange(layout) }
                     .padding(vertical = 4.dp),
             )
@@ -338,15 +353,15 @@ private val layoutLabels = listOf(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun SectionHeader(title: String, onLongPress: (() -> Unit)? = null) {
+internal fun SectionHeader(title: String, onLongPress: (() -> Unit)? = null) {
     val colors = LocalBodhaColors.current
     Text(
         text = title,
         color = colors.inkMuted,
-        fontSize = 13.sp,
-        letterSpacing = 1.sp,
+        style = BodhaType.overline,
         modifier = Modifier
             .fillMaxWidth()
+            .touchTargetFloor()
             .let { base ->
                 if (onLongPress == null) base
                 else base.combinedClickable(onClick = {}, onLongClick = onLongPress)
@@ -357,14 +372,15 @@ private fun SectionHeader(title: String, onLongPress: (() -> Unit)? = null) {
 
 /** The Groups layout's quiet entry point for creating a group. */
 @Composable
-private fun NewGroupRow(onTap: () -> Unit) {
+internal fun NewGroupRow(onTap: () -> Unit) {
     val colors = LocalBodhaColors.current
     Text(
         text = "New group …",
         color = colors.inkMuted,
-        fontSize = 13.sp,
+        style = BodhaType.label,
         modifier = Modifier
             .fillMaxWidth()
+            .touchTargetFloor()
             .clickable(onClick = onTap)
             .padding(top = 20.dp, bottom = 8.dp),
     )
@@ -372,7 +388,7 @@ private fun NewGroupRow(onTap: () -> Unit) {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun IconCell(
+internal fun IconCell(
     app: HomeAction,
     iconKey: Any,
     iconFor: (HomeAction) -> ImageBitmap?,
@@ -383,6 +399,7 @@ private fun IconCell(
     val icon = remember(app.id, iconKey) { iconFor(app) }
     Column(
         modifier = Modifier
+            .touchTargetFloor()
             .combinedClickable(
                 onClick = { onOpen(app) },
                 onLongClick = { onLongPress(app) },
@@ -399,7 +416,7 @@ private fun IconCell(
         Text(
             text = app.label,
             color = colors.ink,
-            fontSize = 11.sp,
+            style = BodhaType.caption,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center,
@@ -411,9 +428,19 @@ private fun IconCell(
 /**
  * The letter rail: drag or tap jumps the list to that letter's first app.
  * Shows only letters the resolved rows actually contain.
+ *
+ * **One accessibility node, not one per letter** (ADR 0020). The rail fills the
+ * height with a slot per present letter — about 27 slots over ~700dp, so ~26dp
+ * each — and no phone is tall enough for 27 targets at the 48dp floor. So the
+ * letters' own semantics are cleared, stopping a screen reader focusing them as
+ * bare characters, and the rail carries one custom action per letter: a direct
+ * jump, rather than the 26 increments an adjustable control would cost.
+ *
+ * Only its touch area grows to the floor; [Alignment.End] keeps the letters
+ * drawn against the same edge, so nothing moves visually.
  */
 @Composable
-private fun AlphabetScrubber(
+internal fun AlphabetScrubber(
     index: List<LibraryIndexEntry>,
     onJump: (Int) -> Unit,
     modifier: Modifier = Modifier,
@@ -426,7 +453,20 @@ private fun AlphabetScrubber(
         onJump(index[slot].firstRow)
     }
     Column(
+        horizontalAlignment = Alignment.End,
         modifier = modifier
+            .touchTargetFloor()
+            .clearAndSetSemantics {
+                contentDescription = RAIL_LABEL
+                // Labelled by the letter alone: the reader already reads the
+                // node's own name before the action list.
+                customActions = index.map { entry ->
+                    CustomAccessibilityAction(entry.letter.toString()) {
+                        onJump(entry.firstRow)
+                        true
+                    }
+                }
+            }
             .onSizeChanged { railHeight.intValue = it.height }
             .pointerInput(index) {
                 detectVerticalDragGestures(
@@ -442,31 +482,38 @@ private fun AlphabetScrubber(
                 modifier = Modifier.weight(1f).padding(start = 16.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(text = it.letter.toString(), color = colors.inkMuted, fontSize = 11.sp)
+                Text(text = it.letter.toString(), color = colors.inkMuted, style = BodhaType.caption)
             }
         }
     }
 }
 
+/** The rail's spoken name, asserted by [AccessibilityFloorTest]. */
+internal const val RAIL_LABEL = "Jump to letter"
+
 @Composable
-private fun LibrarySearchField(query: String, onQueryChange: (String) -> Unit) {
+internal fun LibrarySearchField(query: String, onQueryChange: (String) -> Unit) {
     val colors = LocalBodhaColors.current
     Column(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
         BasicTextField(
             value = query,
             onValueChange = onQueryChange,
             singleLine = true,
-            textStyle = TextStyle(color = colors.ink, fontSize = 16.sp),
+            textStyle = BodhaType.body.copy(color = colors.ink),
             cursorBrush = SolidColor(colors.ink),
             decorationBox = { field ->
                 Box {
                     if (query.isEmpty()) {
-                        Text(text = "Search", color = colors.inkMuted, fontSize = 16.sp)
+                        Text(text = "Search", color = colors.inkMuted, style = BodhaType.body)
                     }
                     field()
                 }
             },
-            modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .semantics { contentDescription = "Search apps" }
+                .padding(vertical = 12.dp)
+                .touchTargetFloor(),
         )
         Box(Modifier.fillMaxWidth().height(1.dp).background(colors.hairline))
     }
@@ -474,7 +521,7 @@ private fun LibrarySearchField(query: String, onQueryChange: (String) -> Unit) {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun AppRow(
+internal fun AppRow(
     app: HomeAction,
     onOpen: (HomeAction) -> Unit,
     onLongPress: (HomeAction) -> Unit,
@@ -489,6 +536,7 @@ private fun AppRow(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .touchTargetFloor()
                 .pointerInput(app, onSwipeRight, onSwipeLeft) {
                     val threshold = SWIPE_THRESHOLD.toPx()
                     var drag = 0f
@@ -509,26 +557,26 @@ private fun AppRow(
                 )
                 .padding(vertical = if (lastUsedLine == null) 16.dp else 12.dp),
         ) {
-            Text(text = app.label, color = colors.ink, fontSize = 16.sp)
+            Text(text = app.label, color = colors.ink, style = BodhaType.body)
             if (lastUsedLine != null) {
-                Text(text = lastUsedLine, color = colors.inkMuted, fontSize = 12.sp)
+                Text(text = lastUsedLine, color = colors.inkMuted, style = BodhaType.caption)
             }
         }
     }
 }
 
 @Composable
-private fun HiddenHeader(count: Int, expanded: Boolean, onToggle: () -> Unit) {
+internal fun HiddenHeader(count: Int, expanded: Boolean, onToggle: () -> Unit) {
     val colors = LocalBodhaColors.current
     Column(modifier = Modifier.fillMaxWidth()) {
         Box(Modifier.fillMaxWidth().height(1.dp).background(colors.hairline))
         Text(
             text = if (expanded) "Hidden · $count" else "Hidden · $count …",
             color = colors.inkMuted,
-            fontSize = 13.sp,
-            letterSpacing = 1.sp,
+            style = BodhaType.overline,
             modifier = Modifier
                 .fillMaxWidth()
+                .touchTargetFloor()
                 .clickable(onClick = onToggle)
                 .padding(vertical = 16.dp),
         )
@@ -536,14 +584,15 @@ private fun HiddenHeader(count: Int, expanded: Boolean, onToggle: () -> Unit) {
 }
 
 @Composable
-private fun HiddenSearchableRow(enabled: Boolean, onChange: (Boolean) -> Unit) {
+internal fun HiddenSearchableRow(enabled: Boolean, onChange: (Boolean) -> Unit) {
     val colors = LocalBodhaColors.current
     Text(
         text = if (enabled) "Shown in search" else "Kept out of search",
         color = if (enabled) colors.ink else colors.inkMuted,
-        fontSize = 13.sp,
+        style = BodhaType.label,
         modifier = Modifier
             .fillMaxWidth()
+            .touchTargetFloor()
             .clickable { onChange(!enabled) }
             .padding(vertical = 8.dp),
     )

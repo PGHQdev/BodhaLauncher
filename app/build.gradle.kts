@@ -59,6 +59,17 @@ android {
     testOptions {
         unitTests {
             isIncludeAndroidResources = true
+            // The release variant is excluded, not wired (ADR 0021). The Compose
+            // test manifest is debug-scoped, so release's merged test manifest
+            // declares no activity and every Compose-rule test dies at launch —
+            // all of them, screenshots or not. Wiring it would then make the
+            // Roborazzi captures, which write module-relative paths, record every
+            // golden a second time in the same `./gradlew test` run. R8 is
+            // verified by assembleRelease; compileReleaseUnitTestKotlin still
+            // catches release-only test-compile breakage.
+            all {
+                it.enabled = !it.name.contains("Release")
+            }
         }
     }
 }

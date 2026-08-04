@@ -44,8 +44,24 @@ So the scale carries a sans title and a serif voice title at the same 22sp: mach
 - **"Still want to open it?" moves 16→18**, into `voicePassage`. A one-point shift on one site, in exchange for not carrying a sixth serif role.
 - **Three tappable 13sp controls move to 14** — the Library's layout switcher, "New group …", "Shown in search". This makes 13sp uniquely the overline, and it grows three touch targets, so the type collapse and ADR 0020's 48dp floor push the same direction.
 - **11 folds into `caption`.** One point on the icon-cell label and the rail letters; neither reflows.
-- **Five overlines unify at letterSpacing 2**, and two sites that were plainly overlines missing their tracking — `OpenCheckDialogs`' "Open Check — …" and `GroupDialogs`' app label — get it.
+- **Five overlines unify at letterSpacing 2**, and the sites that were plainly overlines missing their tracking get it. The census undercounted these while the scale was being drawn; implementing it found the real set. Two corrections, both recorded here rather than left as drift:
+  - **Four sites, not two**, were untracked overlines: `OpenCheckDialogs`' "Open Check — …" and `GroupDialogs`' app label, plus `HomeDialogs`' action label and its "Edit Home" — both dialog eyebrows of exactly the same kind, which fell between the census's "tracked overline" and "tappable control" groups and so were counted in neither.
+  - **The Library's "Apps" header is a seventh overline**, moving 14→13. It carried 2sp tracking already and was filed under 14sp as a plain label; a muted tracked screen eyebrow is an overline, so the collapse that was described as five-plus-two is really seven.
 - **The date under the clock folds into `label`**, losing its 1sp tracking. A seventh sans role for a single `Text` was the alternative. If the pairing with the 64sp clock genuinely needs the tracking, the golden diff will say so and a role can be added then, rather than invented now on a guess.
+
+## What implementing it changed
+
+Two things the collapses did not predict, both consequences of the floor and the scale meeting:
+
+The **layout switcher scrolls** rather than squeezes. Its five labels moved from 13sp to `label`, and each gained the 48dp floor, so the row needs about 332dp — which a 360dp phone does not have once the page padding is off. The floor wins over the layout, so the row gives way: `horizontalScroll`, which is invisible at 411dp and keeps all five reachable below it.
+
+**Every screenshot fixture was being clipped, and had been for some time.** They rendered at the Robolectric default of 320×480 while the content was already taller, so the large-type captures — the ones proving "large text never breaks a layout" — photographed the top of each fixture and `verify` compared clipped to clipped and passed. The Open Check sheet at large type measured 751dp against a 470dp window, hiding its three timed-open rows and "Go back" entirely. This predates the change and is unrelated to it; it surfaced because newly added components below the fold simply did not appear. Every fixture now gets a display taller than itself, and the same trap reaches the walk: a node past the window's height measures zero tall, which reads as a floor violation but is a clipped fixture.
+
+**Text fields are actionable nodes**, which the floor's first pass missed. Compose gives a `BasicTextField` click semantics, so every one of the six in the app was an unnamed ~22dp target: its own contents are not a name, so a screen reader announced an edit box for nothing in particular. Each now names what it edits and takes the floor.
+
+Two things about that are worth writing down, because both are traps rather than choices. On a field the floor must come **last** in the chain: a field's click semantics sit on its own inner node, below every modifier, so a `padding` between the two takes that padding off the node a reader activates and the target measures the floor minus the padding while the chain still reads as floored. And wrapping a field in a floored container fails the same way — the field's node keeps its text height. Elsewhere, where the click sits on the chain's own node, order does not matter.
+
+Four of the six sit inside sheets and dialogs that compose `ModalBottomSheet` or `Dialog` directly, so no fixture can reach them without splitting a content composable out of each. They are fixed but unguarded. Two of those also sit inside a `Modifier.weight`, which fixes their width and so makes the floor's width clause inert there — not violated at present sizes, but unenforced. That is the same coverage hole in a new place, and its real answer is issue #115: a check that reads call sites rather than fixtures does not care whether a component is reachable from a gallery.
 
 ## Roles carry no colour
 

@@ -24,6 +24,20 @@ jobs:
           distribution: temurin
           java-version: "17"
       - uses: gradle/actions/setup-gradle@v4
+
+      # Screens consume roles, never raw values (#26) — 63 raw sizes accumulated
+      # under that instruction because nothing checked. The rule is syntactic, so
+      # it needs no lint module (ADR 0021).
+      - name: No raw type sizes or faces outside the token layer
+        run: |
+          offenders=$(grep -rn --include='*.kt' -E 'fontSize *=|fontFamily *=' app/src \
+            | grep -v '/BodhaTheme.kt:' || true)
+          if [ -n "$offenders" ]; then
+            echo "Raw type outside BodhaTheme.kt — use a BodhaType role:"
+            echo "$offenders"
+            exit 1
+          fi
+
       - run: ./gradlew :engine:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
 
       - uses: actions/upload-artifact@v4

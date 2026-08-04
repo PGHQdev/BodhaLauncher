@@ -16,7 +16,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.bodhalauncher.engine.HomeAction
 
@@ -42,9 +41,10 @@ fun AppPickerDialog(
                     Text(
                         text = app.label,
                         color = colors.ink,
-                        fontSize = 16.sp,
+                        style = BodhaType.body,
                         modifier = Modifier
                             .fillMaxWidth()
+                            .touchTargetFloor()
                             .clickable { onPick(app) }
                             .padding(vertical = 14.dp),
                     )
@@ -77,7 +77,7 @@ fun ActionOptionsDialog(
             Text(
                 text = action.label,
                 color = colors.inkMuted,
-                fontSize = 13.sp,
+                style = BodhaType.overline,
                 modifier = Modifier.padding(vertical = 12.dp),
             )
             if (isPinned) {
@@ -90,7 +90,7 @@ fun ActionOptionsDialog(
             Text(
                 text = "Explain — coming with suggestions",
                 color = colors.inkMuted,
-                fontSize = 16.sp,
+                style = BodhaType.body,
                 modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
             )
         }
@@ -112,14 +112,14 @@ fun EditHomeDialog(onAddPin: () -> Unit, onDismiss: () -> Unit) {
             Text(
                 text = "Edit Home",
                 color = colors.inkMuted,
-                fontSize = 13.sp,
+                style = BodhaType.overline,
                 modifier = Modifier.padding(vertical = 12.dp),
             )
             OptionRow("Add pin") { onAddPin(); onDismiss() }
             Text(
                 text = "More editing — coming",
                 color = colors.inkMuted,
-                fontSize = 16.sp,
+                style = BodhaType.body,
                 modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
             )
         }
@@ -134,9 +134,10 @@ private fun OptionRow(label: String, onClick: () -> Unit) {
         Text(
             text = label,
             color = colors.ink,
-            fontSize = 16.sp,
+            style = BodhaType.body,
             modifier = Modifier
                 .fillMaxWidth()
+                .touchTargetFloor()
                 .clickable(onClick = onClick)
                 .padding(vertical = 14.dp),
         )

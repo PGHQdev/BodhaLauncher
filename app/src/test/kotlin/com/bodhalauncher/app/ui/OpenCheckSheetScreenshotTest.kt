@@ -20,7 +20,10 @@ import org.robolectric.annotation.GraphicsMode
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 // Plain Application: the launcher's runtimes (sessions, WorkManager) have no place under a screenshot.
-@Config(sdk = [35], application = android.app.Application::class)
+// Tall enough to hold the fixture at 2x text. Without this the window is 320x480
+// and the capture is silently cropped — verify then compares clipped to clipped and
+// passes, so the large-type golden proves nothing about the rows below the fold.
+@Config(sdk = [35], qualifiers = "w320dp-h3000dp", application = android.app.Application::class)
 class OpenCheckSheetScreenshotTest {
 
     @get:Rule

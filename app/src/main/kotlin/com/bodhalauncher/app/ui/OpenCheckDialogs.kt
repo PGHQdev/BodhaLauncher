@@ -19,11 +19,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.bodhalauncher.engine.HomeAction
 import com.bodhalauncher.engine.OpenCheckMode
@@ -80,7 +80,7 @@ fun OpenCheckRuleDialog(
             Text(
                 text = "Open Check — ${app.label}",
                 color = colors.inkMuted,
-                fontSize = 13.sp,
+                style = BodhaType.overline,
                 modifier = Modifier.padding(vertical = 12.dp),
             )
             when (configuring) {
@@ -130,7 +130,7 @@ private fun ThresholdChoices(onPick: (Duration) -> Unit) {
     Text(
         text = "Check after this much use today",
         color = colors.inkMuted,
-        fontSize = 12.sp,
+        style = BodhaType.caption,
         modifier = Modifier.padding(bottom = 4.dp),
     )
     THRESHOLD_CHOICES.forEach { (threshold, label) ->
@@ -149,13 +149,13 @@ private fun WindowEditor(current: ScheduleWindow?, onSave: (ScheduleWindow) -> U
     Text(
         text = "Check between these times",
         color = colors.inkMuted,
-        fontSize = 12.sp,
+        style = BodhaType.caption,
         modifier = Modifier.padding(bottom = 12.dp),
     )
     Row {
-        TimeField(start, placeholder = "21:00", onChange = { start = it }, modifier = Modifier.weight(1f))
+        TimeField(start, "Start time", "21:00", { start = it }, Modifier.weight(1f))
         Spacer(Modifier.width(20.dp))
-        TimeField(end, placeholder = "23:30", onChange = { end = it }, modifier = Modifier.weight(1f))
+        TimeField(end, "End time", "23:30", { end = it }, Modifier.weight(1f))
     }
     Spacer(Modifier.height(8.dp))
     Box(Modifier.fillMaxWidth().height(1.dp).background(colors.hairline))
@@ -164,9 +164,9 @@ private fun WindowEditor(current: ScheduleWindow?, onSave: (ScheduleWindow) -> U
         Text(
             text = "Save",
             color = colors.accent,
-            fontSize = 15.sp,
+            style = BodhaType.action,
             // Equal times would be an empty window — a silently inert rule; Always is the mode for that.
-            modifier = Modifier.clickable(enabled = startMinute != null && endMinute != null && startMinute != endMinute) {
+            modifier = Modifier.touchTargetFloor().clickable(enabled = startMinute != null && endMinute != null && startMinute != endMinute) {
                 onSave(ScheduleWindow(startMinute!!, endMinute!!))
             },
         )
@@ -174,19 +174,28 @@ private fun WindowEditor(current: ScheduleWindow?, onSave: (ScheduleWindow) -> U
 }
 
 @Composable
-private fun TimeField(value: String, placeholder: String, onChange: (String) -> Unit, modifier: Modifier) {
+private fun TimeField(
+    value: String,
+    /** What this field edits, for a reader that cannot see which of the two it is. */
+    label: String,
+    placeholder: String,
+    onChange: (String) -> Unit,
+    modifier: Modifier,
+) {
     val colors = LocalBodhaColors.current
     BasicTextField(
         value = value,
         onValueChange = onChange,
         singleLine = true,
-        textStyle = TextStyle(color = colors.ink, fontSize = 16.sp),
+        textStyle = BodhaType.body.copy(color = colors.ink),
         cursorBrush = SolidColor(colors.accent),
         decorationBox = { field ->
-            if (value.isEmpty()) Text(placeholder, color = colors.inkMuted, fontSize = 16.sp)
+            if (value.isEmpty()) Text(placeholder, color = colors.inkMuted, style = BodhaType.body)
             field()
         },
-        modifier = modifier,
+        modifier = modifier
+            .semantics { contentDescription = label }
+            .touchTargetFloor(),
     )
 }
 
@@ -207,9 +216,10 @@ private fun DialogRow(label: String, muted: Boolean, onClick: () -> Unit) {
         Text(
             text = label,
             color = if (muted) colors.inkMuted else colors.ink,
-            fontSize = 16.sp,
+            style = BodhaType.body,
             modifier = Modifier
                 .fillMaxWidth()
+                .touchTargetFloor()
                 .clickable(onClick = onClick)
                 .padding(vertical = 14.dp),
         )
@@ -227,13 +237,12 @@ fun ProBoundaryDialog(boundary: ProBoundary, onDismiss: () -> Unit) {
         Text(
             text = boundary.explanation,
             color = colors.ink,
-            fontFamily = BodhaFaces.serif,
-            fontSize = 18.sp,
-            lineHeight = 28.sp,
+            style = BodhaType.voicePassage,
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(4.dp))
                 .background(colors.ground)
+                .touchTargetFloor()
                 .clickable(onClick = onDismiss)
                 .padding(28.dp),
         )

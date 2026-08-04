@@ -18,7 +18,12 @@ import org.robolectric.annotation.GraphicsMode
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 // Plain Application: the launcher's runtimes (sessions, WorkManager) have no place under a screenshot.
-@Config(sdk = [35], application = android.app.Application::class)
+//
+// Tall enough to hold the whole fixture at 2x text. The default 320x480 clipped
+// it: the actionable components sit below the fold, and the large-type captures
+// were cropped long before they were added — so "the layout holds at large type"
+// was being asserted about the top third of the gallery.
+@Config(sdk = [35], qualifiers = "w320dp-h3000dp", application = android.app.Application::class)
 class DesignGalleryScreenshotTest {
 
     @get:Rule
