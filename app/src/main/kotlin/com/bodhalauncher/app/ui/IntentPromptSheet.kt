@@ -64,7 +64,8 @@ fun IntentPromptSheet(
                         fontSize = 16.sp,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { onSelect(category, null) }
+                            // Any typed text rides along — the record keeps category + optional text.
+                            .clickable { onSelect(category, freeText.trim().takeIf { it.isNotEmpty() }) }
                             .padding(vertical = 14.dp),
                     )
                 }

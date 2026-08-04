@@ -68,8 +68,9 @@ class IntentPromptEngine(
 
         val coolingDown = cooldownUntil?.isAfter(at) == true
         val trigger = when {
-            coolingDown -> null
+            // Explicit "ask every time" means every session — the cooldown never gates it.
             config.askEveryTime -> TriggerSource.EverySession
+            coolingDown -> null
             recentStarts.size >= REFLEXIVE_SESSION_COUNT -> TriggerSource.Reflexive
             else -> null
         }

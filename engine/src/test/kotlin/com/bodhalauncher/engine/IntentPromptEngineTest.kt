@@ -113,6 +113,14 @@ class IntentPromptEngineTest {
     }
 
     @Test
+    fun `ask every time ignores the cooldown a previous fire started`() {
+        val engine = IntentPromptEngine(config = IntentPromptConfig(askEveryTime = true))
+        assertNotNull(engine.onTransition(started(1, at(0)), SuppressionFlags()))
+        // Well inside the 30-minute cooldown a reflexive fire would observe.
+        assertNotNull(engine.onTransition(started(2, at(5)), SuppressionFlags()))
+    }
+
+    @Test
     fun `ask every time is still suppressed`() {
         val engine = IntentPromptEngine(config = IntentPromptConfig(askEveryTime = true))
         assertNull(engine.onTransition(started(1, at(0)), SuppressionFlags(callActive = true)))

@@ -51,6 +51,7 @@ fun HomeScreen(
     /** Temporary editor entry point until Today (#5) is the intention's editor. */
     onEditIntention: (() -> Unit)? = null,
     gestures: HomeGestures? = null,
+    onSearch: () -> Unit = {},
 ) {
     val colors = LocalBodhaColors.current
     Column(
@@ -111,7 +112,7 @@ fun HomeScreen(
             Box(Modifier.size(6.dp).background(colors.accent, CircleShape))
         }
         Spacer(Modifier.weight(1f))
-        SearchField()
+        SearchField(onSearch)
     }
 }
 
@@ -182,14 +183,15 @@ private fun AddRow(onAdd: () -> Unit) {
 }
 
 @Composable
-private fun SearchField() {
+private fun SearchField(onSearch: () -> Unit) {
     val colors = LocalBodhaColors.current
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
             text = "Search",
             color = colors.inkMuted,
             fontSize = 16.sp,
-            modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+            // Clickable also consumes taps, so double-tap here never falls through to lock.
+            modifier = Modifier.fillMaxWidth().clickable(onClick = onSearch).padding(vertical = 12.dp),
             textAlign = TextAlign.Center,
         )
         Box(Modifier.fillMaxWidth().height(1.dp).background(colors.hairline))

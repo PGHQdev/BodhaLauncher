@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -32,6 +33,7 @@ import com.bodhalauncher.engine.HomeAction
 import com.bodhalauncher.engine.HomeInputs
 import com.bodhalauncher.engine.IntentCategory
 import com.bodhalauncher.engine.resolveHome
+import kotlinx.coroutines.delay
 import java.time.LocalDateTime
 
 class MainActivity : ComponentActivity() {
@@ -95,9 +97,14 @@ private fun HomeRoot(
         return
     }
 
-    // Sampled per recomposition — good enough for the 4am boundary (ADR 0003):
-    // any state change or activity resume re-evaluates validity.
-    val now = LocalDateTime.now()
+    // Ticks each minute so the intention drops at the 4am boundary (ADR 0003)
+    // even when Home sits on screen with nothing else changing.
+    val now by produceState(LocalDateTime.now()) {
+        while (true) {
+            delay((60 - LocalDateTime.now().second) * 1000L)
+            value = LocalDateTime.now()
+        }
+    }
 
     // Remaining inputs fill in as their features ship (suggestions #6, digest #10, …).
     val state = resolveHome(
@@ -127,6 +134,7 @@ private fun HomeRoot(
                 },
                 onLongPressEmpty = { editingHome = true },
             ),
+            onSearch = { surface = HomeSurface.Search },
         )
 
         val due by intentPrompt.promptDue
