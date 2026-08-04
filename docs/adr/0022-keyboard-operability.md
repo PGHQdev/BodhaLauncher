@@ -83,7 +83,9 @@ Two consequences follow. Home's focus-revealed affordances are **lifted into the
 
 ## What this ADR does not settle
 
-Right-arrow-to-actions is a convention a docked user must discover, and nothing announces it. The node being focus-revealed is the only hint, and it reveals only once the key has already been pressed. No answer is proposed here; onboarding (ADR 0018) is explicitly five steps and one grant, and does not teach gestures either.
+Right-arrow-to-actions is a convention a docked user must discover, and nothing announces it. The node being focus-revealed is the only hint, and it reveals only once the key has already been pressed. **Settled since, by ADR 0023**: the focused *row* carries the hint, so it arrives before the guess, and it retires the first time the key is pressed. Only this one convention is taught — the others have a fallback in ADR 0019's Navigation section, and this one has none.
+
+**What focus looks like is still open**, and ADR 0023 surfaced it rather than answering it. This ADR settled where focus goes and what Enter does, not how a focused node shows it. A focus-revealed affordance indicates itself by appearing; an ordinary focused row does not, and the traversal guard asserts reachability rather than visibility.
 
 The residual ADR 0020 recorded is unchanged and now has a sibling: neither #111's semantics nor this ADR's traversal has been exercised against a physical device — TalkBack for the first, a real docked keyboard for the second.
 
