@@ -1,0 +1,231 @@
+<title>Bodha — Focus State Specimen (PROTOTYPE, issue #124)</title>
+<style>
+  /* PROTOTYPE — wipe me. Issue #124. Four focus treatments, on the two screens
+     that read differently: Home's spare centred column and the dense Library.
+     Palette values are the real ones from BodhaTheme.kt. Clay and slate are
+     APPROXIMATED — ADR 0019 settles three free accents but only sage is built. */
+  :root {
+    --ground: #F6F1E7; --ink: #2B261F; --muted: #7A7263; --hairline: #332B261F;
+    --accent: #7D8C6F;
+  }
+  :root[data-theme="dark"] {
+    --ground: #221F1A; --ink: #EAE3D6; --muted: #9A9184; --hairline: #33EAE3D6;
+    --accent: #93A284;
+  }
+  :root[data-accent="clay"]  { --accent: #A8785E; }
+  :root[data-accent="slate"] { --accent: #6C7C8C; }
+  :root[data-theme="dark"][data-accent="clay"]  { --accent: #BC8F76; }
+  :root[data-theme="dark"][data-accent="slate"] { --accent: #869AAC; }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--ground); color: var(--ink);
+    font-family: "Source Sans 3", system-ui, -apple-system, sans-serif;
+    padding: 2rem 1rem 6rem;
+  }
+  .serif { font-family: "Source Serif 4", "Iowan Old Style", Palatino, Georgia, serif; }
+  main { max-width: 62rem; margin: 0 auto; }
+  header.page { text-align: center; margin-bottom: 1.6rem; }
+  header.page h1 { font-size: 1.8rem; font-weight: 500; margin: 0 0 .3rem; }
+  header.page p { color: var(--muted); margin: 0; font-size: .9rem; }
+
+  .bar {
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 9;
+    background: var(--ground); border-top: 1px solid var(--hairline);
+    padding: .7rem 1rem; display: flex; gap: 1.2rem; justify-content: center;
+    flex-wrap: wrap; align-items: center;
+  }
+  .bar .grp { display: flex; gap: .35rem; align-items: center; }
+  .bar .lbl { font-size: .62rem; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); margin-right: .3rem; }
+  button {
+    font: inherit; font-size: .8rem; padding: .35rem .7rem; cursor: pointer;
+    background: transparent; color: var(--ink);
+    border: 1px solid var(--hairline); border-radius: .4rem;
+  }
+  button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+
+  .vhead { max-width: 40rem; margin: 0 auto 1.6rem; text-align: center; }
+  .vhead h2 { margin: 0 0 .4rem; font-size: 1.3rem; font-weight: 500; }
+  .vhead p { color: var(--muted); line-height: 1.5; margin: 0; font-size: .88rem; }
+  .cols { display: flex; gap: 2rem; justify-content: center; flex-wrap: wrap; }
+  .cap { text-align: center; font-size: .7rem; color: var(--muted); margin-top: .5rem;
+         text-transform: uppercase; letter-spacing: .12em; }
+
+  .phone { width: 19rem; border-radius: 2rem; padding: .5rem; background: #1a1813; flex: 0 0 auto; }
+  .screen {
+    border-radius: 1.6rem; height: 36rem; padding: 1.3rem 1.1rem; overflow: hidden;
+    background: var(--ground); color: var(--ink); display: flex; flex-direction: column;
+  }
+
+  /* Home: the spare centred column. */
+  .clock { font-size: 3.6rem; line-height: 1; text-align: center; margin-top: 1rem; }
+  .date { text-align: center; color: var(--muted); font-size: .82rem; margin-top: .35rem; }
+  .intent { text-align: center; font-style: italic; font-size: 1.05rem; margin: 1.6rem 0 1.4rem; }
+  .rows { margin-top: auto; }
+
+  /* Every actionable row is the 48dp floor. The treatment may not rely on padding. */
+  .row {
+    position: relative; min-height: 48px; display: flex; align-items: center;
+    border-top: 1px solid var(--hairline); font-size: .95rem;
+    padding: 0 .1rem;
+  }
+  .row .sub { color: var(--muted); font-size: .75rem; }
+  .row .stack { display: flex; flex-direction: column; gap: .1rem; }
+  /* ADR 0023's hint — rides whatever treatment wins, must not be competed with. */
+  .row .hint {
+    margin-left: auto; font-size: .72rem; color: var(--muted); opacity: 0;
+    white-space: nowrap; padding-left: .6rem;
+  }
+  .row.f .hint { opacity: 1; }
+  .center { justify-content: center; }
+  .center .hint { position: absolute; right: .1rem; margin-left: 0; }
+
+  /* ---- A · Accent rule at the leading edge ---- */
+  .vA .row.f::before {
+    content: ""; position: absolute; left: -.55rem; top: 6px; bottom: 6px;
+    width: 2px; background: var(--accent); border-radius: 1px;
+  }
+  /* ---- B · Tinted block ---- */
+  .vB .row.f {
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    border-radius: .4rem; border-top-color: transparent;
+  }
+  /* ---- C · Outline ring ---- */
+  .vC .row.f {
+    outline: 2px solid var(--accent); outline-offset: -2px; border-radius: .4rem;
+    border-top-color: transparent;
+  }
+  /* ---- D · Ink shift, no shape ---- */
+  .vD .row { color: var(--muted); }
+  .vD .row.f { color: var(--ink); }
+  .vD .row.f .hint { color: var(--accent); }
+  .vD .row.f::after {
+    content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 1px;
+    background: var(--accent);
+  }
+
+  .variant { display: none; }
+  .variant.active { display: block; }
+  .note { max-width: 40rem; margin: 1.6rem auto 0; color: var(--muted); font-size: .82rem; line-height: 1.55; }
+  .note b { color: var(--ink); font-weight: 600; }
+</style>
+
+<main>
+  <header class="page">
+    <h1 class="serif">What focus looks like</h1>
+    <p>Prototype for issue #124 · Tab / Shift+Tab or the buttons below move focus</p>
+  </header>
+  <div id="stage"></div>
+  <div class="note" id="note"></div>
+</main>
+
+<div class="bar">
+  <div class="grp"><span class="lbl">Treatment</span><span id="vbtns"></span></div>
+  <div class="grp"><span class="lbl">Theme</span><span id="tbtns"></span></div>
+  <div class="grp"><span class="lbl">Accent</span><span id="abtns"></span></div>
+  <div class="grp"><button id="prev">← focus</button><button id="next">focus →</button></div>
+</div>
+
+<script>
+const VARIANTS = {
+  A: {
+    name: "Accent rule at the leading edge",
+    blurb: "A 2px accent rule outside the row's own box. Adds no shape and no fill, so the centred column stays centred and the list keeps its hairlines. Closest to the manuscript idiom ADR 0010 draws.",
+    note: "<b>Watch:</b> on Home the rule sits off the centred axis, which is either a quiet margin mark or a thing that breaks the symmetry the whole design is named for."
+  },
+  B: {
+    name: "Tinted block",
+    blurb: "A 14% accent wash behind the focused row. The most legible at a glance and the most conventional — it is what Material does.",
+    note: "<b>Watch:</b> it introduces a filled surface to a design that has none, and it swallows the hairline. On Home a block behind a single centred line reads as a button that isn't there."
+  },
+  C: {
+    name: "Outline ring",
+    blurb: "A 2px accent outline on the row's 48dp box. The platform-conventional answer, and the one a docked user has seen everywhere else.",
+    note: "<b>Watch:</b> it draws the 48dp floor rather than the content, so on the Library the ring is tight and on Home it exposes how much empty width a centred line actually occupies."
+  },
+  D: {
+    name: "Ink shift and a rule beneath",
+    blurb: "Unfocused rows sit at muted ink; the focused row comes up to full ink over an accent hairline. No box, no fill — the treatment is contrast rather than shape.",
+    note: "<b>Watch:</b> it costs resting legibility. Every row is dimmer than it is today so that one can be brighter, which is a real change to the touch design for a keyboard-only benefit."
+  },
+};
+const APPS = [
+  ["Signal", "Last used 8 minutes ago"], ["Slack", "Last used 2 hours ago"],
+  ["Spotify", null], ["Standard Notes", "Last used yesterday"],
+  ["Strava", null], ["Syncthing", "Last used 3 days ago"],
+];
+const HOME_ROWS = ["Messages", "Camera", "Notes", "＋", "Search"];
+
+let variant = "A", focus = 0;
+const TOTAL = HOME_ROWS.length + APPS.length;
+
+function homeScreen(fi) {
+  const rows = HOME_ROWS.map((r, i) => {
+    const on = fi === i;
+    const hint = (i < 3) ? '<span class="hint">→ for actions</span>' : '';
+    return `<div class="row center ${on ? "f" : ""}">${r}${hint}</div>`;
+  }).join("");
+  return `<div class="phone"><div class="screen">
+    <div class="clock serif">9:41</div>
+    <div class="date">Wednesday, 5 August</div>
+    <div class="intent serif">Finish the thing you started</div>
+    <div class="rows">${rows}</div>
+  </div></div><div class="cap">Home · the spare centred column</div>`;
+}
+
+function libraryScreen(fi) {
+  const rows = APPS.map(([n, sub], i) => {
+    const on = fi === i;
+    return `<div class="row ${on ? "f" : ""}">
+      <span class="stack"><span>${n}</span>${sub ? `<span class="sub">${sub}</span>` : ""}</span>
+      <span class="hint">→ for actions</span></div>`;
+  }).join("");
+  return `<div class="phone"><div class="screen">
+    <div style="font-size:.72rem;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);margin-bottom:.9rem">Apps</div>
+    <div style="min-height:48px;display:flex;align-items:center;border-bottom:1px solid var(--hairline);color:var(--muted)">Search</div>
+    <div style="margin-top:.4rem">${rows}</div>
+  </div></div><div class="cap">App Library · the dense list</div>`;
+}
+
+function render() {
+  const v = VARIANTS[variant];
+  const homeFocus = focus < HOME_ROWS.length ? focus : -1;
+  const libFocus = focus >= HOME_ROWS.length ? focus - HOME_ROWS.length : -1;
+  document.getElementById("stage").innerHTML = `
+    <div class="variant active v${variant}">
+      <div class="vhead"><h2>${variant} · ${v.name}</h2><p>${v.blurb}</p></div>
+      <div class="cols"><div>${homeScreen(homeFocus)}</div><div>${libraryScreen(libFocus)}</div></div>
+    </div>`;
+  document.getElementById("note").innerHTML = v.note;
+  [...document.querySelectorAll("#vbtns button")].forEach(b =>
+    b.setAttribute("aria-pressed", b.dataset.v === variant));
+}
+
+function mkButtons(host, items, onPick, initial, attr) {
+  host.innerHTML = items.map(i => `<button data-${attr}="${i}">${i}</button>`).join("");
+  [...host.children].forEach(b => {
+    b.setAttribute("aria-pressed", b.dataset[attr] === initial);
+    b.onclick = () => {
+      [...host.children].forEach(x => x.setAttribute("aria-pressed", "false"));
+      b.setAttribute("aria-pressed", "true");
+      onPick(b.dataset[attr]);
+    };
+  });
+}
+
+mkButtons(document.getElementById("vbtns"), Object.keys(VARIANTS), v => { variant = v; render(); }, "A", "v");
+mkButtons(document.getElementById("tbtns"), ["light", "dark"],
+  t => document.documentElement.dataset.theme = t, "light", "t");
+mkButtons(document.getElementById("abtns"), ["sage", "clay", "slate"],
+  a => document.documentElement.dataset.accent = a, "sage", "a");
+
+const step = d => { focus = (focus + d + TOTAL) % TOTAL; render(); };
+document.getElementById("next").onclick = () => step(1);
+document.getElementById("prev").onclick = () => step(-1);
+document.addEventListener("keydown", e => {
+  if (e.key === "Tab") { e.preventDefault(); step(e.shiftKey ? -1 : 1); }
+});
+document.documentElement.dataset.theme = "light";
+document.documentElement.dataset.accent = "sage";
+render();
+</script>
