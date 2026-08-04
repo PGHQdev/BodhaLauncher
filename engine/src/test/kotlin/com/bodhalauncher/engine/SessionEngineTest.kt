@@ -14,9 +14,16 @@ class SessionEngineTest {
         return events.flatMap { engine.onEvent(it) }
     }
 
+    /** Runs the events, then advances the clock far enough to finalize any provisional end. */
+    private fun runAndSettle(vararg events: DeviceEvent): List<Transition> {
+        val engine = SessionEngine()
+        val transitions = events.flatMap { engine.onEvent(it) }
+        return transitions + engine.advanceTo(events.last().at.plusSeconds(60))
+    }
+
     @Test
     fun `unlock starts a session and screen-off ends it with the same id`() {
-        val transitions = run(
+        val transitions = runAndSettle(
             DeviceEvent.ScreenOn(at(0)),
             DeviceEvent.Unlocked(at(1)),
             DeviceEvent.ScreenOff(at(60)),
@@ -41,7 +48,7 @@ class SessionEngineTest {
 
     @Test
     fun `unlocked session produces no peek`() {
-        val transitions = run(
+        val transitions = runAndSettle(
             DeviceEvent.ScreenOn(at(0)),
             DeviceEvent.Unlocked(at(1)),
             DeviceEvent.ScreenOff(at(60)),
@@ -53,7 +60,7 @@ class SessionEngineTest {
     @Test
     fun `every wake starts a session when every wake unlocks`() {
         // Lock screen set to "None": USER_PRESENT fires on every wake (ADR 0001 degraded mode).
-        val transitions = run(
+        val transitions = runAndSettle(
             DeviceEvent.ScreenOn(at(0)),
             DeviceEvent.Unlocked(at(0)),
             DeviceEvent.ScreenOff(at(30)),
@@ -69,7 +76,7 @@ class SessionEngineTest {
 
     @Test
     fun `unlock without a preceding screen-on still starts a session`() {
-        val transitions = run(
+        val transitions = runAndSettle(
             DeviceEvent.Unlocked(at(0)),
             DeviceEvent.ScreenOff(at(10)),
         )
@@ -94,6 +101,104 @@ class SessionEngineTest {
         val transitions = run(DeviceEvent.ScreenOff(at(0)))
 
         assertEquals(emptyList(), transitions)
+    }
+
+    @Test
+    fun `re-unlock within the merge window resumes the same session`() {
+        val transitions = run(
+            DeviceEvent.Unlocked(at(0)),
+            DeviceEvent.ScreenOff(at(10)),
+            DeviceEvent.Unlocked(at(20)),
+        )
+
+        val started = transitions.filterIsInstance<Transition.SessionStarted>().single()
+        val resumed = transitions.filterIsInstance<Transition.SessionResumed>().single()
+        assertEquals(started.session, resumed.session)
+        assertEquals(at(20), resumed.at)
+        assertEquals(emptyList(), transitions.filterIsInstance<Transition.SessionEnded>())
+    }
+
+    @Test
+    fun `re-unlock at exactly 30s resumes — the window is inclusive`() {
+        val transitions = run(
+            DeviceEvent.Unlocked(at(0)),
+            DeviceEvent.ScreenOff(at(10)),
+            DeviceEvent.Unlocked(at(40)),
+        )
+
+        assertEquals(1, transitions.filterIsInstance<Transition.SessionResumed>().size)
+        assertEquals(emptyList(), transitions.filterIsInstance<Transition.SessionEnded>())
+    }
+
+    @Test
+    fun `re-unlock after the merge window ends the old session and starts a new one`() {
+        val transitions = run(
+            DeviceEvent.Unlocked(at(0)),
+            DeviceEvent.ScreenOff(at(10)),
+            DeviceEvent.Unlocked(at(41)),
+        )
+
+        val started = transitions.filterIsInstance<Transition.SessionStarted>()
+        val ended = transitions.filterIsInstance<Transition.SessionEnded>().single()
+        assertEquals(2, started.size)
+        assertEquals(2, started.map { it.session }.distinct().size)
+        assertEquals(started[0].session, ended.session)
+        assertEquals(at(10), ended.at)
+    }
+
+    @Test
+    fun `a chain of relocks inside the window stays one session`() {
+        val transitions = runAndSettle(
+            DeviceEvent.Unlocked(at(0)),
+            DeviceEvent.ScreenOff(at(10)),
+            DeviceEvent.Unlocked(at(25)),
+            DeviceEvent.ScreenOff(at(30)),
+            DeviceEvent.Unlocked(at(50)),
+            DeviceEvent.ScreenOff(at(60)),
+        )
+
+        assertEquals(1, transitions.filterIsInstance<Transition.SessionStarted>().size)
+        assertEquals(2, transitions.filterIsInstance<Transition.SessionResumed>().size)
+        val ended = transitions.filterIsInstance<Transition.SessionEnded>().single()
+        assertEquals(at(60), ended.at)
+    }
+
+    @Test
+    fun `session end is final only once the merge window passes`() {
+        val engine = SessionEngine()
+        engine.onEvent(DeviceEvent.Unlocked(at(0)))
+        engine.onEvent(DeviceEvent.ScreenOff(at(10)))
+
+        assertEquals(emptyList(), engine.advanceTo(at(40)))
+
+        val ended = engine.advanceTo(at(41)).filterIsInstance<Transition.SessionEnded>().single()
+        assertEquals(at(10), ended.at)
+    }
+
+    @Test
+    fun `finalization is also observable on the next device event`() {
+        val engine = SessionEngine()
+        engine.onEvent(DeviceEvent.Unlocked(at(0)))
+        engine.onEvent(DeviceEvent.ScreenOff(at(10)))
+
+        val transitions = engine.onEvent(DeviceEvent.ScreenOn(at(100)))
+        val ended = transitions.filterIsInstance<Transition.SessionEnded>().single()
+        assertEquals(at(10), ended.at)
+    }
+
+    @Test
+    fun `a peek during the merge window does not disturb the resumable session`() {
+        val transitions = run(
+            DeviceEvent.Unlocked(at(0)),
+            DeviceEvent.ScreenOff(at(10)),
+            DeviceEvent.ScreenOn(at(12)),
+            DeviceEvent.ScreenOff(at(14)),
+            DeviceEvent.Unlocked(at(20)),
+        )
+
+        assertEquals(listOf(Transition.PeekObserved(at(14))), transitions.filterIsInstance<Transition.PeekObserved>())
+        assertEquals(1, transitions.filterIsInstance<Transition.SessionResumed>().size)
+        assertEquals(emptyList(), transitions.filterIsInstance<Transition.SessionEnded>())
     }
 
     @Test
