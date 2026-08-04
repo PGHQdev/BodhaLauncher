@@ -6,10 +6,14 @@ enum class LibraryLayout {
     CompactIcons,
     Categories,
     Recent,
+    Groups,
 }
 
-/** One titled group of the Categories layout. */
+/** One titled group of the Categories and Groups layouts. */
 data class LibrarySection(val title: String, val rows: List<HomeAction>)
+
+/** A user-created app group; [appIds] may hold stale package ids, which resolve away. */
+data class LibraryGroup(val name: String, val appIds: List<String>)
 
 /**
  * Everything the App Library may draw from. Grows as the library's features ship
@@ -20,6 +24,8 @@ data class LibraryInputs(
     val layout: LibraryLayout = LibraryLayout.Alphabetical,
     /** App id to category title; apps without one group under "Other". */
     val categories: Map<String, String> = emptyMap(),
+    /** User-created groups, in the user's order; what the Groups layout sections by. */
+    val groups: List<LibraryGroup> = emptyList(),
     /** Search text; blank means no filtering. Matches anywhere in the label, ignoring case. */
     val query: String = "",
     /** App ids the user has hidden; they collect in [LibraryState.hiddenRows]. */
@@ -69,15 +75,20 @@ fun resolveLibrary(inputs: LibraryInputs): LibraryState {
         .filter { (query.isEmpty() || inputs.hiddenSearchable) && matches(it) }
         .sortedWith(alphabetical)
     val categorised = inputs.layout == LibraryLayout.Categories
+    val grouped = inputs.layout == LibraryLayout.Groups
     val recentOrdered = inputs.layout == LibraryLayout.Recent && recency != null
-    val index = if (categorised || recentOrdered) emptyList() else rows.withIndex()
+    val index = if (categorised || grouped || recentOrdered) emptyList() else rows.withIndex()
         .groupBy { (_, app) -> app.label.firstOrNull()?.uppercaseChar()?.takeIf { it in 'A'..'Z' } ?: '#' }
         .map { (letter, entries) -> LibraryIndexEntry(letter, entries.first().index) }
         .sortedBy { it.firstRow }
-    val sections = if (!categorised) emptyList() else rows
-        .groupBy { inputs.categories[it.id] ?: OTHER_CATEGORY }
-        .map { (title, apps) -> LibrarySection(title, apps) }
-        .sortedWith(compareBy({ it.title == OTHER_CATEGORY }, { it.title }))
+    val sections = when {
+        categorised -> rows
+            .groupBy { inputs.categories[it.id] ?: OTHER_CATEGORY }
+            .map { (title, apps) -> LibrarySection(title, apps) }
+            .sortedWith(compareBy({ it.title == OTHER_CATEGORY }, { it.title }))
+        grouped -> groupSections(inputs.groups, rows, searching = query.isNotEmpty())
+        else -> emptyList()
+    }
     return LibraryState(
         layout = inputs.layout,
         rows = rows,
@@ -91,6 +102,26 @@ fun resolveLibrary(inputs: LibraryInputs): LibraryState {
 }
 
 const val OTHER_CATEGORY = "Other"
+const val UNGROUPED_GROUP = "Ungrouped"
+
+/**
+ * The Groups layout's sections: each user group over the resolved [rows] (so stale
+ * and hidden ids resolve away), ungrouped rows last. An empty group keeps its
+ * section while browsing; a search keeps only sections with a match.
+ */
+private fun groupSections(
+    groups: List<LibraryGroup>,
+    rows: List<HomeAction>,
+    searching: Boolean,
+): List<LibrarySection> {
+    val named = groups
+        .map { group -> LibrarySection(group.name, rows.filter { it.id in group.appIds }) }
+        .filter { !searching || it.rows.isNotEmpty() }
+    val groupedIds = groups.flatMapTo(mutableSetOf()) { it.appIds }
+    val ungrouped = rows.filter { it.id !in groupedIds }
+    return if (ungrouped.isEmpty()) named
+    else named + LibrarySection(UNGROUPED_GROUP, ungrouped)
+}
 
 private fun lastUsedLabel(now: Long, then: Long): String {
     val minutes = (now - then) / 60_000

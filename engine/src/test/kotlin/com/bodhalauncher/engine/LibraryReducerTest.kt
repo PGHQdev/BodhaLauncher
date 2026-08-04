@@ -220,6 +220,141 @@ class LibraryReducerTest {
     }
 
     @Test
+    fun `groups sections apps by user groups in stored order, ungrouped last`() {
+        val library = resolveLibrary(
+            LibraryInputs(
+                apps = listOf(app("Signal"), app("Chess"), app("Doom"), app("Ledger")),
+                layout = LibraryLayout.Groups,
+                groups = listOf(
+                    LibraryGroup("Play", listOf("doom", "chess")),
+                    LibraryGroup("People", listOf("signal")),
+                ),
+            )
+        )
+
+        assertEquals(listOf("Play", "People", "Ungrouped"), library.sections.map { it.title })
+        assertEquals(listOf("Chess", "Doom"), library.sections[0].rows.map { it.label })
+        assertEquals(listOf("Signal"), library.sections[1].rows.map { it.label })
+        assertEquals(listOf("Ledger"), library.sections[2].rows.map { it.label })
+    }
+
+    @Test
+    fun `an empty group keeps its section`() {
+        val library = resolveLibrary(
+            LibraryInputs(
+                apps = listOf(app("Signal")),
+                layout = LibraryLayout.Groups,
+                groups = listOf(LibraryGroup("Play", emptyList())),
+            )
+        )
+
+        assertEquals(listOf("Play", "Ungrouped"), library.sections.map { it.title })
+        assertTrue(library.sections[0].rows.isEmpty())
+    }
+
+    @Test
+    fun `ungrouped section is absent when every app is grouped`() {
+        val library = resolveLibrary(
+            LibraryInputs(
+                apps = listOf(app("Chess")),
+                layout = LibraryLayout.Groups,
+                groups = listOf(LibraryGroup("Play", listOf("chess"))),
+            )
+        )
+
+        assertEquals(listOf("Play"), library.sections.map { it.title })
+    }
+
+    @Test
+    fun `stale package ids drop out of groups`() {
+        val library = resolveLibrary(
+            LibraryInputs(
+                apps = listOf(app("Chess")),
+                layout = LibraryLayout.Groups,
+                groups = listOf(LibraryGroup("Play", listOf("uninstalled", "chess"))),
+            )
+        )
+
+        assertEquals(listOf("Chess"), library.sections[0].rows.map { it.label })
+    }
+
+    @Test
+    fun `hidden apps stay out of group sections`() {
+        val library = resolveLibrary(
+            LibraryInputs(
+                apps = listOf(app("Chess"), app("Doom")),
+                layout = LibraryLayout.Groups,
+                groups = listOf(LibraryGroup("Play", listOf("chess", "doom"))),
+                hidden = setOf("doom"),
+            )
+        )
+
+        assertEquals(listOf("Chess"), library.sections[0].rows.map { it.label })
+        assertEquals(listOf("Doom"), library.hiddenRows.map { it.label })
+    }
+
+    @Test
+    fun `an app assigned to two groups appears in both`() {
+        val library = resolveLibrary(
+            LibraryInputs(
+                apps = listOf(app("Camera")),
+                layout = LibraryLayout.Groups,
+                groups = listOf(
+                    LibraryGroup("Travel", listOf("camera")),
+                    LibraryGroup("Create", listOf("camera")),
+                ),
+            )
+        )
+
+        assertEquals(listOf("Camera"), library.sections[0].rows.map { it.label })
+        assertEquals(listOf("Camera"), library.sections[1].rows.map { it.label })
+    }
+
+    @Test
+    fun `group rows sort alphabetically regardless of assignment order`() {
+        val library = resolveLibrary(
+            LibraryInputs(
+                apps = listOf(app("Doom"), app("Anki"), app("Chess")),
+                layout = LibraryLayout.Groups,
+                groups = listOf(LibraryGroup("Play", listOf("doom", "chess", "anki"))),
+            )
+        )
+
+        assertEquals(listOf("Anki", "Chess", "Doom"), library.sections[0].rows.map { it.label })
+    }
+
+    @Test
+    fun `searching keeps only group sections with a match`() {
+        val library = resolveLibrary(
+            LibraryInputs(
+                apps = listOf(app("Chess"), app("Signal")),
+                layout = LibraryLayout.Groups,
+                groups = listOf(
+                    LibraryGroup("Play", listOf("chess")),
+                    LibraryGroup("People", listOf("signal")),
+                    LibraryGroup("Empty", emptyList()),
+                ),
+                query = "ches",
+            )
+        )
+
+        assertEquals(listOf("Play"), library.sections.map { it.title })
+    }
+
+    @Test
+    fun `groups layout has no scrubber index`() {
+        val library = resolveLibrary(
+            LibraryInputs(
+                apps = listOf(app("Chess")),
+                layout = LibraryLayout.Groups,
+                groups = listOf(LibraryGroup("Play", listOf("chess"))),
+            )
+        )
+
+        assertTrue(library.index.isEmpty())
+    }
+
+    @Test
     fun `recent orders by last use, never-used apps last alphabetically`() {
         val now = 1_000_000_000L
         val library = resolveLibrary(

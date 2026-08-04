@@ -85,8 +85,15 @@ fun LibraryScreen(
     onUnhide: (HomeAction) -> Unit,
     hiddenSearchable: Boolean,
     onHiddenSearchableChange: (Boolean) -> Unit,
+    /** User group names, so the Groups layout knows which sections it may manage. */
+    groupNames: List<String>,
+    onCreateGroup: (String) -> Unit,
+    onRenameGroup: (String, String) -> Unit,
+    onDeleteGroup: (String) -> Unit,
     onBack: () -> Unit,
 ) {
+    // null = closed, "" = creating, else the group being renamed or deleted.
+    val groupEditor = remember { mutableStateOf<String?>(null) }
     val colors = LocalBodhaColors.current
     val dismissThreshold = with(LocalDensity.current) { SWIPE_THRESHOLD.toPx() }
     val overscroll = remember { mutableFloatStateOf(0f) }
@@ -192,12 +199,20 @@ fun LibraryScreen(
                         }
                     } else {
                         state.sections.forEach { section ->
+                            val manageable = state.layout == LibraryLayout.Groups &&
+                                section.title in groupNames
                             item(key = "section:" + section.title) {
-                                SectionHeader(section.title)
+                                SectionHeader(
+                                    title = section.title,
+                                    onLongPress = { groupEditor.value = section.title }
+                                        .takeIf { manageable },
+                                )
                             }
                             items(
+                                // Grouped rows repeat across sections, so ids alone
+                                // can't key them.
                                 count = section.rows.size,
-                                key = { section.rows[it].id },
+                                key = { "section:" + section.title + ":" + section.rows[it].id },
                             ) { i ->
                                 val app = section.rows[i]
                                 AppRow(
@@ -205,6 +220,11 @@ fun LibraryScreen(
                                     onSwipeRight = onPin, onSwipeLeft = onHide,
                                     lastUsedLine = state.lastUsedLines[app.id],
                                 )
+                            }
+                        }
+                        if (state.layout == LibraryLayout.Groups && query.isBlank()) {
+                            item(key = "new-group") {
+                                NewGroupRow(onTap = { groupEditor.value = "" })
                             }
                         }
                     }
@@ -226,6 +246,18 @@ fun LibraryScreen(
                 }
             }
         }
+    }
+
+    groupEditor.value?.let { editing ->
+        GroupEditorDialog(
+            existing = editing.takeIf { it.isNotEmpty() },
+            taken = groupNames,
+            onSave = { name ->
+                if (editing.isEmpty()) onCreateGroup(name) else onRenameGroup(editing, name)
+            },
+            onDelete = { onDeleteGroup(editing) },
+            onDismiss = { groupEditor.value = null },
+        )
     }
 }
 
@@ -301,17 +333,40 @@ private val layoutLabels = listOf(
     LibraryLayout.CompactIcons to "Icons",
     LibraryLayout.Categories to "Categories",
     LibraryLayout.Recent to "Recent",
+    LibraryLayout.Groups to "Groups",
 )
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun SectionHeader(title: String) {
+private fun SectionHeader(title: String, onLongPress: (() -> Unit)? = null) {
     val colors = LocalBodhaColors.current
     Text(
         text = title,
         color = colors.inkMuted,
         fontSize = 13.sp,
         letterSpacing = 1.sp,
-        modifier = Modifier.fillMaxWidth().padding(top = 20.dp, bottom = 8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .let { base ->
+                if (onLongPress == null) base
+                else base.combinedClickable(onClick = {}, onLongClick = onLongPress)
+            }
+            .padding(top = 20.dp, bottom = 8.dp),
+    )
+}
+
+/** The Groups layout's quiet entry point for creating a group. */
+@Composable
+private fun NewGroupRow(onTap: () -> Unit) {
+    val colors = LocalBodhaColors.current
+    Text(
+        text = "New group …",
+        color = colors.inkMuted,
+        fontSize = 13.sp,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onTap)
+            .padding(top = 20.dp, bottom = 8.dp),
     )
 }
 

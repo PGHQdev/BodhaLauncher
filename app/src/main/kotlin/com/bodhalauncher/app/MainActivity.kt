@@ -18,6 +18,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.bodhalauncher.app.home.AppCatalog
+import com.bodhalauncher.app.home.GroupStore
 import com.bodhalauncher.app.home.IntentionStore
 import com.bodhalauncher.app.home.LibraryStore
 import com.bodhalauncher.app.home.PinStore
@@ -29,6 +30,7 @@ import com.bodhalauncher.app.ui.AppActionsSheet
 import com.bodhalauncher.app.ui.AppPickerDialog
 import com.bodhalauncher.app.ui.BodhaTheme
 import com.bodhalauncher.app.ui.EditHomeDialog
+import com.bodhalauncher.app.ui.GroupPickerDialog
 import com.bodhalauncher.app.ui.HomeGestures
 import com.bodhalauncher.app.ui.HomeScreen
 import com.bodhalauncher.app.ui.IntentPromptSheet
@@ -68,14 +70,16 @@ class MainActivity : ComponentActivity() {
         val pinStore = PinStore(this)
         val intentionStore = IntentionStore(this)
         val libraryStore = LibraryStore(this)
+        val groupStore = GroupStore(this)
         catalog = AppCatalog(this)
         catalog.onAppsRemoved = { ids ->
             ids.forEach { pinStore.unpin(it); pinStore.unhide(it) }
+            groupStore.removeApps(ids)
         }
         catalog.startWatching()
         setContent {
             BodhaTheme {
-                HomeRoot(pinStore, intentionStore, libraryStore, catalog, app.intentPrompt)
+                HomeRoot(pinStore, intentionStore, libraryStore, groupStore, catalog, app.intentPrompt)
             }
         }
     }
@@ -102,6 +106,7 @@ private fun HomeRoot(
     pinStore: PinStore,
     intentionStore: IntentionStore,
     libraryStore: LibraryStore,
+    groupStore: GroupStore,
     catalog: AppCatalog,
     intentPrompt: IntentPromptRuntime,
 ) {
@@ -124,9 +129,11 @@ private fun HomeRoot(
         if (surface == HomeSurface.Library) {
             var query by remember { mutableStateOf("") }
             var actionsFor by remember { mutableStateOf<HomeAction?>(null) }
+            var groupsFor by remember { mutableStateOf<HomeAction?>(null) }
             val hiddenSearchable by libraryStore.hiddenSearchable
             val layout by libraryStore.layout
             val categories by catalog.categories
+            val groups by groupStore.groups
             val usage = remember { UsageReader(context) }
             // Re-reads on every resume, so granting access in settings shows up on return;
             // read on demand and never stored (ADR 0009).
@@ -146,6 +153,7 @@ private fun HomeRoot(
                         apps = allApps,
                         layout = layout,
                         categories = categories,
+                        groups = groups,
                         query = query,
                         hidden = hidden,
                         hiddenSearchable = hiddenSearchable,
@@ -166,8 +174,20 @@ private fun HomeRoot(
                 onUnhide = { pinStore.unhide(it.id) },
                 hiddenSearchable = hiddenSearchable,
                 onHiddenSearchableChange = libraryStore::setHiddenSearchable,
+                groupNames = groups.map { it.name },
+                onCreateGroup = groupStore::create,
+                onRenameGroup = groupStore::rename,
+                onDeleteGroup = groupStore::delete,
                 onBack = back,
             )
+            groupsFor?.let { app ->
+                GroupPickerDialog(
+                    app = app,
+                    groups = groups,
+                    onToggle = { groupStore.toggle(it.name, app.id) },
+                    onDismiss = { groupsFor = null },
+                )
+            }
             actionsFor?.let { app ->
                 val dismiss = { actionsFor = null }
                 AppActionsSheet(
@@ -181,6 +201,7 @@ private fun HomeRoot(
                     onUnpin = { dismiss(); pinStore.unpin(app.id) },
                     onHide = { dismiss(); pinStore.hide(app.id) },
                     onUnhide = { dismiss(); pinStore.unhide(app.id) },
+                    onGroups = { dismiss(); groupsFor = app },
                     onPause = { dismiss(); surface = HomeSurface.Focus },
                     onOpenCheck = { dismiss(); surface = HomeSurface.OpenCheck },
                     onAppInfo = { dismiss(); catalog.openAppInfo(app.id) },

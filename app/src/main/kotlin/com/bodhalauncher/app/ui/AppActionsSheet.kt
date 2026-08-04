@@ -37,6 +37,8 @@ fun AppActionsSheet(
     onUnpin: () -> Unit,
     onHide: () -> Unit,
     onUnhide: () -> Unit,
+    /** Opens the group membership picker (user groups, #67). */
+    onGroups: () -> Unit,
     onPause: () -> Unit,
     onOpenCheck: () -> Unit,
     onAppInfo: () -> Unit,
@@ -58,6 +60,7 @@ fun AppActionsSheet(
             }
             if (isPinned) ActionEntry("Unpin", onUnpin) else ActionEntry("Pin", onPin)
             if (isHidden) ActionEntry("Unhide", onUnhide) else ActionEntry("Hide", onHide)
+            ActionEntry("Groups", onGroups)
             ActionEntry("Pause", onPause)
             ActionEntry("Set Open Check", onOpenCheck)
             ActionEntry("App info", onAppInfo)
