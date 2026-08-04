@@ -4,11 +4,12 @@ import java.time.Duration
 import java.time.Instant
 
 /**
- * When a rule's check fires (#8). The walking skeleton ships [Always] and
- * [Never]; the remaining trigger modes (repeated opening, daily threshold,
- * schedule, during Focus) arrive with their own tickets.
+ * When a rule's check fires (#8). [RepeatedOpening] catches autopilot: the
+ * first launches are frictionless, the third within a rolling window is
+ * checked (#72). The remaining trigger modes (daily threshold, schedule,
+ * during Focus) arrive with their own tickets.
  */
-enum class OpenCheckMode { Always, Never }
+enum class OpenCheckMode { Always, RepeatedOpening, Never }
 
 /** A user's per-app Open Check rule; no rule at all means the app just opens. */
 data class OpenCheckRule(val mode: OpenCheckMode)
@@ -64,8 +65,15 @@ private fun plural(n: Long, unit: String): String = "$n $unit${if (n == 1L) "" e
 sealed interface OpenCheckDecision {
     data object Proceed : OpenCheckDecision
 
-    /** The check is due — the adapter presents the sheet. */
-    data class ShowCheck(val appId: String, val at: Instant) : OpenCheckDecision
+    /**
+     * The check is due — the adapter presents the sheet. [repeatedOpen] marks a
+     * repeated-opening detection (#72); the adapter logs the event, type only.
+     */
+    data class ShowCheck(
+        val appId: String,
+        val at: Instant,
+        val repeatedOpen: Boolean = false,
+    ) : OpenCheckDecision
 }
 
 /**
@@ -76,6 +84,10 @@ data class OpenCheckState(
     /** The app a passed check granted entry to, and when it runs out. */
     val grantedApp: String?,
     val grantedUntil: Instant?,
+    /** Recent frictionless launches per app, for the repeated-opening window (#72). */
+    val recentLaunches: Map<String, List<Instant>> = emptyMap(),
+    /** Per-app rest after a repeated-opening check fired (#72). */
+    val restingUntil: Map<String, Instant> = emptyMap(),
 ) {
     companion object {
         val Initial = OpenCheckState(grantedApp = null, grantedUntil = null)
@@ -94,8 +106,10 @@ class OpenCheckEngine(initial: OpenCheckState = OpenCheckState.Initial) {
 
     private var grantedApp = initial.grantedApp
     private var grantedUntil = initial.grantedUntil
+    private var recentLaunches = initial.recentLaunches
+    private var restingUntil = initial.restingUntil
 
-    fun snapshot(): OpenCheckState = OpenCheckState(grantedApp, grantedUntil)
+    fun snapshot(): OpenCheckState = OpenCheckState(grantedApp, grantedUntil, recentLaunches, restingUntil)
 
     fun onLaunchAttempt(appId: String, rule: OpenCheckRule?, now: Instant): OpenCheckDecision {
         if (appId == grantedApp && grantedUntil?.isBefore(now) == false) {
@@ -105,7 +119,26 @@ class OpenCheckEngine(initial: OpenCheckState = OpenCheckState.Initial) {
         return when (rule?.mode) {
             null, OpenCheckMode.Never -> OpenCheckDecision.Proceed
             OpenCheckMode.Always -> OpenCheckDecision.ShowCheck(appId, now)
+            OpenCheckMode.RepeatedOpening -> onRepeatedAttempt(appId, now)
         }
+    }
+
+    /**
+     * The rolling window always rolls — launches are recorded even while the
+     * rule rests, so autopilot that outlasts the cooldown is caught on the
+     * first launch after it; the rest only suppresses firing.
+     */
+    private fun onRepeatedAttempt(appId: String, now: Instant): OpenCheckDecision {
+        val window = recentLaunches[appId].orEmpty()
+            .filter { it.isAfter(now.minus(REPEATED_OPEN_WINDOW)) }
+        val resting = restingUntil[appId]?.isAfter(now) == true
+        if (!resting && window.size >= REPEATED_OPEN_THRESHOLD - 1) {
+            restingUntil = restingUntil + (appId to now.plus(REPEATED_OPEN_COOLDOWN))
+            recentLaunches = recentLaunches - appId
+            return OpenCheckDecision.ShowCheck(appId, now, repeatedOpen = true)
+        }
+        recentLaunches = recentLaunches + (appId to window + now)
+        return OpenCheckDecision.Proceed
     }
 
     /** The user chose Open on the check sheet. */
@@ -127,5 +160,12 @@ class OpenCheckEngine(initial: OpenCheckState = OpenCheckState.Initial) {
     companion object {
         /** Long enough for the granted launch to loop back, short enough to keep Always honest. */
         val GRANT_WINDOW: Duration = Duration.ofSeconds(5)
+
+        // Repeated-opening constants ship fixed in v1 (#72), Settings defaults
+        // later — same precedent as the Intent Prompt frequency (ADR 0004).
+        /** The launch that fires the check: the third inside the window. */
+        const val REPEATED_OPEN_THRESHOLD = 3
+        val REPEATED_OPEN_WINDOW: Duration = Duration.ofMinutes(15)
+        val REPEATED_OPEN_COOLDOWN: Duration = Duration.ofMinutes(30)
     }
 }
