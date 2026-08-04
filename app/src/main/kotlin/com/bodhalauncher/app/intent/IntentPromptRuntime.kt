@@ -32,8 +32,16 @@ class IntentPromptRuntime(context: Context, private val sessions: SessionRuntime
     /** The prompt due for the active session, if any; null once handled. */
     val promptDue = mutableStateOf<PromptDecision?>(null)
 
+    /** The current session's chosen intent — Home's reducer input; null when none. */
+    val sessionIntent = mutableStateOf<IntentCategory?>(null)
+
     fun start() {
         sessions.addTransitionListener { transition ->
+            // Session-scoped: a new session starts clean, a final end clears it,
+            // and a merge-window resume keeps it (neither transition fires).
+            if (transition is Transition.SessionStarted || transition is Transition.SessionEnded) {
+                sessionIntent.value = null
+            }
             val decision = engine.onTransition(transition, currentSuppression())
             store.save(engine.snapshot())
             val active = (sessions.phase.value as? SessionPhase.Active)?.session
@@ -92,6 +100,10 @@ class IntentPromptRuntime(context: Context, private val sessions: SessionRuntime
     fun select(category: IntentCategory?, text: String?) {
         val decision = promptDue.value ?: return
         records.appendSelection(decision, category, text)
+        // "Just looking" opens Home without judgment — it shapes nothing.
+        if (category != null && category != IntentCategory.JustLooking) {
+            sessionIntent.value = category
+        }
         promptDue.value = null
     }
 

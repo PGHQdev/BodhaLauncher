@@ -30,6 +30,7 @@ import com.bodhalauncher.app.ui.IntentionEditorDialog
 import com.bodhalauncher.app.ui.PlaceholderSurface
 import com.bodhalauncher.engine.HomeAction
 import com.bodhalauncher.engine.HomeInputs
+import com.bodhalauncher.engine.IntentCategory
 import com.bodhalauncher.engine.resolveHome
 import java.time.LocalDateTime
 
@@ -79,6 +80,7 @@ private fun HomeRoot(
     val pinnedIds by pinStore.pinned
     val hidden by pinStore.hidden
     val intention by intentionStore.intention
+    val sessionIntent by intentPrompt.sessionIntent
     val pinned = remember(pinnedIds) { catalog.resolve(pinnedIds) }
     var pickerOpen by remember { mutableStateOf(false) }
     var optionsFor by remember { mutableStateOf<HomeAction?>(null) }
@@ -103,6 +105,7 @@ private fun HomeRoot(
             dailyIntention = intention?.textOn(now),
             pinned = pinned,
             hidden = hidden,
+            sessionIntent = sessionIntent,
         )
     )
 
@@ -129,7 +132,11 @@ private fun HomeRoot(
         val due by intentPrompt.promptDue
         if (due != null) {
             IntentPromptSheet(
-                onSelect = { category, text -> intentPrompt.select(category, text) },
+                onSelect = { category, text ->
+                    intentPrompt.select(category, text)
+                    // The intent flows straight into the action.
+                    if (category == IntentCategory.FindSomething) surface = HomeSurface.Search
+                },
                 onDismiss = intentPrompt::dismiss,
             )
         }
