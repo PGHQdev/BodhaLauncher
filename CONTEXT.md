@@ -28,6 +28,10 @@ _Avoid_: midnight, day rollover
 The deterministic at-a-glance card of categorized notification counts ("3 people reached out"). Part of the free inbox; involves no model.
 _Avoid_: notification summary (that's the model-generated prose)
 
+**Handled**:
+A notification the user has dealt with from Bodha's inbox. Handling cancels the real notification, so the system shade and the inbox never disagree.
+_Avoid_: read, dismissed (that's the user swiping it away elsewhere), archived
+
 **Notification summary**:
 Model-generated prose condensing notification threads. Pro, on-device model only; absent on devices without one.
 _Avoid_: digest (that's the deterministic counts card)
