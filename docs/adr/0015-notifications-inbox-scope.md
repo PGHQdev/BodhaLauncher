@@ -1,0 +1,17 @@
+# Notifications inbox: no SMS or calls, four sections, metadata only
+
+Notifications from the holders of the default SMS role and the default phone role never enter the inbox — not displayed, not stored, not counted in the digest. Play's SMS/Call Log policy names "SMS or calls appearing in wallpaper, launcher, and other tools" and "SMS or phone notification enhancement and alerts" as invalid use cases, and forbids "alternative methods to derive data attributed to Call Log or SMS related permissions". Those clauses are scoped to permissions Bodha never requests, and nothing published says whether that scoping saves a listener-based inbox (#89). Excluding the two role holders answers the exact clause while leaving third-party messengers untouched, since their content is not attributed to those permissions. The penalty for guessing wrong lands on a launcher, where removal is not a lost feature but a bricked home screen — so the reading that needs no interpretation wins. Texts and missed calls are the two things people most expect an inbox to hold; their absence is the price.
+
+Four sections, each citing a platform signal: **People** (conversation-ness — `Ranking.isConversation()` at API 31+, `MessagingStyle` plus `shortcutId` plus `category == "msg"` below it), **Time-sensitive** (category plus post-override importance), **Updates** (the promo, social, status and recommendation categories), **Silent** (low importance, or never audibly alerted). #10's **Work** section is dropped: no platform signal supports it, and listeners are ignored inside work profiles, so the one place the answer exists is invisible to us. Every placement is explainable in one line, which is what #10's "inferred urgency must be explainable" requires.
+
+The digest card sits on Today; tapping it opens the inbox as its own surface, and back from there returns Home per the radial model (ADR 0011).
+
+Handled and snooze act on the real notification — `cancelNotification` and the platform's `snoozeNotification` — so Bodha and the system shade never disagree and the user dismisses once. #10's "mark handled locally" is read as "on-device, no server", which is how *locally* is used everywhere else in that document and consistent with ADR 0009. Tapping a row fires the original `contentIntent` directly, as the trampoline restriction at target 31+ requires.
+
+Storage is **metadata only**: app, section, category and timestamps. Never title, text or sender name. That is all the digest's counts need, and it means the sensitive part is never written down — no Android 15 OTP-redaction problem to detect (there is no API to detect it), nothing to leak, nothing on export beyond counts, and `RetentionCategory.NotificationContent` stays nearly empty. Inbox rows render from the live shade via `getActiveNotifications()`, so what is shown is what exists. The accepted consequence is that the digest can count something no longer listed. `REASON_LOCKDOWN` obliges deleting our copy; with metadata-only storage that means dropping the row.
+
+This inbox is deliberately weaker than the system shade: no SMS, no calls, no stored content, rows live only as long as the notification does. What it adds is the digest and the calm sections, not a replacement shade.
+
+Listener reliability — auto-rebind fires once at 10s and then stops, so `requestRebind` from the launcher activity is the self-heal — is an app-lifecycle concern (#18), not this surface's.
+
+Resolved in issue #93.
