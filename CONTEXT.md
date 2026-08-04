@@ -15,3 +15,11 @@ _Avoid_: pickup (Awareness may count raw unlocks separately; a peek is not one)
 **Merge window**:
 The 30 seconds after screen-off during which a re-unlock resumes the previous session instead of starting a new one.
 _Avoid_: grace period, debounce
+
+**Daily intention**:
+The single intention shown on Today for the current day. Editable anytime; expires at the day boundary rather than carrying over.
+_Avoid_: intent (that's the per-session Intent Prompt choice), goal
+
+**Day boundary**:
+4:00am local time — where one day ends and the next begins for daily state like the intention. Late-night use before 4am belongs to the previous day.
+_Avoid_: midnight, day rollover
