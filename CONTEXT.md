@@ -48,6 +48,10 @@ _Avoid_: grace period (that connotes leniency; the grant covers exactly one open
 The default Intent Prompt trigger: a 3rd session starting within a 15-minute window, signalling autopilot use. After firing it rests for a cooldown.
 _Avoid_: unlock trigger (it counts sessions, not unlocks)
 
+**Context mode**:
+A named set of Home pins the user built, optionally taking over during a time window. Switches Home's pins and nothing else. The unnamed default arrangement is not a mode.
+_Avoid_: context (too broad), profile, theme
+
 **Per-query default**:
 The user's explicit choice of which result wins for one query string. Set from a result's long-press, reversible there, and the second ranking tier.
 _Avoid_: preferred app, favourite, shortcut
