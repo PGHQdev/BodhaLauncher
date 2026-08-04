@@ -1,0 +1,3 @@
+# Notification summaries: deterministic digest in MVP, model prose in beta
+
+The spec's "summary" is two things, split here. The inbox digest — the Home card's categorized counts ("3 people reached out / 1 item needs attention") plus inbox grouping and metadata-derived urgency — is pure aggregation: it ships in MVP as part of the free notifications inbox (ADR 0005). Notification summaries proper — model-generated prose condensing threads — wait for a post-MVP beta as a Pro feature, generated on-device only (Gemini Nano via AICore) per ADR 0007; on devices without an on-device model the feature is simply absent, no cloud fallback. ADR 0005's "notification summaries: Pro if they ship" refers to the prose summaries, never the digest. Resolved in issue #40.

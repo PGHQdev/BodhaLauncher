@@ -24,6 +24,14 @@ _Avoid_: intent (that's the per-session Intent Prompt choice), goal
 4:00am local time — where one day ends and the next begins for daily state like the intention. Late-night use before 4am belongs to the previous day.
 _Avoid_: midnight, day rollover
 
+**Inbox digest**:
+The deterministic at-a-glance card of categorized notification counts ("3 people reached out"). Part of the free inbox; involves no model.
+_Avoid_: notification summary (that's the model-generated prose)
+
+**Notification summary**:
+Model-generated prose condensing notification threads. Pro, on-device model only; absent on devices without one.
+_Avoid_: digest (that's the deterministic counts card)
+
 **Reflexive trigger**:
 The default Intent Prompt trigger: a 3rd session starting within a 15-minute window, signalling autopilot use. After firing it rests for a cooldown.
 _Avoid_: unlock trigger (it counts sessions, not unlocks)
