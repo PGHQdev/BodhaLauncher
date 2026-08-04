@@ -164,12 +164,14 @@ private fun HomeRoot(
     var checkFor by rememberSaveable(stateSaver = homeActionSaver) { mutableStateOf<HomeAction?>(null) }
     // The single opening path (#8): every surface's launch flows through here.
     val openApp: (HomeAction) -> Unit = { action ->
-        when (openCheck.onLaunchAttempt(action.id, openCheckStore.ruleFor(action.id), Instant.now())) {
+        when (val decision = openCheck.onLaunchAttempt(action.id, openCheckStore.ruleFor(action.id), Instant.now())) {
             is OpenCheckDecision.Proceed -> {
                 events.log(EventType.AppLaunched)
                 catalog.launch(action)
             }
             is OpenCheckDecision.ShowCheck -> {
+                // Type and timestamp only — the event never carries the app (#25).
+                if (decision.repeatedOpen) events.log(EventType.RepeatedOpenDetected)
                 events.log(EventType.OpenCheckDisplayed)
                 checkFor = action
             }

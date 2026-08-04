@@ -26,6 +26,7 @@ import com.bodhalauncher.engine.ProBoundary
  */
 internal fun openCheckModeLabel(mode: OpenCheckMode): String = when (mode) {
     OpenCheckMode.Always -> "Always"
+    OpenCheckMode.RepeatedOpening -> "Repeated opening"
     OpenCheckMode.Never -> "Never"
 }
 
