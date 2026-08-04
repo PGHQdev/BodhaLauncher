@@ -20,16 +20,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bodhalauncher.app.home.AppCatalog
+import com.bodhalauncher.app.home.IntentionStore
 import com.bodhalauncher.app.home.PinStore
 import com.bodhalauncher.app.intent.IntentPromptRuntime
 import com.bodhalauncher.app.ui.ActionOptionsDialog
 import com.bodhalauncher.app.ui.AppPickerDialog
 import com.bodhalauncher.app.ui.BodhaTheme
 import com.bodhalauncher.app.ui.HomeScreen
+import com.bodhalauncher.app.ui.IntentionEditorDialog
 import com.bodhalauncher.app.ui.LocalBodhaColors
 import com.bodhalauncher.engine.HomeAction
 import com.bodhalauncher.engine.HomeInputs
 import com.bodhalauncher.engine.resolveHome
+import java.time.LocalDateTime
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -37,10 +40,11 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         val app = application as BodhaApp
         val pinStore = PinStore(this)
+        val intentionStore = IntentionStore(this)
         val catalog = AppCatalog(this)
         setContent {
             BodhaTheme {
-                HomeRoot(pinStore, catalog, app.intentPrompt)
+                HomeRoot(pinStore, intentionStore, catalog, app.intentPrompt)
             }
         }
     }
@@ -49,17 +53,30 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun HomeRoot(
     pinStore: PinStore,
+    intentionStore: IntentionStore,
     catalog: AppCatalog,
     intentPrompt: IntentPromptRuntime,
 ) {
     val pinnedIds by pinStore.pinned
     val hidden by pinStore.hidden
+    val intention by intentionStore.intention
     val pinned = remember(pinnedIds) { catalog.resolve(pinnedIds) }
     var pickerOpen by remember { mutableStateOf(false) }
     var optionsFor by remember { mutableStateOf<HomeAction?>(null) }
+    var editingIntention by remember { mutableStateOf(false) }
 
-    // Remaining inputs fill in as their features ship (intention #53, suggestions #6, …).
-    val state = resolveHome(HomeInputs(pinned = pinned, hidden = hidden))
+    // Sampled per recomposition — good enough for the 4am boundary (ADR 0003):
+    // any state change or activity resume re-evaluates validity.
+    val now = LocalDateTime.now()
+
+    // Remaining inputs fill in as their features ship (suggestions #6, digest #10, …).
+    val state = resolveHome(
+        HomeInputs(
+            dailyIntention = intention?.textOn(now),
+            pinned = pinned,
+            hidden = hidden,
+        )
+    )
 
     Box(modifier = Modifier.fillMaxSize()) {
         HomeScreen(
@@ -67,6 +84,7 @@ private fun HomeRoot(
             onAction = catalog::launch,
             onActionLongPress = { optionsFor = it },
             onAddAction = { pickerOpen = true },
+            onEditIntention = { editingIntention = true },
         )
 
         // Temporary prompt-due signal; the bottom sheet (#55) replaces it.
@@ -91,6 +109,14 @@ private fun HomeRoot(
             apps = apps.filter { it.id !in pinnedIds },
             onPick = { pinStore.pin(it.id); pickerOpen = false },
             onDismiss = { pickerOpen = false },
+        )
+    }
+    if (editingIntention) {
+        IntentionEditorDialog(
+            current = intention?.textOn(now),
+            onSave = { intentionStore.set(it, LocalDateTime.now()) },
+            onClear = intentionStore::clear,
+            onDismiss = { editingIntention = false },
         )
     }
     optionsFor?.let { action ->

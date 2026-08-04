@@ -48,6 +48,8 @@ fun HomeScreen(
     onActionLongPress: (HomeAction) -> Unit = {},
     /** Shown while there is room for another pin; opens the app picker. */
     onAddAction: (() -> Unit)? = null,
+    /** Temporary editor entry point until Today (#5) is the intention's editor. */
+    onEditIntention: (() -> Unit)? = null,
 ) {
     val colors = LocalBodhaColors.current
     Column(
@@ -64,15 +66,29 @@ fun HomeScreen(
             Spacer(Modifier.height(12.dp))
             Text(text = it, color = colors.inkMuted, fontSize = 13.sp, letterSpacing = 2.sp)
         }
-        state.dailyIntention?.let {
+        val intention = state.dailyIntention
+        if (intention != null) {
             Spacer(Modifier.height(36.dp))
             Text(
-                text = it,
+                text = intention,
                 color = colors.ink,
                 fontFamily = FontFamily.Serif,
                 fontStyle = FontStyle.Italic,
                 fontSize = 19.sp,
                 textAlign = TextAlign.Center,
+                modifier = Modifier.clickable(enabled = onEditIntention != null) { onEditIntention?.invoke() },
+            )
+        } else if (onEditIntention != null) {
+            // Temporary empty-state entry point; Today (#5) owns this moment once it exists.
+            Spacer(Modifier.height(36.dp))
+            Text(
+                text = "Set today's intention",
+                color = colors.inkMuted,
+                fontFamily = FontFamily.Serif,
+                fontStyle = FontStyle.Italic,
+                fontSize = 19.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.clickable { onEditIntention() },
             )
         }
         Spacer(Modifier.height(48.dp))
