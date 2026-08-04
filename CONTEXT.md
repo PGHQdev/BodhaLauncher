@@ -43,3 +43,15 @@ _Avoid_: grace period (that connotes leniency; the grant covers exactly one open
 **Reflexive trigger**:
 The default Intent Prompt trigger: a 3rd session starting within a 15-minute window, signalling autopilot use. After firing it rests for a cooldown.
 _Avoid_: unlock trigger (it counts sessions, not unlocks)
+
+**Surface**:
+A place you dwell in and look around: Home, Search, App Library, Awareness, Today, an active Focus session, Settings. Reached by a swipe, from within another surface, or by name in Search.
+_Avoid_: screen (that's the display), page, tab
+
+**Sheet**:
+One decision you make and leave — single purpose, dismissible without consequence, at most two footer actions. Exactly one exists at a time; a new sheet replaces the open one.
+_Avoid_: modal, dialog, popup
+
+**Root**:
+The surface back and the system Home button land on. Home, except while a Focus session runs, when Focus is root.
+_Avoid_: home screen (Home is one surface; root is a role)
