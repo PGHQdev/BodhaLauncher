@@ -17,12 +17,16 @@ The 30 seconds after screen-off during which a re-unlock resumes the previous se
 _Avoid_: grace period, debounce
 
 **Daily intention**:
-The single intention shown on Today for the current day. Editable anytime; expires at the day boundary rather than carrying over.
+The single intention shown on Today for the current day. Owned and edited on Today; Home renders it read-only. Editable anytime; expires at the day boundary rather than carrying over.
 _Avoid_: intent (that's the per-session Intent Prompt choice), goal
 
 **Day boundary**:
-4:00am local time — where one day ends and the next begins for daily state like the intention. Late-night use before 4am belongs to the previous day.
+4:00am local time — where one day ends and the next begins for daily state like the intention. Late-night use before 4am belongs to the previous day. Governs all of Today, including which day the day slot reads.
 _Avoid_: midnight, day rollover
+
+**Day slot**:
+Today's calendar slot: the current day's not-yet-ended events in time order, from visible calendars, declined instances dropped. Falls back to one Tomorrow row when the day is spent.
+_Avoid_: agenda, schedule, next event (that's one row, not the slot)
 
 **Inbox digest**:
 The deterministic at-a-glance card of categorized notification counts ("3 people reached out"). Part of the free inbox; involves no model.
@@ -71,6 +75,10 @@ _Avoid_: session (that's the phone session), timed session (that's one checked a
 **Surface**:
 A place you dwell in and look around: Home, Search, App Library, Awareness, Today, an active Focus session, Settings. Reached by a swipe, from within another surface, or by name in Search.
 _Avoid_: screen (that's the display), page, tab
+
+**Today**:
+The day surface, one swipe right from Home: three fixed slots — daily intention, day slot, inbox digest — under the day key's date. Never ranked, never a task manager.
+_Avoid_: agenda, dashboard, feed, at-a-glance
 
 **Sheet**:
 One decision you make and leave — single purpose, dismissible without consequence, at most two footer actions. Exactly one exists at a time; a new sheet replaces the open one.
