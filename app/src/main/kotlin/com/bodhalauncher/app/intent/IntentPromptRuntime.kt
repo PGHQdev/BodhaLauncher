@@ -3,6 +3,7 @@ package com.bodhalauncher.app.intent
 import android.content.Context
 import androidx.compose.runtime.mutableStateOf
 import com.bodhalauncher.app.session.SessionRuntime
+import com.bodhalauncher.engine.IntentCategory
 import com.bodhalauncher.engine.IntentPromptEngine
 import com.bodhalauncher.engine.PromptDecision
 import com.bodhalauncher.engine.SessionPhase
@@ -18,6 +19,7 @@ import com.bodhalauncher.engine.Transition
 class IntentPromptRuntime(context: Context, private val sessions: SessionRuntime) {
 
     private val store = IntentPromptStateStore(context)
+    private val records = IntentRecordStore(context)
     private val engine = IntentPromptEngine(initial = store.load())
 
     /** The prompt due for the active session, if any; null once handled. */
@@ -39,7 +41,21 @@ class IntentPromptRuntime(context: Context, private val sessions: SessionRuntime
     /** Suppression detection lands with #56; until then nothing suppresses. */
     private fun currentSuppression() = SuppressionFlags()
 
+    /**
+     * The user chose an intent (or typed free text with no category). The engine
+     * started the cooldown when the prompt fired, so selection and dismissal
+     * already rest identically; here we only record and clear.
+     */
+    fun select(category: IntentCategory?, text: String?) {
+        val decision = promptDue.value ?: return
+        records.appendSelection(decision, category, text)
+        promptDue.value = null
+    }
+
+    /** Swiped down or tapped outside — recorded, and the cooldown stands. */
     fun dismiss() {
+        val decision = promptDue.value ?: return
+        records.appendDismissal(decision)
         promptDue.value = null
     }
 }

@@ -6,21 +6,14 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.bodhalauncher.app.home.AppCatalog
 import com.bodhalauncher.app.home.IntentionStore
 import com.bodhalauncher.app.home.PinStore
@@ -32,8 +25,8 @@ import com.bodhalauncher.app.ui.BodhaTheme
 import com.bodhalauncher.app.ui.EditHomeDialog
 import com.bodhalauncher.app.ui.HomeGestures
 import com.bodhalauncher.app.ui.HomeScreen
+import com.bodhalauncher.app.ui.IntentPromptSheet
 import com.bodhalauncher.app.ui.IntentionEditorDialog
-import com.bodhalauncher.app.ui.LocalBodhaColors
 import com.bodhalauncher.app.ui.PlaceholderSurface
 import com.bodhalauncher.engine.HomeAction
 import com.bodhalauncher.engine.HomeInputs
@@ -122,18 +115,11 @@ private fun HomeRoot(
             ),
         )
 
-        // Temporary prompt-due signal; the bottom sheet (#55) replaces it.
         val due by intentPrompt.promptDue
         if (due != null) {
-            Text(
-                text = "What are you here for?",
-                color = LocalBodhaColors.current.accent,
-                fontSize = 14.sp,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .safeDrawingPadding()
-                    .padding(bottom = 96.dp)
-                    .clickable { intentPrompt.dismiss() },
+            IntentPromptSheet(
+                onSelect = { category, text -> intentPrompt.select(category, text) },
+                onDismiss = intentPrompt::dismiss,
             )
         }
     }
