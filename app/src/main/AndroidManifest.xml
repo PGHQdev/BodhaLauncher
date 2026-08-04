@@ -9,7 +9,10 @@
         </intent>
     </queries>
 
+    <!-- ADR 0009: session data never leaves the phone — no Auto Backup either -->
     <application
+        android:name=".BodhaApp"
+        android:allowBackup="false"
         android:label="Bodha"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.DeviceDefault.NoActionBar">

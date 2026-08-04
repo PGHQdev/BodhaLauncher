@@ -178,7 +178,8 @@ class SessionEngine(initial: EngineState = EngineState.Initial) {
         return Transition.SessionEnded(s.session, s.endedAt)
     }
 
-    private companion object {
+    companion object {
+        /** ADR 0001: how long a session end stays provisional. Adapters schedule finalization from it. */
         val MERGE_WINDOW: Duration = Duration.ofSeconds(30)
     }
 }
