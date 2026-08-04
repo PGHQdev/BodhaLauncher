@@ -34,7 +34,7 @@ class HomeGesturesAccessibilityTest {
         swipeUp = GestureAction("Open App Library") { record("up") },
         swipeLeft = GestureAction("Open Awareness") { record("left") },
         swipeRight = GestureAction("Open Today") { record("right") },
-        doubleTapEmpty = GestureAction("Lock screen") { record("lock") },
+        doubleTapEmpty = GestureAction("Lock phone") { record("lock") },
         longPressEmpty = GestureAction("Edit layout") { record("edit") },
     )
 
@@ -57,9 +57,32 @@ class HomeGesturesAccessibilityTest {
                 "Open App Library",
                 "Open Awareness",
                 "Open Today",
-                "Lock screen",
+                "Lock phone",
                 "Edit layout",
             ),
+            customActions().map { it.label },
+        )
+    }
+
+    /**
+     * A named action that only reports its own absence is worse than no action,
+     * so a gesture whose mechanism is still pending performs without announcing.
+     */
+    @Test
+    fun `an unlabelled gesture still performs but is never announced`() {
+        val performed = mutableListOf<String>()
+        compose.setContent {
+            Box(
+                Modifier.fillMaxSize().testTag("home").homeGestures(
+                    gestures { performed += it }.copy(
+                        doubleTapEmpty = GestureAction(label = null) { performed += "lock" },
+                    )
+                )
+            )
+        }
+
+        assertEquals(
+            listOf("Open Search", "Open App Library", "Open Awareness", "Open Today", "Edit layout"),
             customActions().map { it.label },
         )
     }

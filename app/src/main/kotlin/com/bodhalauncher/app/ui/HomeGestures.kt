@@ -21,8 +21,12 @@ val SWIPE_THRESHOLD = 72.dp
  * destination, never the gesture — the accessibility menu is read to someone who
  * cannot perform the swipe, and ADR 0011 lets the four assignments move, so a
  * direction-named label would eventually lie.
+ *
+ * A null label still performs but is never announced. Offering a named action
+ * that does nothing is worse than offering none, so a gesture whose mechanism is
+ * still pending stays out of the menu until it works.
  */
-data class GestureAction(val label: String, val perform: () -> Unit)
+data class GestureAction(val label: String?, val perform: () -> Unit)
 
 /**
  * The spec's gesture fan-out from Home; taps on actions are consumed by their rows first.
@@ -53,10 +57,12 @@ fun Modifier.homeGestures(gestures: HomeGestures): Modifier = this
         // is what makes the actions actually reachable rather than merely present.
         contentDescription = "Home"
         isTraversalGroup = true
-        customActions = gestures.all.map { action ->
-            CustomAccessibilityAction(action.label) {
-                action.perform()
-                true
+        customActions = gestures.all.mapNotNull { action ->
+            action.label?.let { label ->
+                CustomAccessibilityAction(label) {
+                    action.perform()
+                    true
+                }
             }
         }
     }

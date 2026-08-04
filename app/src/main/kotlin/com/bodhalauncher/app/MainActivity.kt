@@ -559,8 +559,10 @@ private fun HomeRoot(
                 swipeUp = openSurface(HomeSurface.Library) { surface = it },
                 swipeLeft = openSurface(HomeSurface.Awareness) { surface = it },
                 swipeRight = openSurface(HomeSurface.Today) { surface = it },
-                // Lock mechanism is settled in the permissions spec (#18); stub until then.
-                doubleTapEmpty = GestureAction("Lock phone") {
+                // Lock mechanism is settled in the permissions spec (#18); stub until
+                // then, so it stays unannounced rather than offering an action that
+                // only reports its own absence.
+                doubleTapEmpty = GestureAction(label = null) {
                     Toast.makeText(context, "Lock — mechanism pending", Toast.LENGTH_SHORT).show()
                 },
                 longPressEmpty = GestureAction("Edit layout") { editingHome = true },
