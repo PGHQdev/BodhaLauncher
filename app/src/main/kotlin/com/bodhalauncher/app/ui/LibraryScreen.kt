@@ -43,10 +43,12 @@ import com.bodhalauncher.engine.LibraryState
 import kotlinx.coroutines.launch
 
 /**
- * The App Library: a quiet text-first list of every launchable app (ADR 0010 —
- * left-aligned hairline machinery, no icons or badges). Renders [LibraryState]
- * and nothing else. Pulling down past the list's top returns Home, mirroring
- * the swipe-up that opened it; back does the same via the caller's BackHandler.
+ * The App Library: a quiet text-first list of launchable apps (ADR 0010 —
+ * left-aligned hairline machinery, no icons or badges), with a search field
+ * above and a letter rail beside the rows [LibraryState] resolved. Tap opens,
+ * a rightward swipe pins to Home. Pulling down past the list's top returns
+ * Home, mirroring the swipe-up that opened it; back does the same via the
+ * caller's BackHandler.
  */
 @Composable
 fun LibraryScreen(
@@ -58,7 +60,7 @@ fun LibraryScreen(
     onBack: () -> Unit,
 ) {
     val colors = LocalBodhaColors.current
-    val dismissThreshold = with(LocalDensity.current) { 72.dp.toPx() }
+    val dismissThreshold = with(LocalDensity.current) { SWIPE_THRESHOLD.toPx() }
     val overscroll = remember { mutableFloatStateOf(0f) }
     val dismissOnOverscroll = remember(onBack) {
         object : NestedScrollConnection {
@@ -103,7 +105,7 @@ fun LibraryScreen(
             letterSpacing = 2.sp,
             modifier = Modifier.padding(bottom = 20.dp),
         )
-        SearchField(query, onQueryChange)
+        LibrarySearchField(query, onQueryChange)
         val listState = rememberLazyListState()
         val scope = rememberCoroutineScope()
         Box(modifier = Modifier.fillMaxSize()) {
@@ -115,7 +117,7 @@ fun LibraryScreen(
                     AppRow(state.rows[index], onOpen, onPin)
                 }
             }
-            if (state.index.size > 1) {
+            if (state.index.isNotEmpty()) {
                 AlphabetScrubber(
                     index = state.index,
                     onJump = { row -> scope.launch { listState.scrollToItem(row) } },
@@ -152,19 +154,22 @@ private fun AlphabetScrubber(
                     onVerticalDrag = { change, _ -> jumpTo(change.position.y) },
                 )
             }
-            .pointerInput(index) { detectTapGestures { jumpTo(it.y) } }
-            .padding(start = 16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.SpaceEvenly,
+            .pointerInput(index) { detectTapGestures { jumpTo(it.y) } },
     ) {
+        // Each letter gets a uniform slot so jumpTo's y-to-slot math is exact.
         index.forEach {
-            Text(text = it.letter.toString(), color = colors.inkMuted, fontSize = 11.sp)
+            Box(
+                modifier = Modifier.weight(1f).padding(start = 16.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(text = it.letter.toString(), color = colors.inkMuted, fontSize = 11.sp)
+            }
         }
     }
 }
 
 @Composable
-private fun SearchField(query: String, onQueryChange: (String) -> Unit) {
+private fun LibrarySearchField(query: String, onQueryChange: (String) -> Unit) {
     val colors = LocalBodhaColors.current
     Column(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
         BasicTextField(
@@ -199,7 +204,7 @@ private fun AppRow(app: HomeAction, onOpen: (HomeAction) -> Unit, onPin: (HomeAc
             modifier = Modifier
                 .fillMaxWidth()
                 .pointerInput(app) {
-                    val threshold = 72.dp.toPx()
+                    val threshold = SWIPE_THRESHOLD.toPx()
                     var drag = 0f
                     detectHorizontalDragGestures(
                         onDragStart = { drag = 0f },
