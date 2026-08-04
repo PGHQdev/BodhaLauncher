@@ -57,8 +57,8 @@ private val screens = mapOf(
         capability = Capability.UsageAccess,
         dataAccessed = "Which apps you open and when, from Android's usage statistics.",
         processing = ON_DEVICE,
-        withoutIt = "Screen-time context, recently-used ordering and Awareness stay off.",
-        feature = "Awareness",
+        withoutIt = "Screen-time context, recently-used ordering, Awareness and Open Check's context lines stay off.",
+        feature = "Awareness and Open Check",
     ),
     Capability.NotificationAccess to EducationScreen(
         capability = Capability.NotificationAccess,

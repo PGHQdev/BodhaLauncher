@@ -1,5 +1,6 @@
 package com.bodhalauncher.app.home
 
+import android.app.usage.UsageStats
 import android.app.usage.UsageStatsManager
 import android.content.Context
 import com.bodhalauncher.app.capability.CapabilityEdge
@@ -15,13 +16,25 @@ class UsageReader(private val context: Context) {
     private val capabilities = CapabilityEdge(context)
 
     /** Package name to last-use epoch millis over the past month; null without access. */
-    fun lastUsed(): Map<String, Long>? {
+    fun lastUsed(): Map<String, Long>? =
+        aggregate(System.currentTimeMillis() - LOOKBACK_MILLIS) { it.lastTimeUsed }
+
+    /**
+     * Package name to foreground millis since [startMillis]; null without access.
+     * Bucket-based, so the total near a boundary is best-effort — good enough
+     * for a context line, never for enforcement.
+     */
+    fun usedSince(startMillis: Long): Map<String, Long>? =
+        aggregate(startMillis) { it.totalTimeInForeground }
+
+    private fun aggregate(
+        startMillis: Long,
+        field: (UsageStats) -> Long,
+    ): Map<String, Long>? {
         if (!capabilities.granted(Capability.UsageAccess)) return null
-        val manager = context.getSystemService(UsageStatsManager::class.java)
-        val now = System.currentTimeMillis()
-        return manager
-            .queryAndAggregateUsageStats(now - LOOKBACK_MILLIS, now)
-            .mapValues { (_, stats) -> stats.lastTimeUsed }
+        return context.getSystemService(UsageStatsManager::class.java)
+            .queryAndAggregateUsageStats(startMillis, System.currentTimeMillis())
+            .mapValues { (_, stats) -> field(stats) }
             .filterValues { it > 0 }
     }
 

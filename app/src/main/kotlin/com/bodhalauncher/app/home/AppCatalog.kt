@@ -161,6 +161,13 @@ class AppCatalog(private val context: Context) {
 
     private fun packageOf(id: String): String = id.substringBefore(':')
 
+    /**
+     * The package name for a primary-profile id; null for work-profile ids.
+     * Usage stats cover only the primary profile, so a work-profile app must
+     * read as "no data" rather than borrow its personal clone's numbers.
+     */
+    fun primaryPackage(id: String): String? = id.takeIf { ':' !in it }
+
     /** The profile behind a `pkg:serial` id; null for the main profile or a gone profile. */
     private fun handleOf(id: String): UserHandle? {
         val serial = id.substringAfter(':', missingDelimiterValue = "").toLongOrNull() ?: return null

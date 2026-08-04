@@ -13,6 +13,54 @@ enum class OpenCheckMode { Always, Never }
 /** A user's per-app Open Check rule; no rule at all means the app just opens. */
 data class OpenCheckRule(val mode: OpenCheckMode)
 
+/**
+ * The check sheet's context lines (#8): information, not guilt. Absent inputs
+ * mean absent lines — no placeholders, no zeros.
+ */
+data class OpenCheckLines(
+    val lastOpened: String?,
+    val usedToday: String?,
+)
+
+/**
+ * Phrases the context for a check on one app. [usedTodayMillis] is the app's
+ * foreground time since [dayStart] — the adapter reads it on demand and never
+ * stores it (ADR 0009). Under a minute of use isn't worth a line.
+ */
+fun resolveOpenCheckLines(
+    lastOpenedEpochMillis: Long?,
+    usedTodayMillis: Long?,
+    nowEpochMillis: Long,
+): OpenCheckLines = OpenCheckLines(
+    lastOpened = lastOpenedEpochMillis?.let { "Last opened ${agoPhrase(nowEpochMillis - it)}" },
+    usedToday = usedTodayMillis?.takeIf { it >= 60_000 }?.let { "Used ${spanPhrase(it)} today" },
+)
+
+private fun agoPhrase(elapsedMillis: Long): String {
+    val minutes = elapsedMillis / 60_000
+    val hours = minutes / 60
+    val days = hours / 24
+    return when {
+        minutes < 1 -> "just now"
+        minutes < 60 -> "${plural(minutes, "minute")} ago"
+        hours < 24 -> "${plural(hours, "hour")} ago"
+        else -> "${plural(days, "day")} ago"
+    }
+}
+
+private fun spanPhrase(millis: Long): String {
+    val minutes = millis / 60_000
+    val hours = minutes / 60
+    val rest = minutes % 60
+    return when {
+        hours < 1 -> plural(minutes, "minute")
+        rest == 0L -> plural(hours, "hour")
+        else -> "${plural(hours, "hour")} ${plural(rest, "minute")}"
+    }
+}
+
+private fun plural(n: Long, unit: String): String = "$n $unit${if (n == 1L) "" else "s"}"
+
 sealed interface OpenCheckDecision {
     data object Proceed : OpenCheckDecision
 
