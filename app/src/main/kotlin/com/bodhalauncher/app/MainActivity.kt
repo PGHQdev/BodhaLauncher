@@ -43,6 +43,7 @@ import com.bodhalauncher.app.ui.AppPickerDialog
 import com.bodhalauncher.app.ui.BodhaTheme
 import com.bodhalauncher.app.ui.EditHomeDialog
 import com.bodhalauncher.app.ui.GroupPickerDialog
+import com.bodhalauncher.app.ui.GestureAction
 import com.bodhalauncher.app.ui.HomeGestures
 import com.bodhalauncher.app.ui.HomeScreen
 import com.bodhalauncher.app.ui.IntentPromptSheet
@@ -547,16 +548,18 @@ private fun HomeRoot(
             onActionLongPress = { optionsFor = it },
             onAddAction = { pickerOpen = true },
             onEditIntention = { editingIntention = true },
+            // Labels name the destination, so they stay true when ADR 0011's
+            // reassignment lands and a swipe points somewhere else.
             gestures = HomeGestures(
-                onSwipeDown = { surface = HomeSurface.Search },
-                onSwipeUp = { surface = HomeSurface.Library },
-                onSwipeLeft = { surface = HomeSurface.Awareness },
-                onSwipeRight = { surface = HomeSurface.Today },
+                swipeDown = GestureAction("Open Search") { surface = HomeSurface.Search },
+                swipeUp = GestureAction("Open App Library") { surface = HomeSurface.Library },
+                swipeLeft = GestureAction("Open Awareness") { surface = HomeSurface.Awareness },
+                swipeRight = GestureAction("Open Today") { surface = HomeSurface.Today },
                 // Lock mechanism is settled in the permissions spec (#18); stub until then.
-                onDoubleTapEmpty = {
+                doubleTapEmpty = GestureAction("Lock screen") {
                     Toast.makeText(context, "Lock — mechanism pending", Toast.LENGTH_SHORT).show()
                 },
-                onLongPressEmpty = { editingHome = true },
+                longPressEmpty = GestureAction("Edit layout") { editingHome = true },
             ),
             onSearch = { surface = HomeSurface.Search },
         )
