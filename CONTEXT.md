@@ -119,3 +119,7 @@ _Avoid_: display type, heading (says something about rank, nothing about authors
 **Machinery**:
 Operational text — controls, data, labels, and anything a third party wrote, an app's own name included. Set in the sans, which is also the inherited default. An app name is machinery even when it's the largest thing on the sheet.
 _Avoid_: UI text, body copy, chrome
+
+**Visual vocabulary**:
+The parts of `bodhalauncher.png` that are binding: an element belongs if it encodes something a reader decodes — card versus hairline row (does this scroll), tinted versus solid fill (the current thing versus the one primary action), a trailing chevron (this navigates), pill versus card, chip versus bare icon. The picture decides these; ADRs decide what goes inside them and win wherever they speak.
+_Avoid_: design system, style guide (both claim more than the picture settles), mockup (claims less)
