@@ -1,0 +1,14 @@
+{
+  "name": "bodha-backend",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-01",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "bodha",
+      // PLACEHOLDER — replace with the real id from `wrangler d1 create bodha` before deploy.
+      "database_id": "00000000-0000-0000-0000-000000000000"
+    }
+  ]
+  // Secrets (never vars): `wrangler secret put JWT_SECRET`, `wrangler secret put GOOGLE_CLIENT_ID`.
+}
