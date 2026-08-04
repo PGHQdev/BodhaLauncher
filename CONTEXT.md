@@ -44,6 +44,10 @@ _Avoid_: grace period (that connotes leniency; the grant covers exactly one open
 The default Intent Prompt trigger: a 3rd session starting within a 15-minute window, signalling autopilot use. After firing it rests for a cooldown.
 _Avoid_: unlock trigger (it counts sessions, not unlocks)
 
+**Focus session**:
+A stretch of time with an activity label, a duration and a set of allowed apps. While it runs it is root, and any app off the allowed list fires an Open Check. Ends silently at its duration; the end moment waits until the user returns to root.
+_Avoid_: session (that's the phone session), timed session (that's one checked app), focus mode
+
 **Surface**:
 A place you dwell in and look around: Home, Search, App Library, Awareness, Today, an active Focus session, Settings. Reached by a swipe, from within another surface, or by name in Search.
 _Avoid_: screen (that's the display), page, tab
