@@ -1,11 +1,9 @@
 package com.bodhalauncher.app.home
 
-import android.app.AppOpsManager
 import android.app.usage.UsageStatsManager
 import android.content.Context
-import android.content.Intent
-import android.os.Process
-import android.provider.Settings
+import com.bodhalauncher.app.capability.CapabilityEdge
+import com.bodhalauncher.engine.Capability
 
 /**
  * Last-use timestamps from Android's usage stats, read on demand and never
@@ -14,29 +12,17 @@ import android.provider.Settings
  */
 class UsageReader(private val context: Context) {
 
+    private val capabilities = CapabilityEdge(context)
+
     /** Package name to last-use epoch millis over the past month; null without access. */
     fun lastUsed(): Map<String, Long>? {
-        if (!hasAccess()) return null
+        if (!capabilities.granted(Capability.UsageAccess)) return null
         val manager = context.getSystemService(UsageStatsManager::class.java)
         val now = System.currentTimeMillis()
         return manager
             .queryAndAggregateUsageStats(now - LOOKBACK_MILLIS, now)
             .mapValues { (_, stats) -> stats.lastTimeUsed }
             .filterValues { it > 0 }
-    }
-
-    fun openAccessSettings() {
-        context.startActivity(
-            Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        )
-    }
-
-    private fun hasAccess(): Boolean {
-        val appOps = context.getSystemService(AppOpsManager::class.java)
-        val mode = appOps.unsafeCheckOpNoThrow(
-            AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), context.packageName,
-        )
-        return mode == AppOpsManager.MODE_ALLOWED
     }
 
     private companion object {
