@@ -23,6 +23,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.unit.dp
@@ -130,7 +132,11 @@ fun OpenCheckSheetContent(
                 }
                 field()
             },
-            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .semantics { contentDescription = "What you want to do there" }
+                .padding(bottom = 12.dp)
+                .touchTargetFloor(),
         )
         SheetRow("Open") { onOpen(typed()) }
         OpenCheckEngine.TIMED_SESSION_MINUTES.forEach { minutes ->

@@ -21,6 +21,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.unit.dp
 import com.bodhalauncher.engine.IntentCategory
@@ -86,7 +88,10 @@ fun IntentPromptSheet(
                         }
                         field()
                     },
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .semantics { contentDescription = "Something else" }
+                        .touchTargetFloor(),
                 )
                 if (freeText.isNotBlank()) {
                     Spacer(Modifier.width(16.dp))

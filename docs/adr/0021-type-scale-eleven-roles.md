@@ -57,6 +57,12 @@ The **layout switcher scrolls** rather than squeezes. Its five labels moved from
 
 The **gallery's captures were clipped and had been for some time.** The screenshot fixture rendered at the Robolectric default of 320×480 while the gallery was already taller, so the large-type captures — the ones proving "large text never breaks a layout" — were photographing the top third. That was true before this change and unrelated to it; it surfaced because the actionable components were added below the fold and did not appear. The fixture now gets a display taller than itself, and the same trap catches the walk: a node past the window's height measures zero tall, which reads as a floor violation that is really a clipped fixture.
 
+**Text fields are actionable nodes**, which the floor's first pass missed. Compose gives a `BasicTextField` click semantics, so every one of the six in the app was an unnamed ~22dp target: its own contents are not a name, so a screen reader announced an edit box for nothing in particular. Each now names what it edits and takes the floor.
+
+Two things about that are worth writing down, because both are traps rather than choices. The floor must be the **innermost** modifier on a field: it raises the minimum passed to whatever follows, so a `padding` inside it comes straight back off the node the reader activates, and the target measures the floor minus the padding while looking correctly written. And wrapping a field in a floored container does nothing — the field's own node keeps its text height, so the floor has to be on the field.
+
+Four of the six sit inside sheets and dialogs that compose `ModalBottomSheet` or `Dialog` directly, so no fixture can reach them without splitting a content composable out of each. They are fixed but unguarded. That is the same coverage hole in a new place, and its real answer is issue #115: a check that reads call sites rather than fixtures does not care whether a component is reachable from a gallery.
+
 ## Roles carry no colour
 
 A role is face, size, style, tracking and lineHeight. Colour stays at the call site, reading `LocalBodhaColors`.

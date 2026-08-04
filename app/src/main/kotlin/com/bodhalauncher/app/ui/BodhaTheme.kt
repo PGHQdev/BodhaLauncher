@@ -111,6 +111,12 @@ object BodhaType {
  *
  * A minimum rather than a size, so a control keeps drawing at whatever size it
  * draws at and only its touch area grows — the rail's letters do not move.
+ *
+ * **Put this innermost.** It raises the minimum passed to whatever follows it in
+ * the chain, so a `padding` sitting inside it takes that padding straight back
+ * off the node the screen reader actually activates — the target measures the
+ * floor minus the padding and the check fails for a reason that reads like the
+ * floor was never applied. `…padding(…).touchTargetFloor()`, not the reverse.
  */
 val TOUCH_TARGET_MIN = 48.dp
 

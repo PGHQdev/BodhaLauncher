@@ -39,6 +39,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.SolidColor
@@ -490,7 +492,7 @@ internal fun AlphabetScrubber(
 internal const val RAIL_LABEL = "Jump to letter"
 
 @Composable
-private fun LibrarySearchField(query: String, onQueryChange: (String) -> Unit) {
+internal fun LibrarySearchField(query: String, onQueryChange: (String) -> Unit) {
     val colors = LocalBodhaColors.current
     Column(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
         BasicTextField(
@@ -507,7 +509,11 @@ private fun LibrarySearchField(query: String, onQueryChange: (String) -> Unit) {
                     field()
                 }
             },
-            modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .semantics { contentDescription = "Search apps" }
+                .padding(vertical = 12.dp)
+                .touchTargetFloor(),
         )
         Box(Modifier.fillMaxWidth().height(1.dp).background(colors.hairline))
     }

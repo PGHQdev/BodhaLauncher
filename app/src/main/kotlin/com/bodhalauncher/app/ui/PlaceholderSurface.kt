@@ -10,6 +10,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 
 /** Stands in for a surface that hasn't shipped; tap anywhere (or back) returns Home. */
@@ -20,6 +22,7 @@ fun PlaceholderSurface(title: String, onBack: () -> Unit) {
         modifier = Modifier
             .fillMaxSize()
             .background(colors.ground)
+            .semantics { contentDescription = "$title — coming soon. Tap to go back." }
             .clickable(onClick = onBack),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,

@@ -19,6 +19,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.unit.dp
@@ -151,9 +153,9 @@ private fun WindowEditor(current: ScheduleWindow?, onSave: (ScheduleWindow) -> U
         modifier = Modifier.padding(bottom = 12.dp),
     )
     Row {
-        TimeField(start, placeholder = "21:00", onChange = { start = it }, modifier = Modifier.weight(1f))
+        TimeField(start, "Start time", "21:00", { start = it }, Modifier.weight(1f))
         Spacer(Modifier.width(20.dp))
-        TimeField(end, placeholder = "23:30", onChange = { end = it }, modifier = Modifier.weight(1f))
+        TimeField(end, "End time", "23:30", { end = it }, Modifier.weight(1f))
     }
     Spacer(Modifier.height(8.dp))
     Box(Modifier.fillMaxWidth().height(1.dp).background(colors.hairline))
@@ -172,7 +174,14 @@ private fun WindowEditor(current: ScheduleWindow?, onSave: (ScheduleWindow) -> U
 }
 
 @Composable
-private fun TimeField(value: String, placeholder: String, onChange: (String) -> Unit, modifier: Modifier) {
+private fun TimeField(
+    value: String,
+    /** What this field edits, for a reader that cannot see which of the two it is. */
+    label: String,
+    placeholder: String,
+    onChange: (String) -> Unit,
+    modifier: Modifier,
+) {
     val colors = LocalBodhaColors.current
     BasicTextField(
         value = value,
@@ -184,7 +193,9 @@ private fun TimeField(value: String, placeholder: String, onChange: (String) -> 
             if (value.isEmpty()) Text(placeholder, color = colors.inkMuted, style = BodhaType.body)
             field()
         },
-        modifier = modifier,
+        modifier = modifier
+            .semantics { contentDescription = label }
+            .touchTargetFloor(),
     )
 }
 

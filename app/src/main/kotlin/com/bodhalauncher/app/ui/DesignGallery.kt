@@ -74,6 +74,7 @@ fun DesignGallery() {
         AppRow(app = GALLERY_APP, onOpen = {}, onLongPress = {})
         AppRow(app = GALLERY_APP, onOpen = {}, onLongPress = {}, lastUsedLine = "Last used 8 minutes ago")
         SheetRow("Sheet row") {}
+        LibrarySearchField(query = "", onQueryChange = {})
         SectionHeader(title = "Section header", onLongPress = {})
         HiddenHeader(count = 3, expanded = false, onToggle = {})
         HiddenSearchableRow(enabled = true, onChange = {})
