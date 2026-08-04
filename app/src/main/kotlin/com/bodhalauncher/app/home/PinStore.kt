@@ -32,6 +32,11 @@ class PinStore(context: Context) {
         persist(KEY_HIDDEN, hidden.value.toList())
     }
 
+    fun unhide(id: String) {
+        hidden.value = hidden.value - id
+        persist(KEY_HIDDEN, hidden.value.toList())
+    }
+
     private fun load(key: String): List<String> =
         prefs.getString(key, "").orEmpty().split('\n').filter { it.isNotEmpty() }
 

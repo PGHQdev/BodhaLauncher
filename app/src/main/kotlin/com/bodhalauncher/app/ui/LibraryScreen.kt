@@ -21,6 +21,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -57,6 +58,10 @@ fun LibraryScreen(
     onQueryChange: (String) -> Unit,
     onOpen: (HomeAction) -> Unit,
     onPin: (HomeAction) -> Unit,
+    onHide: (HomeAction) -> Unit,
+    onUnhide: (HomeAction) -> Unit,
+    hiddenSearchable: Boolean,
+    onHiddenSearchableChange: (Boolean) -> Unit,
     onBack: () -> Unit,
 ) {
     val colors = LocalBodhaColors.current
@@ -106,6 +111,7 @@ fun LibraryScreen(
             modifier = Modifier.padding(bottom = 20.dp),
         )
         LibrarySearchField(query, onQueryChange)
+        val hiddenExpanded = remember { mutableStateOf(false) }
         val listState = rememberLazyListState()
         val scope = rememberCoroutineScope()
         Box(modifier = Modifier.fillMaxSize()) {
@@ -114,7 +120,28 @@ fun LibraryScreen(
                 modifier = Modifier.fillMaxSize().nestedScroll(dismissOnOverscroll),
             ) {
                 items(count = state.rows.size, key = { state.rows[it].id }) { index ->
-                    AppRow(state.rows[index], onOpen, onPin)
+                    AppRow(state.rows[index], onOpen, onSwipeRight = onPin, onSwipeLeft = onHide)
+                }
+                if (state.hiddenRows.isNotEmpty()) {
+                    item(key = "hidden-header") {
+                        HiddenHeader(
+                            count = state.hiddenRows.size,
+                            expanded = hiddenExpanded.value,
+                            onToggle = { hiddenExpanded.value = !hiddenExpanded.value },
+                        )
+                    }
+                    // A search that surfaced hidden matches shouldn't hide them behind a tap.
+                    if (hiddenExpanded.value || query.isNotBlank()) {
+                        item(key = "hidden-searchable") {
+                            HiddenSearchableRow(hiddenSearchable, onHiddenSearchableChange)
+                        }
+                        items(
+                            count = state.hiddenRows.size,
+                            key = { "hidden:" + state.hiddenRows[it].id },
+                        ) { index ->
+                            AppRow(state.hiddenRows[index], onOpen, onSwipeRight = onUnhide)
+                        }
+                    }
                 }
             }
             if (state.index.isNotEmpty()) {
@@ -193,7 +220,12 @@ private fun LibrarySearchField(query: String, onQueryChange: (String) -> Unit) {
 }
 
 @Composable
-private fun AppRow(app: HomeAction, onOpen: (HomeAction) -> Unit, onPin: (HomeAction) -> Unit) {
+private fun AppRow(
+    app: HomeAction,
+    onOpen: (HomeAction) -> Unit,
+    onSwipeRight: ((HomeAction) -> Unit)? = null,
+    onSwipeLeft: ((HomeAction) -> Unit)? = null,
+) {
     val colors = LocalBodhaColors.current
     Column(modifier = Modifier.fillMaxWidth()) {
         Box(Modifier.fillMaxWidth().height(1.dp).background(colors.hairline))
@@ -203,17 +235,54 @@ private fun AppRow(app: HomeAction, onOpen: (HomeAction) -> Unit, onPin: (HomeAc
             fontSize = 16.sp,
             modifier = Modifier
                 .fillMaxWidth()
-                .pointerInput(app) {
+                .pointerInput(app, onSwipeRight, onSwipeLeft) {
                     val threshold = SWIPE_THRESHOLD.toPx()
                     var drag = 0f
                     detectHorizontalDragGestures(
                         onDragStart = { drag = 0f },
                         onHorizontalDrag = { _, amount -> drag += amount },
-                        onDragEnd = { if (drag > threshold) onPin(app) },
+                        onDragEnd = {
+                            when {
+                                drag > threshold -> onSwipeRight?.invoke(app)
+                                drag < -threshold -> onSwipeLeft?.invoke(app)
+                            }
+                        },
                     )
                 }
                 .clickable { onOpen(app) }
                 .padding(vertical = 16.dp),
         )
     }
+}
+
+@Composable
+private fun HiddenHeader(count: Int, expanded: Boolean, onToggle: () -> Unit) {
+    val colors = LocalBodhaColors.current
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Box(Modifier.fillMaxWidth().height(1.dp).background(colors.hairline))
+        Text(
+            text = if (expanded) "Hidden · $count" else "Hidden · $count …",
+            color = colors.inkMuted,
+            fontSize = 13.sp,
+            letterSpacing = 1.sp,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onToggle)
+                .padding(vertical = 16.dp),
+        )
+    }
+}
+
+@Composable
+private fun HiddenSearchableRow(enabled: Boolean, onChange: (Boolean) -> Unit) {
+    val colors = LocalBodhaColors.current
+    Text(
+        text = if (enabled) "Shown in search" else "Kept out of search",
+        color = if (enabled) colors.ink else colors.inkMuted,
+        fontSize = 13.sp,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onChange(!enabled) }
+            .padding(vertical = 8.dp),
+    )
 }

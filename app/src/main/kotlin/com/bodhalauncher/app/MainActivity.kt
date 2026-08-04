@@ -17,6 +17,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.bodhalauncher.app.home.AppCatalog
 import com.bodhalauncher.app.home.IntentionStore
+import com.bodhalauncher.app.home.LibraryStore
 import com.bodhalauncher.app.home.PinStore
 import com.bodhalauncher.app.intent.IntentPromptRuntime
 import androidx.compose.ui.platform.LocalContext
@@ -57,10 +58,11 @@ class MainActivity : ComponentActivity() {
         val app = application as BodhaApp
         val pinStore = PinStore(this)
         val intentionStore = IntentionStore(this)
+        val libraryStore = LibraryStore(this)
         val catalog = AppCatalog(this)
         setContent {
             BodhaTheme {
-                HomeRoot(pinStore, intentionStore, catalog, app.intentPrompt)
+                HomeRoot(pinStore, intentionStore, libraryStore, catalog, app.intentPrompt)
             }
         }
     }
@@ -79,6 +81,7 @@ private enum class HomeSurface(val title: String) {
 private fun HomeRoot(
     pinStore: PinStore,
     intentionStore: IntentionStore,
+    libraryStore: LibraryStore,
     catalog: AppCatalog,
     intentPrompt: IntentPromptRuntime,
 ) {
@@ -100,12 +103,24 @@ private fun HomeRoot(
         if (surface == HomeSurface.Library) {
             val apps = remember { catalog.installedApps() }
             var query by remember { mutableStateOf("") }
+            val hiddenSearchable by libraryStore.hiddenSearchable
             LibraryScreen(
-                state = resolveLibrary(LibraryInputs(apps = apps, query = query)),
+                state = resolveLibrary(
+                    LibraryInputs(
+                        apps = apps,
+                        query = query,
+                        hidden = hidden,
+                        hiddenSearchable = hiddenSearchable,
+                    )
+                ),
                 query = query,
                 onQueryChange = { query = it },
                 onOpen = catalog::launch,
                 onPin = { pinStore.pin(it.id) },
+                onHide = { pinStore.hide(it.id) },
+                onUnhide = { pinStore.unhide(it.id) },
+                hiddenSearchable = hiddenSearchable,
+                onHiddenSearchableChange = libraryStore::setHiddenSearchable,
                 onBack = back,
             )
         } else {

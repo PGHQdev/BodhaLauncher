@@ -111,6 +111,60 @@ class LibraryReducerTest {
     }
 
     @Test
+    fun `hidden apps leave the rows and collect in the hidden section`() {
+        val library = resolveLibrary(
+            LibraryInputs(
+                apps = listOf(app("Signal"), app("Instagram"), app("Camera")),
+                hidden = setOf("instagram"),
+            )
+        )
+
+        assertEquals(listOf("Camera", "Signal"), library.rows.map { it.label })
+        assertEquals(listOf("Instagram"), library.hiddenRows.map { it.label })
+    }
+
+    @Test
+    fun `hidden apps stay out of search results by default`() {
+        val library = resolveLibrary(
+            LibraryInputs(
+                apps = listOf(app("Instagram"), app("Signal")),
+                hidden = setOf("instagram"),
+                query = "insta",
+            )
+        )
+
+        assertTrue(library.rows.isEmpty())
+        assertTrue(library.hiddenRows.isEmpty())
+    }
+
+    @Test
+    fun `hidden apps match searches when configured searchable`() {
+        val library = resolveLibrary(
+            LibraryInputs(
+                apps = listOf(app("Instagram"), app("Signal")),
+                hidden = setOf("instagram"),
+                hiddenSearchable = true,
+                query = "insta",
+            )
+        )
+
+        assertTrue(library.rows.isEmpty())
+        assertEquals(listOf("Instagram"), library.hiddenRows.map { it.label })
+    }
+
+    @Test
+    fun `index ignores the hidden section`() {
+        val library = resolveLibrary(
+            LibraryInputs(
+                apps = listOf(app("Arc"), app("Zulip")),
+                hidden = setOf("zulip"),
+            )
+        )
+
+        assertEquals(listOf(LibraryIndexEntry('A', 0)), library.index)
+    }
+
+    @Test
     fun `every app passed in appears in the rows`() {
         val apps = listOf(app("A"), app("B"), app("C"), app("D"))
 
