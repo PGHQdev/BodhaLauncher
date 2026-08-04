@@ -44,6 +44,14 @@ _Avoid_: grace period (that connotes leniency; the grant covers exactly one open
 The default Intent Prompt trigger: a 3rd session starting within a 15-minute window, signalling autopilot use. After firing it rests for a cooldown.
 _Avoid_: unlock trigger (it counts sessions, not unlocks)
 
+**Launch log**:
+Bodha's own record of launches it mediates — app identity and timestamp, nothing else. The spine of Awareness's per-app views; needs no permission and keeps full history, unlike the system's few-day usage events.
+_Avoid_: usage stats (that's the system's), history, analytics (nothing is transmitted)
+
+**Intentional session**:
+A session in which the user stated an intent — answered the Intent Prompt, wrote an Open Check intention, or ran a Focus session. Every other session is unclassified.
+_Avoid_: unintentional session (the phone doesn't know), mindful session
+
 **Focus session**:
 A stretch of time with an activity label, a duration and a set of allowed apps. While it runs it is root, and any app off the allowed list fires an Open Check. Ends silently at its duration; the end moment waits until the user returns to root.
 _Avoid_: session (that's the phone session), timed session (that's one checked app), focus mode
