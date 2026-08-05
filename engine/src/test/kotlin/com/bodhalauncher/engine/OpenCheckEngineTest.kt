@@ -405,21 +405,6 @@ class OpenCheckEngineTest {
         assertEquals(OpenCheckDecision.Proceed, OpenCheckEngine().onLaunchAttempt("app", rule, t0, OpenCheckContext(minuteOfDay = 0)))
     }
 
-    // During-Focus trigger (#77): wired but inert until Focus (#9) lands.
-
-    private val duringFocus = OpenCheckRule(OpenCheckMode.DuringFocus)
-
-    @Test
-    fun `during focus the check shows`() {
-        val context = OpenCheckContext(focusActive = true)
-        assertIs<OpenCheckDecision.ShowCheck>(OpenCheckEngine().onLaunchAttempt("app", duringFocus, t0, context))
-    }
-
-    @Test
-    fun `with focus inactive the during-focus trigger is inert`() {
-        assertEquals(OpenCheckDecision.Proceed, OpenCheckEngine().onLaunchAttempt("app", duringFocus, t0, OpenCheckContext()))
-    }
-
     // Bypass (#77): friction never stands between the user and a call or alarm.
 
     @Test
