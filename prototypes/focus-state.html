@@ -1,0 +1,233 @@
+<title>Bodha — Focus State on the Settled Shapes (PROTOTYPE, issue #124)</title>
+<style>
+  /* PROTOTYPE — throwaway, issue #124. Second attempt.
+     The first attempt drew four treatments on one invented `.row` primitive and
+     they came back indistinguishable. ADR 0025 has since settled the shapes, so
+     every treatment here is drawn on the four real ones, with the real geometry
+     from BodhaComponents.kt: CardRow (14dp radius, surface fill, 1dp hairline
+     border), ListRow (1dp hairline above, transparent, no box), BodhaPill and
+     BodhaField (fully round, surface fill, 1dp hairline border).
+
+     Palette values are the real ones from BodhaTheme.kt. Clay and slate are
+     APPROXIMATED — ADR 0019 settles three free accents, only sage is built.
+
+     All four treatments render at once, side by side. The first attempt used a
+     switcher, which is how four indistinguishable things went unnoticed. */
+  :root {
+    --ground:#F6F1E7; --ink:#2B261F; --muted:#7A7263;
+    --surface:#FBF8F1; --raised:#FFFDF6;
+    --hairline:rgba(43,38,31,.20);
+    --accent:#7D8C6F;
+  }
+  :root[data-theme="dark"] {
+    --ground:#221F1A; --ink:#EAE3D6; --muted:#9A9184;
+    --surface:#2A2721; --raised:#35312A;
+    --hairline:rgba(234,227,214,.20);
+    --accent:#93A284;
+  }
+  :root[data-accent="clay"]  { --accent:#A8785E; }
+  :root[data-accent="slate"] { --accent:#6C7C8C; }
+  :root[data-theme="dark"][data-accent="clay"]  { --accent:#BC8F76; }
+  :root[data-theme="dark"][data-accent="slate"] { --accent:#869AAC; }
+
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--ground); color:var(--ink);
+    font-family:"Source Sans 3",system-ui,-apple-system,sans-serif;
+    padding:1.6rem 1rem 5.5rem;
+  }
+  .serif{font-family:"Source Serif 4","Iowan Old Style",Palatino,Georgia,serif}
+  main{max-width:108rem;margin:0 auto}
+  header.page{text-align:center;margin-bottom:1.2rem}
+  header.page h1{font-size:1.5rem;font-weight:500;margin:0 0 .25rem}
+  header.page p{color:var(--muted);margin:0;font-size:.85rem;max-width:44rem;margin:0 auto}
+
+  .bar{
+    position:fixed;bottom:0;left:0;right:0;z-index:9;background:var(--ground);
+    border-top:1px solid var(--hairline);padding:.6rem 1rem;display:flex;
+    gap:1.4rem;justify-content:center;flex-wrap:wrap;align-items:center;
+  }
+  .bar .grp{display:flex;gap:.3rem;align-items:center}
+  .bar .lbl{font-size:.6rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin-right:.25rem}
+  button{
+    font:inherit;font-size:.78rem;padding:.3rem .65rem;cursor:pointer;
+    background:transparent;color:var(--ink);border:1px solid var(--hairline);border-radius:.35rem;
+  }
+  button[aria-pressed="true"]{border-color:var(--accent);color:var(--accent)}
+
+  .sheet{display:flex;gap:1.4rem;justify-content:center;flex-wrap:wrap;align-items:flex-start}
+  .col{flex:0 0 auto;width:19rem}
+  .col > h2{
+    font-size:.68rem;text-transform:uppercase;letter-spacing:.14em;color:var(--muted);
+    margin:0 0 .15rem;text-align:center;font-weight:600;
+  }
+  .col > p.note{font-size:.72rem;color:var(--muted);margin:0 0 .7rem;text-align:center;min-height:2.4rem;line-height:1.35}
+
+  .phone{width:19rem;border-radius:1.7rem;padding:.45rem;background:#1a1813}
+  .screen{
+    border-radius:1.35rem;padding:1.1rem .95rem;overflow:hidden;
+    background:var(--ground);color:var(--ink);display:flex;flex-direction:column;gap:.55rem;
+  }
+  .screen + .screen{margin-top:.5rem}
+  .surfacelbl{font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:.2rem 0 .1rem}
+
+  /* Home voice — untouched by any treatment (ADR 0010's centred axis). */
+  .clock{font-size:2.6rem;line-height:1;text-align:center;margin-top:.2rem}
+  .date{text-align:center;color:var(--muted);font-size:.75rem;margin-top:.2rem}
+  .intent{text-align:center;font-style:italic;font-size:.95rem;margin:.5rem 0 .3rem}
+
+  /* ---------- the four settled shapes, real geometry ---------- */
+  .card{
+    position:relative;background:var(--surface);border:1px solid var(--hairline);
+    border-radius:14px;min-height:48px;display:flex;align-items:center;gap:12px;
+    padding:8px 12px;font-size:.9rem;overflow:hidden;
+  }
+  .cards{display:flex;flex-direction:column;gap:8px}
+  .chip{
+    width:34px;height:34px;border-radius:10px;background:var(--hairline);
+    display:flex;align-items:center;justify-content:center;font-size:1rem;flex:0 0 auto;
+  }
+  .glyph{width:34px;height:34px;border-radius:8px;background:linear-gradient(150deg,#8ea3b8,#5d7690);
+    display:flex;align-items:center;justify-content:center;color:#fff;font-size:.85rem;flex:0 0 auto}
+
+  .list{display:flex;flex-direction:column}
+  .lrow{
+    position:relative;min-height:48px;display:flex;align-items:center;gap:12px;
+    padding:12px 0;font-size:.9rem;border-top:1px solid var(--hairline);
+  }
+  .stack{display:flex;flex-direction:column;gap:1px;min-width:0;flex:1 1 auto}
+  .sub{color:var(--muted);font-size:.72rem}
+  .chev{color:var(--muted);font-size:1.15rem;line-height:1}
+
+  .pill{
+    position:relative;background:var(--surface);border:1px solid var(--hairline);
+    border-radius:999px;min-height:48px;display:flex;align-items:center;gap:12px;
+    padding:0 16px;font-size:.85rem;overflow:hidden;
+  }
+  .pill.field{color:var(--muted)}
+  .pillrow{display:flex;gap:6px}
+  .pillrow .pill{min-height:40px;padding:0 14px;font-size:.75rem;justify-content:center}
+
+  /* ADR 0023's hint. Rides every treatment; must not be competed with. */
+  .hint{margin-left:auto;font-size:.7rem;color:var(--muted);white-space:nowrap;padding-left:.5rem;opacity:0}
+  .f .hint{opacity:1}
+
+  /* ================= R · Ring on the component's own outline ================= */
+  .vR .card.f{box-shadow:inset 0 0 0 2px var(--accent);border-color:transparent}
+  .vR .pill.f{box-shadow:inset 0 0 0 2px var(--accent);border-color:transparent}
+  .vR .lrow.f{box-shadow:inset 0 0 0 2px var(--accent);border-radius:14px;border-top-color:transparent}
+
+  /* ====== R2 · Ring, but following each shape's own outline ======
+     Card and pill as R. A hairline row has no outline, so instead of borrowing
+     the card's 14dp box the ring goes square and bleeds to the screen's edges —
+     a band across the list rather than a card that appeared. */
+  .vR2 .card.f{box-shadow:inset 0 0 0 2px var(--accent);border-color:transparent}
+  .vR2 .pill.f{box-shadow:inset 0 0 0 2px var(--accent);border-color:transparent}
+  .vR2 .lrow.f{
+    box-shadow:inset 0 0 0 2px var(--accent);border-top-color:transparent;
+    margin:0 -15px;padding-left:15px;padding-right:15px;
+  }
+
+  /* ================= B · Bar at the leading edge, inside the shape ================= */
+  .vB .f::before{
+    content:"";position:absolute;left:0;top:0;bottom:0;width:3px;
+    background:var(--accent);border-radius:0 2px 2px 0;
+  }
+  .vB .lrow.f::before{left:-2px}
+
+  /* ================= U · Rule beneath the row ================= */
+  .vU .f::after{
+    content:"";position:absolute;left:0;right:0;bottom:0;height:2px;background:var(--accent);
+  }
+  .vU .card.f::after{border-radius:0 0 12px 12px}
+  .vU .pill.f::after{left:14px;right:14px}
+
+  /* ================= G · Ground step, no accent ================= */
+  .vG .card.f{background:var(--raised)}
+  .vG .lrow.f{background:var(--surface);margin:0 -8px;padding-left:8px;padding-right:8px;border-radius:10px}
+  .vG .pill.f{background:var(--raised)}
+</style>
+
+<main>
+  <header class="page">
+    <h1>What focus looks like — on the shapes ADR 0025 settled</h1>
+    <p>Five candidates, all visible at once, drawn on a Home pin <b>card</b>, a scrolling Library <b>hairline row</b>, the search <b>field</b>, the ＋ <b>card</b> with its icon chip, and the layout <b>pills</b>. One node is focused on each surface; ADR 0023's “→ for actions” hint rides it. The Library's second row carries a chevron, to test the trailing collision. <b>R2 won</b> (ADR 0026); B, U and G cannot be told from an unfocused row, which is what “all at rest” is for.</p>
+  </header>
+
+  <div class="sheet" id="sheet"></div>
+</main>
+
+<div class="bar">
+  <div class="grp"><span class="lbl">Theme</span>
+    <button data-k="theme" data-v="light" aria-pressed="true">light</button>
+    <button data-k="theme" data-v="dark">dark</button>
+  </div>
+  <div class="grp"><span class="lbl">Accent</span>
+    <button data-k="accent" data-v="sage" aria-pressed="true">sage</button>
+    <button data-k="accent" data-v="clay">clay</button>
+    <button data-k="accent" data-v="slate">slate</button>
+  </div>
+  <div class="grp"><span class="lbl">Focus</span>
+    <button data-k="focus" data-v="on" aria-pressed="true">focused</button>
+    <button data-k="focus" data-v="off">all at rest</button>
+  </div>
+</div>
+
+<script>
+const TREATMENTS = [
+  ["vR","R · Ring on the component's own outline","2dp accent inset ring. On a card, pill and field it recolours an edge that already exists. On a hairline row it invents a box that is not there."],
+  ["vR2","R2 · Ring following each shape's own outline","Card and pill as R. On a hairline row the ring goes square and bleeds to the screen edge, so it reads as a band across the list rather than a card that appeared."],
+  ["vB","B · Bar at the leading edge","3dp accent bar inside the shape's own start edge. Same mark on every shape; needs no padding and never touches the trailing slot."],
+  ["vU","U · Rule beneath the row","2dp accent rule on the bottom edge. On a hairline row it sits one pixel from the next row's own hairline."],
+  ["vG","G · Ground step, no accent","The focused thing steps one ground lighter. No accent at all, so it is the only candidate that cannot clash with an accent choice."],
+];
+
+function surfaces(f) {
+  const F = f ? " f" : "";
+  return `
+  <div class="phone"><div class="screen">
+    <div class="clock serif">9:41</div>
+    <div class="date">Tuesday, 5 August</div>
+    <div class="intent serif">Finish the draft before noon</div>
+    <div class="cards">
+      <div class="card"><span class="glyph">M</span><div class="stack"><div>Messages</div></div></div>
+      <div class="card${F}"><span class="glyph">C</span><div class="stack"><div>Calendar</div></div><span class="hint">→ for actions</span></div>
+      <div class="card"><span class="chip">＋</span><div class="stack"><div>Add a pin</div></div></div>
+    </div>
+    <div class="pill field">Search</div>
+  </div>
+
+  <div class="screen">
+    <div class="surfacelbl">App Library</div>
+    <div class="pill field${F}">Search apps<span class="hint">↓ for results</span></div>
+    <div class="pillrow">
+      <div class="pill">List</div><div class="pill${F}">Grid</div><div class="pill">Tiles</div>
+    </div>
+    <div class="list">
+      <div class="lrow"><span class="glyph">A</span><div class="stack"><div>Authenticator</div><div class="sub">2 days ago</div></div></div>
+      <div class="lrow"><span class="glyph">B</span><div class="stack"><div>Books</div><div class="sub">yesterday</div></div><span class="chev">›</span></div>
+      <div class="lrow${F}"><span class="glyph">C</span><div class="stack"><div>Calendar</div><div class="sub">12 minutes ago</div></div><span class="hint">→ for actions</span></div>
+      <div class="lrow"><span class="glyph">D</span><div class="stack"><div>Drive</div><div class="sub">last week</div></div></div>
+      <div class="lrow"><span class="glyph">E</span><div class="stack"><div>Email</div><div class="sub">an hour ago</div></div></div>
+    </div>
+  </div></div>`;
+}
+
+function render() {
+  const f = document.documentElement.dataset.focus !== "off";
+  document.getElementById("sheet").innerHTML = TREATMENTS.map(([k,t,n]) =>
+    `<div class="col ${k}"><h2>${t}</h2><p class="note">${n}</p>${surfaces(f)}</div>`
+  ).join("");
+}
+
+document.querySelectorAll(".bar button").forEach(b => b.addEventListener("click", () => {
+  document.querySelectorAll(`.bar button[data-k="${b.dataset.k}"]`)
+    .forEach(o => o.setAttribute("aria-pressed", String(o === b)));
+  document.documentElement.dataset[b.dataset.k] = b.dataset.v;
+  if (b.dataset.k === "focus") render();
+}));
+
+document.documentElement.dataset.theme = "light";
+document.documentElement.dataset.accent = "sage";
+render();
+</script>
