@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -29,8 +28,8 @@ import com.bodhalauncher.app.home.IntentionStore
 import com.bodhalauncher.app.home.LibraryStore
 import com.bodhalauncher.app.home.PinStore
 import com.bodhalauncher.app.home.UsageReader
-import com.bodhalauncher.app.capability.CapabilityEdge
-import com.bodhalauncher.app.capability.EducationStateStore
+import com.bodhalauncher.app.capability.CapabilityEducationHost
+import com.bodhalauncher.app.capability.rememberCapabilityEducation
 import com.bodhalauncher.app.data.EventLogger
 import com.bodhalauncher.app.intent.IntentPromptRuntime
 import com.bodhalauncher.app.intent.IntentRecordStore
@@ -52,14 +51,11 @@ import com.bodhalauncher.app.ui.IntentPromptSheet
 import com.bodhalauncher.app.ui.IntentionEditorDialog
 import com.bodhalauncher.app.ui.LocalActionsKeyHint
 import com.bodhalauncher.app.ui.escapeIsBack
-import com.bodhalauncher.app.ui.EducationSheet
 import com.bodhalauncher.app.ui.OpenCheckSheet
 import com.bodhalauncher.app.ui.PlaceholderSurface
 import com.bodhalauncher.app.ui.SessionEndSheet
 import com.bodhalauncher.engine.Capability
-import com.bodhalauncher.engine.CapabilityResolution
 import com.bodhalauncher.engine.EducationEntry
-import com.bodhalauncher.engine.EducationScreen
 import com.bodhalauncher.engine.EventType
 import com.bodhalauncher.engine.HomeAction
 import com.bodhalauncher.engine.HomeInputs
@@ -74,13 +70,9 @@ import com.bodhalauncher.engine.OpenCheckEngine
 import com.bodhalauncher.engine.OpenCheckMode
 import com.bodhalauncher.engine.TimedSessionEnd
 import com.bodhalauncher.engine.dayStart
-import com.bodhalauncher.engine.resolveCapability
 import com.bodhalauncher.engine.sessionEndPhrase
 import com.bodhalauncher.engine.resolveOpenCheckLines
 import com.bodhalauncher.engine.resolveHome
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.delay
 import java.time.Instant
 import java.time.LocalDateTime
@@ -195,9 +187,15 @@ private fun BodhaHost(
     var editingHome by remember { mutableStateOf(false) }
     // Focus has no producer yet; #9's slice supplies it rather than re-deciding the rule.
     val focusRunning = false
+    // Every capability Bodha asks for, from any surface, enters here (#157).
+    val education = rememberCapabilityEducation(events)
     var place by remember { mutableStateOf(Place(resolveRoot(focusRunning))) }
-    // The system Home button lands on root from wherever you were.
-    LaunchedEffect(homeIntents) { place = Place(resolveRoot(focusRunning)) }
+    // The system Home button lands on root from wherever you were, and takes the
+    // education sheet the departed surface opened with it — it belongs to that ask.
+    LaunchedEffect(homeIntents) {
+        place = Place(resolveRoot(focusRunning))
+        education.close()
+    }
     val context = LocalContext.current
     val openCheckStateStore = remember { OpenCheckStateStore(context) }
     // Snapshot-restored so a pending timed session survives Bodha being killed (#75).
@@ -280,24 +278,10 @@ private fun BodhaHost(
     }
 
     checkFor?.let { app ->
-        val capabilityEdge = remember { CapabilityEdge(context) }
-        val educationStore = remember { EducationStateStore(context) }
-        var educationFor by remember { mutableStateOf<EducationScreen?>(null) }
-        // Re-reads on resume so a grant made from this sheet's education path
-        // shows up on return from system settings (#18).
-        val lifecycleOwner = LocalLifecycleOwner.current
-        var usageTick by remember { mutableIntStateOf(0) }
-        DisposableEffect(lifecycleOwner) {
-            val observer = LifecycleEventObserver { _, event ->
-                if (event == Lifecycle.Event.ON_RESUME) usageTick++
-            }
-            lifecycleOwner.lifecycle.addObserver(observer)
-            onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-        }
-        val usageGranted = remember(app.id, usageTick) { capabilityEdge.granted(Capability.UsageAccess) }
+        val usageGranted = education.granted(Capability.UsageAccess)
         // Read at check time, never stored (ADR 0009). The 4am boundary is engine
         // math. Work-profile ids read as "no data" — see AppCatalog.primaryPackage.
-        val lines = remember(app.id, usageTick) {
+        val lines = remember(app.id, education.resumeTick) {
             val pkg = catalog.primaryPackage(app.id)
             val dayStartMillis = dayStart(LocalDateTime.now())
                 .atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
@@ -307,34 +291,13 @@ private fun BodhaHost(
                 nowEpochMillis = System.currentTimeMillis(),
             )
         }
-        // The grant becomes observable only on return from system settings (#18); log it once (#25).
-        LaunchedEffect(usageGranted) {
-            if (usageGranted &&
-                educationStore.shown(Capability.UsageAccess) &&
-                !educationStore.grantLogged(Capability.UsageAccess)
-            ) {
-                events.log(EventType.PermissionEnabled)
-                educationStore.markGrantLogged(Capability.UsageAccess)
-            }
-        }
         OpenCheckSheet(
             app = app,
             icon = remember(app.id, catalog.version.intValue) { catalog.icon(app.id) },
             lines = lines,
             // The note is an explicit ask — education precedes any system screen (#18).
             onContextNoteTap = if (usageGranted) null else {
-                {
-                    val resolution = resolveCapability(
-                        capability = Capability.UsageAccess,
-                        granted = false,
-                        educationShown = educationStore.shown(Capability.UsageAccess),
-                        entry = EducationEntry.UserRequest,
-                    )
-                    if (resolution is CapabilityResolution.Educate) {
-                        educationFor = resolution.screen
-                        educationStore.markShown(Capability.UsageAccess)
-                    }
-                }
+                { education.ask(Capability.UsageAccess, EducationEntry.UserRequest) }
             },
             onOpen = { typed ->
                 typed?.let(records::appendOpenCheckIntention)
@@ -358,21 +321,11 @@ private fun BodhaHost(
                 syncOpenCheck()
             },
         )
-        educationFor?.let { screen ->
-            EducationSheet(
-                screen = screen,
-                // The grant isn't known until observed on return; only the skip is terminal here.
-                onContinue = {
-                    capabilityEdge.openSystemScreen(screen.capability)
-                    educationFor = null
-                },
-                onDismiss = {
-                    events.log(EventType.PermissionSkipped)
-                    educationFor = null
-                },
-            )
-        }
     }
+
+    // Above every surface, because the Open Check sheet and the Library both ask
+    // from it; the surfaces themselves only ever call `education.ask` (#157).
+    CapabilityEducationHost(education)
 
     // Always enabled, and a no-op on root. An enabled callback that does nothing is
     // what keeps back from finishing the activity and having the system relaunch it,
@@ -393,7 +346,7 @@ private fun BodhaHost(
                 catalog = catalog,
                 usage = usage,
                 bypass = bypass,
-                events = events,
+                education = education,
                 openApp = openApp,
                 onPause = { place = Place(Surface.Focus) },
                 onBack = back,

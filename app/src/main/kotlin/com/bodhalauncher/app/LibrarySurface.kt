@@ -1,20 +1,11 @@
 package com.bodhalauncher.app
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.LocalContext
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import com.bodhalauncher.app.capability.CapabilityEdge
-import com.bodhalauncher.app.capability.EducationStateStore
-import com.bodhalauncher.app.data.EventLogger
+import com.bodhalauncher.app.capability.CapabilityEducation
 import com.bodhalauncher.app.entitlement.EntitlementStore
 import com.bodhalauncher.app.home.AppCatalog
 import com.bodhalauncher.app.home.GroupStore
@@ -24,22 +15,17 @@ import com.bodhalauncher.app.home.UsageReader
 import com.bodhalauncher.app.opencheck.BypassClassifier
 import com.bodhalauncher.app.opencheck.OpenCheckRuleStore
 import com.bodhalauncher.app.ui.AppActionsSheet
-import com.bodhalauncher.app.ui.EducationSheet
 import com.bodhalauncher.app.ui.GroupPickerDialog
 import com.bodhalauncher.app.ui.LibraryScreen
 import com.bodhalauncher.app.ui.OpenCheckRuleDialog
 import com.bodhalauncher.app.ui.ProBoundaryDialog
 import com.bodhalauncher.engine.Capability
-import com.bodhalauncher.engine.CapabilityResolution
 import com.bodhalauncher.engine.EducationEntry
-import com.bodhalauncher.engine.EducationScreen
-import com.bodhalauncher.engine.EventType
 import com.bodhalauncher.engine.GateDecision
 import com.bodhalauncher.engine.HomeAction
 import com.bodhalauncher.engine.LibraryInputs
 import com.bodhalauncher.engine.OpenCheckMode
 import com.bodhalauncher.engine.ProBoundary
-import com.bodhalauncher.engine.resolveCapability
 import com.bodhalauncher.engine.resolveLibrary
 import com.bodhalauncher.engine.resolveOpenCheckRuleWrite
 
@@ -58,12 +44,11 @@ fun LibrarySurface(
     catalog: AppCatalog,
     usage: UsageReader,
     bypass: BypassClassifier,
-    events: EventLogger,
+    education: CapabilityEducation,
     openApp: (HomeAction) -> Unit,
     onPause: () -> Unit,
     onBack: () -> Unit,
 ) {
-    val context = LocalContext.current
     val pinnedIds by pinStore.pinned
     val hidden by pinStore.hidden
     val allApps by catalog.apps
@@ -72,35 +57,13 @@ fun LibrarySurface(
     var groupsFor by remember { mutableStateOf<HomeAction?>(null) }
     var openCheckFor by remember { mutableStateOf<HomeAction?>(null) }
     var boundary by remember { mutableStateOf<ProBoundary?>(null) }
-    var educationFor by remember { mutableStateOf<EducationScreen?>(null) }
-    val capabilityEdge = remember { CapabilityEdge(context) }
-    val educationStore = remember { EducationStateStore(context) }
     val hiddenSearchable by libraryStore.hiddenSearchable
     val layout by libraryStore.layout
     val categories by catalog.categories
     val groups by groupStore.groups
-    // Re-reads on every resume, so granting access in settings shows up on return;
+    // Re-read on every resume, so granting access in settings shows up on return;
     // read on demand and never stored (ADR 0009).
-    val lifecycleOwner = LocalLifecycleOwner.current
-    var usageTick by remember { mutableIntStateOf(0) }
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) usageTick++
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
-    val lastUsed = remember(allApps, usageTick) { usage.lastUsed() }
-    // The grant becomes observable only on return from system settings (#18); log it once (#25).
-    LaunchedEffect(lastUsed != null) {
-        if (lastUsed != null &&
-            educationStore.shown(Capability.UsageAccess) &&
-            !educationStore.grantLogged(Capability.UsageAccess)
-        ) {
-            events.log(EventType.PermissionEnabled)
-            educationStore.markGrantLogged(Capability.UsageAccess)
-        }
-    }
+    val lastUsed = remember(allApps, education.resumeTick) { usage.lastUsed() }
     LibraryScreen(
         state = resolveLibrary(
             LibraryInputs(
@@ -119,18 +82,7 @@ fun LibrarySurface(
         onQueryChange = { query = it },
         onLayoutChange = libraryStore::setLayout,
         // The layout note is an explicit ask — education precedes any system screen (#18).
-        onLayoutNoteTap = {
-            val resolution = resolveCapability(
-                capability = Capability.UsageAccess,
-                granted = capabilityEdge.granted(Capability.UsageAccess),
-                educationShown = educationStore.shown(Capability.UsageAccess),
-                entry = EducationEntry.UserRequest,
-            )
-            if (resolution is CapabilityResolution.Educate) {
-                educationFor = resolution.screen
-                educationStore.markShown(Capability.UsageAccess)
-            }
-        },
+        onLayoutNoteTap = { education.ask(Capability.UsageAccess, EducationEntry.UserRequest) },
         iconFor = { catalog.icon(it.id) },
         iconKey = catalog.version.intValue,
         onOpen = openApp,
@@ -146,20 +98,6 @@ fun LibrarySurface(
         onDeleteGroup = groupStore::delete,
         onBack = onBack,
     )
-    educationFor?.let { screen ->
-        EducationSheet(
-            screen = screen,
-            // The grant isn't known until observed on return; only the skip is terminal here.
-            onContinue = {
-                capabilityEdge.openSystemScreen(screen.capability)
-                educationFor = null
-            },
-            onDismiss = {
-                events.log(EventType.PermissionSkipped)
-                educationFor = null
-            },
-        )
-    }
     groupsFor?.let { app ->
         GroupPickerDialog(
             app = app,
@@ -184,19 +122,8 @@ fun LibrarySurface(
                         openCheckStore.set(app.id, rule)
                         // The threshold trigger wants usage access; the rule is
                         // saved either way and stays inert until granted (#73).
-                        if (rule.mode == OpenCheckMode.DailyThreshold &&
-                            !capabilityEdge.granted(Capability.UsageAccess)
-                        ) {
-                            val resolution = resolveCapability(
-                                capability = Capability.UsageAccess,
-                                granted = false,
-                                educationShown = educationStore.shown(Capability.UsageAccess),
-                                entry = EducationEntry.UserRequest,
-                            )
-                            if (resolution is CapabilityResolution.Educate) {
-                                educationFor = resolution.screen
-                                educationStore.markShown(Capability.UsageAccess)
-                            }
+                        if (rule.mode == OpenCheckMode.DailyThreshold) {
+                            education.ask(Capability.UsageAccess, EducationEntry.UserRequest)
                         }
                     }
                     is GateDecision.Capped -> boundary = decision.boundary
