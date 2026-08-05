@@ -44,7 +44,13 @@ fun IntentPromptSheet(
         onDismissRequest = onDismiss,
         containerColor = colors.ground,
     ) {
-        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp)) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .escapeDismisses(onDismiss)
+                .focusOnOpen()
+                .padding(horizontal = 28.dp),
+        ) {
             Text(
                 text = "What are you here for?",
                 color = colors.ink,

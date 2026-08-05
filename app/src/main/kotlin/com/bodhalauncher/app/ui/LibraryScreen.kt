@@ -3,7 +3,6 @@ package com.bodhalauncher.app.ui
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.combinedClickable
@@ -22,7 +21,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
@@ -34,15 +32,19 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
@@ -139,23 +141,16 @@ fun LibraryScreen(
             .padding(horizontal = 28.dp, vertical = 24.dp),
     ) {
         // Sans: a list header is machinery, not the voice (ADR 0010).
-        Text(
-            text = "Apps",
-            color = colors.inkMuted,
-            style = BodhaType.overline,
-            modifier = Modifier.padding(bottom = 20.dp),
-        )
-        LibrarySearchField(query, onQueryChange)
+        SectionOverline("Apps")
+        LibrarySearchField(query, onQueryChange, focusOnOpen = true)
         LayoutSwitcher(state.layout, onLayoutChange)
         state.layoutNote?.let { note ->
-            Text(
-                text = note,
-                color = colors.inkMuted,
-                style = BodhaType.caption,
-                modifier = Modifier
-                    .touchTargetFloor()
-                    .clickable(onClick = onLayoutNoteTap)
-                    .padding(bottom = 12.dp),
+            // A discrete thing to press, so a pill (rule 4). It was a caption whose
+            // tappability was encoded by nothing at all.
+            BodhaPill(
+                label = note,
+                onClick = onLayoutNoteTap,
+                modifier = Modifier.padding(bottom = 12.dp),
             )
         }
         val hiddenExpanded = remember { mutableStateOf(false) }
@@ -177,7 +172,7 @@ fun LibraryScreen(
                         hiddenSearchable, onHiddenSearchableChange,
                         onToggle = { hiddenExpanded.value = !hiddenExpanded.value },
                         row = { app ->
-                            AppRow(app, onOpen, onLongPress, onSwipeRight = onUnhide)
+                            AppRow(app, iconKey, iconFor, onOpen, onLongPress, onSwipeRight = onUnhide)
                         },
                     )
                 }
@@ -198,7 +193,7 @@ fun LibraryScreen(
                         items(count = state.rows.size, key = { state.rows[it].id }) { i ->
                             val app = state.rows[i]
                             AppRow(
-                                app, onOpen, onLongPress,
+                                app, iconKey, iconFor, onOpen, onLongPress,
                                 onSwipeRight = onPin, onSwipeLeft = onHide,
                                 lastUsedLine = state.lastUsedLines[app.id],
                             )
@@ -208,9 +203,9 @@ fun LibraryScreen(
                             val manageable = state.layout == LibraryLayout.Groups &&
                                 section.title in groupNames
                             item(key = "section:" + section.title) {
-                                SectionHeader(
-                                    title = section.title,
-                                    onLongPress = { groupEditor.value = section.title }
+                                SectionOverline(
+                                    text = section.title,
+                                    onLongClick = { groupEditor.value = section.title }
                                         .takeIf { manageable },
                                 )
                             }
@@ -222,7 +217,7 @@ fun LibraryScreen(
                             ) { i ->
                                 val app = section.rows[i]
                                 AppRow(
-                                    app, onOpen, onLongPress,
+                                    app, iconKey, iconFor, onOpen, onLongPress,
                                     onSwipeRight = onPin, onSwipeLeft = onHide,
                                     lastUsedLine = state.lastUsedLines[app.id],
                                 )
@@ -230,7 +225,12 @@ fun LibraryScreen(
                         }
                         if (state.layout == LibraryLayout.Groups && query.isBlank()) {
                             item(key = "new-group") {
-                                NewGroupRow(onTap = { groupEditor.value = "" })
+                                // No chevron: a dialog opens over the Library rather
+                                // than navigating away from it (rule 3).
+                                ListRow(
+                                    title = "New group …",
+                                    onClick = { groupEditor.value = "" },
+                                )
                             }
                         }
                     }
@@ -239,7 +239,7 @@ fun LibraryScreen(
                         hiddenSearchable, onHiddenSearchableChange,
                         onToggle = { hiddenExpanded.value = !hiddenExpanded.value },
                         row = { app ->
-                            AppRow(app, onOpen, onLongPress, onSwipeRight = onUnhide)
+                            AppRow(app, iconKey, iconFor, onOpen, onLongPress, onSwipeRight = onUnhide)
                         },
                     )
                 }
@@ -318,27 +318,24 @@ private fun androidx.compose.foundation.lazy.grid.LazyGridScope.hiddenSection(
 
 @Composable
 internal fun LayoutSwitcher(current: LibraryLayout, onChange: (LibraryLayout) -> Unit) {
-    val colors = LocalBodhaColors.current
-    // Scrolls rather than squeezes: five labels at the 48dp floor need ~332dp, which
-    // a 360dp phone does not have once the page padding is off (ADR 0020 — the floor
-    // wins, so the row gives way instead of the targets).
+    // Scrolls rather than squeezes: five pills at the 48dp floor overrun a 360dp
+    // phone once the page padding is off (ADR 0020 — the floor wins, so the row
+    // gives way instead of the targets).
     Row(
+        horizontalArrangement = Arrangement.spacedBy(BodhaSpacing.s),
         modifier = Modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState())
             .padding(bottom = 12.dp)
     ) {
         layoutLabels.forEach { (layout, label) ->
-            Text(
-                text = label,
-                color = if (layout == current) colors.ink else colors.inkMuted,
-                style = BodhaType.label,
-                modifier = Modifier
-                    .touchTargetFloor()
-                    .clickable { onChange(layout) }
-                    .padding(vertical = 4.dp),
+            BodhaPill(
+                label = label,
+                onClick = { onChange(layout) },
+                // The current layout is the current thing, which is the whole of
+                // what a tint may mean (rule 2) — and it was ink colour alone.
+                emphasis = if (layout == current) Emphasis.Tinted else Emphasis.Plain,
             )
-            Spacer(Modifier.width(20.dp))
         }
     }
 }
@@ -351,41 +348,11 @@ private val layoutLabels = listOf(
     LibraryLayout.Groups to "Groups",
 )
 
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-internal fun SectionHeader(title: String, onLongPress: (() -> Unit)? = null) {
-    val colors = LocalBodhaColors.current
-    Text(
-        text = title,
-        color = colors.inkMuted,
-        style = BodhaType.overline,
-        modifier = Modifier
-            .fillMaxWidth()
-            .touchTargetFloor()
-            .let { base ->
-                if (onLongPress == null) base
-                else base.combinedClickable(onClick = {}, onLongClick = onLongPress)
-            }
-            .padding(top = 20.dp, bottom = 8.dp),
-    )
-}
-
-/** The Groups layout's quiet entry point for creating a group. */
-@Composable
-internal fun NewGroupRow(onTap: () -> Unit) {
-    val colors = LocalBodhaColors.current
-    Text(
-        text = "New group …",
-        color = colors.inkMuted,
-        style = BodhaType.label,
-        modifier = Modifier
-            .fillMaxWidth()
-            .touchTargetFloor()
-            .clickable(onClick = onTap)
-            .padding(top = 20.dp, bottom = 8.dp),
-    )
-}
-
+/**
+ * One app in the Icons layout. It carries the same actions node and keys as a
+ * row (ADR 0022): the grid's long-press is the same app actions sheet, and a
+ * layout switch is not a reason for it to become unreachable from a keyboard.
+ */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun IconCell(
@@ -397,12 +364,18 @@ internal fun IconCell(
 ) {
     val colors = LocalBodhaColors.current
     val icon = remember(app.id, iconKey) { iconFor(app) }
+    val onLongClick = { onLongPress(app) }
+    var focused by remember { mutableStateOf(false) }
+    val actions = rememberRowActions(onLongClick)
     Column(
         modifier = Modifier
             .touchTargetFloor()
+            .then(if (focusRingShown(focused)) Modifier.focusRing(RectangleShape) else Modifier)
+            .onFocusChanged { focused = it.isFocused }
+            .actionsKeys(actions, onLongClick)
             .combinedClickable(
                 onClick = { onOpen(app) },
-                onLongClick = { onLongPress(app) },
+                onLongClick = onLongClick,
             )
             .padding(vertical = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -422,6 +395,7 @@ internal fun IconCell(
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(horizontal = 4.dp),
         )
+        ActionsSlot(actions, onLongClick, focused)
     }
 }
 
@@ -469,12 +443,17 @@ internal fun AlphabetScrubber(
             }
             .onSizeChanged { railHeight.intValue = it.height }
             .pointerInput(index) {
+                // reachable: one custom action per letter on the rail itself, and
+                // out of the keyboard's reach by design — typing beats scrubbing.
                 detectVerticalDragGestures(
                     onDragStart = { jumpTo(it.y) },
                     onVerticalDrag = { change, _ -> jumpTo(change.position.y) },
                 )
             }
-            .pointerInput(index) { detectTapGestures { jumpTo(it.y) } },
+            .pointerInput(index) {
+                // reachable: the same custom actions as the drag above.
+                detectTapGestures { jumpTo(it.y) }
+            },
     ) {
         // Each letter gets a uniform slot so jumpTo's y-to-slot math is exact.
         index.forEach {
@@ -491,10 +470,26 @@ internal fun AlphabetScrubber(
 /** The rail's spoken name, asserted by [AccessibilityFloorTest]. */
 internal const val RAIL_LABEL = "Jump to letter"
 
+/**
+ * The Library's search, in the pill shape rule 4 gives a field.
+ *
+ * The name and the floor sit on the `BasicTextField` itself rather than only on
+ * [BodhaField]: a text field's click semantics live on its own inner node, so
+ * that node is what a reader activates and what the floor walk measures
+ * (ADR 0020, and the caveat in `BodhaTheme.kt`).
+ *
+ * [focusOnOpen] is the surface arriving (ADR 0022), so it is the screen's call
+ * and not the field's: the design gallery renders this field as a specimen, and
+ * a specimen is not an arrival.
+ */
 @Composable
-internal fun LibrarySearchField(query: String, onQueryChange: (String) -> Unit) {
+internal fun LibrarySearchField(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    focusOnOpen: Boolean = false,
+) {
     val colors = LocalBodhaColors.current
-    Column(modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+    BodhaField(modifier = Modifier.padding(bottom = 12.dp)) {
         BasicTextField(
             value = query,
             onValueChange = onQueryChange,
@@ -511,18 +506,28 @@ internal fun LibrarySearchField(query: String, onQueryChange: (String) -> Unit) 
             },
             modifier = Modifier
                 .fillMaxWidth()
+                .then(if (focusOnOpen) Modifier.focusOnOpen() else Modifier)
+                .downEntersList()
                 .semantics { contentDescription = "Search apps" }
-                .padding(vertical = 12.dp)
+                // Stays last: ADR 0020's caveat in BodhaTheme.kt.
                 .touchTargetFloor(),
         )
-        Box(Modifier.fillMaxWidth().height(1.dp).background(colors.hairline))
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
+/**
+ * One app in the list that scrolls, so the hairline row (rule 1) — and no
+ * chevron, because a tap leaves Bodha for the app rather than navigating within
+ * it (rule 3).
+ *
+ * The swipes ride in on [ListRow]'s modifier, which puts them one node above the
+ * row's click chain — where they already were.
+ */
 @Composable
 internal fun AppRow(
     app: HomeAction,
+    iconKey: Any,
+    iconFor: (HomeAction) -> ImageBitmap?,
     onOpen: (HomeAction) -> Unit,
     onLongPress: (HomeAction) -> Unit,
     onSwipeRight: ((HomeAction) -> Unit)? = null,
@@ -530,70 +535,46 @@ internal fun AppRow(
     /** Subdued screen-time line ("Last used 8 minutes ago"); absent without usage access. */
     lastUsedLine: String? = null,
 ) {
-    val colors = LocalBodhaColors.current
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Box(Modifier.fillMaxWidth().height(1.dp).background(colors.hairline))
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .touchTargetFloor()
-                .pointerInput(app, onSwipeRight, onSwipeLeft) {
-                    val threshold = SWIPE_THRESHOLD.toPx()
-                    var drag = 0f
-                    detectHorizontalDragGestures(
-                        onDragStart = { drag = 0f },
-                        onHorizontalDrag = { _, amount -> drag += amount },
-                        onDragEnd = {
-                            when {
-                                drag > threshold -> onSwipeRight?.invoke(app)
-                                drag < -threshold -> onSwipeLeft?.invoke(app)
-                            }
-                        },
-                    )
-                }
-                .combinedClickable(
-                    onClick = { onOpen(app) },
-                    onLongClick = { onLongPress(app) },
-                )
-                .padding(vertical = if (lastUsedLine == null) 16.dp else 12.dp),
-        ) {
-            Text(text = app.label, color = colors.ink, style = BodhaType.body)
-            if (lastUsedLine != null) {
-                Text(text = lastUsedLine, color = colors.inkMuted, style = BodhaType.caption)
-            }
-        }
-    }
+    val icon = remember(app.id, iconKey) { iconFor(app) }
+    ListRow(
+        title = app.label,
+        subtitle = lastUsedLine,
+        onClick = { onOpen(app) },
+        onLongClick = { onLongPress(app) },
+        // The app's own mark, so bare rather than chipped (rule 5).
+        leading = if (icon != null) ({ AppMark(icon) }) else null,
+        modifier = Modifier.pointerInput(app, onSwipeRight, onSwipeLeft) {
+            // reachable: pin and hide are also on the long-press actions sheet.
+            val threshold = SWIPE_THRESHOLD.toPx()
+            var drag = 0f
+            detectHorizontalDragGestures(
+                onDragStart = { drag = 0f },
+                onHorizontalDrag = { _, amount -> drag += amount },
+                onDragEnd = {
+                    when {
+                        drag > threshold -> onSwipeRight?.invoke(app)
+                        drag < -threshold -> onSwipeLeft?.invoke(app)
+                    }
+                },
+            )
+        },
+    )
 }
 
 @Composable
 internal fun HiddenHeader(count: Int, expanded: Boolean, onToggle: () -> Unit) {
-    val colors = LocalBodhaColors.current
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Box(Modifier.fillMaxWidth().height(1.dp).background(colors.hairline))
-        Text(
-            text = if (expanded) "Hidden · $count" else "Hidden · $count …",
-            color = colors.inkMuted,
-            style = BodhaType.overline,
-            modifier = Modifier
-                .fillMaxWidth()
-                .touchTargetFloor()
-                .clickable(onClick = onToggle)
-                .padding(vertical = 16.dp),
-        )
-    }
+    // No chevron: it expands in place (rule 3).
+    ListRow(
+        title = if (expanded) "Hidden · $count" else "Hidden · $count …",
+        onClick = onToggle,
+    )
 }
 
 @Composable
 internal fun HiddenSearchableRow(enabled: Boolean, onChange: (Boolean) -> Unit) {
-    val colors = LocalBodhaColors.current
-    Text(
-        text = if (enabled) "Shown in search" else "Kept out of search",
-        color = if (enabled) colors.ink else colors.inkMuted,
-        style = BodhaType.label,
-        modifier = Modifier
-            .fillMaxWidth()
-            .touchTargetFloor()
-            .clickable { onChange(!enabled) }
-            .padding(vertical = 8.dp),
+    // The state is in the words, so nothing is left to colour to say (#26).
+    ListRow(
+        title = if (enabled) "Shown in search" else "Kept out of search",
+        onClick = { onChange(!enabled) },
     )
 }

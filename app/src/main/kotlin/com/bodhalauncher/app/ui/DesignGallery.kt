@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -92,7 +93,7 @@ fun DesignGallery() {
         Spacer(Modifier.height(BodhaSpacing.s))
         BodhaPill("Destructive pill", onClick = {}, destructive = true)
         Spacer(Modifier.height(BodhaSpacing.s))
-        BodhaField(name = "Gallery field") {
+        BodhaField {
             Text("Field — the pill shape, typed into", style = BodhaType.body, color = colors.inkMuted)
         }
         ListRow(
@@ -103,17 +104,55 @@ fun DesignGallery() {
         )
         Spacer(Modifier.height(BodhaSpacing.xl))
 
+        // Focus (ADR 0026), forced rather than requested: only one node can hold
+        // real focus, and the fixture has to show the ring on all four shapes.
+        // Screenshots capture at rest, so without these specimens no golden ever
+        // contains the treatment.
+        CompositionLocalProvider(
+            LocalForceFocusRing provides true,
+            // The hint retires on first use, so the fixture states the untaught
+            // case: a golden recorded after someone's Right press would show a
+            // row the product draws only until then (ADR 0023).
+            LocalActionsKeyHint provides ActionsKeyHint(shown = true),
+        ) {
+            SectionOverline("Focus")
+            CardRow(title = "Card row, focused", onClick = {})
+            Spacer(Modifier.height(BodhaSpacing.s))
+            CardRow(title = "Tinted card row, focused", onClick = {}, emphasis = Emphasis.Tinted)
+            Spacer(Modifier.height(BodhaSpacing.s))
+            BodhaPill("Pill, focused", onClick = {})
+            Spacer(Modifier.height(BodhaSpacing.s))
+            BodhaField {
+                Text("Field, focused", style = BodhaType.body, color = colors.inkMuted)
+            }
+            ListRow(title = "List row, focused", onClick = {})
+            // The two rows that carry per-item actions, so the hint and the
+            // actions node are inside both guards rather than only on a screen.
+            CardRow(title = "Pin row, focused", onClick = {}, onLongClick = {})
+            ListRow(title = "App row, focused", onClick = {}, onLongClick = {})
+            // Home's gestures, lifted here for the traversal to see them — the
+            // same move ADR 0020 made for AppRow, IconCell and the rail. The
+            // forced ring is what puts them in the tree at all here: on Home
+            // they exist only in keyboard input mode, and a fixture presses
+            // nothing.
+            HomeGestureAffordances(GALLERY_GESTURES)
+        }
+        Spacer(Modifier.height(BodhaSpacing.xl))
+
+        // What is left after the ADR 0025 migration: the nodes a screen still
+        // builds itself, because the roster does not express them. A row that is
+        // now a bare CardRow or ListRow call is covered by the vocabulary block
+        // above, and repeating it here would only inflate the walk's count.
         Text("Actionable components", style = BodhaType.overline, color = colors.inkMuted)
-        PinRow(action = GALLERY_APP, onAction = {}, onLongPress = {})
-        AddPinRow(onAdd = {})
-        AppRow(app = GALLERY_APP, onOpen = {}, onLongPress = {})
-        AppRow(app = GALLERY_APP, onOpen = {}, onLongPress = {}, lastUsedLine = "Last used 8 minutes ago")
+        IntentionCard(text = "Today's intention, tinted", muted = false, onEdit = {})
+        AppRow(app = GALLERY_APP, iconKey = Unit, iconFor = { null }, onOpen = {}, onLongPress = {})
+        AppRow(
+            app = GALLERY_APP, iconKey = Unit, iconFor = { null },
+            onOpen = {}, onLongPress = {}, lastUsedLine = "Last used 8 minutes ago",
+        )
         SheetRow("Sheet row") {}
         LibrarySearchField(query = "", onQueryChange = {})
-        SectionHeader(title = "Section header", onLongPress = {})
-        HiddenHeader(count = 3, expanded = false, onToggle = {})
-        HiddenSearchableRow(enabled = true, onChange = {})
-        NewGroupRow(onTap = {})
+        SectionOverline("Overline, long-pressable", onLongClick = {})
         LayoutSwitcher(current = LibraryLayout.Alphabetical, onChange = {})
         Row {
             IconCell(app = GALLERY_APP, iconKey = Unit, iconFor = { null }, onOpen = {}, onLongPress = {})
@@ -132,6 +171,16 @@ private val GALLERY_APP = HomeAction(id = "gallery.app", label = "Gallery app")
 
 private val GALLERY_INDEX = listOf('A', 'F', 'M', 'S', 'W')
     .mapIndexed { i, letter -> LibraryIndexEntry(letter = letter, firstRow = i) }
+
+/** The five labelled gestures; the unlabelled one draws no node, by design. */
+private val GALLERY_GESTURES = HomeGestures(
+    swipeDown = GestureAction("Open Search") {},
+    swipeUp = GestureAction("Open App Library") {},
+    swipeLeft = GestureAction("Open Awareness") {},
+    swipeRight = GestureAction("Open Today") {},
+    doubleTapEmpty = GestureAction(label = null) {},
+    longPressEmpty = GestureAction("Edit layout") {},
+)
 
 @Composable
 private fun Swatch(color: Color, outlined: Boolean = false) {

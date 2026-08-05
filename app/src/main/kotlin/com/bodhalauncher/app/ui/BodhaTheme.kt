@@ -1,6 +1,7 @@
 package com.bodhalauncher.app.ui
 
 import android.provider.Settings
+import androidx.compose.foundation.border
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.ui.Modifier
@@ -8,6 +9,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
@@ -141,6 +143,40 @@ val TOUCH_TARGET_MIN = 48.dp
 
 fun Modifier.touchTargetFloor(): Modifier =
     defaultMinSize(minWidth = TOUCH_TARGET_MIN, minHeight = TOUCH_TARGET_MIN)
+
+/**
+ * Focus is a 2dp ring in the accent on the component's own outline (ADR 0026).
+ *
+ * It **replaces** the resting 1dp hairline rather than stacking inside it, and
+ * [Modifier.border] paints within the bounds, so nothing reflows and no padding
+ * is consulted — which is what lets the same treatment sit on a `CardRow` that
+ * has padding and a `ListRow` that has none.
+ *
+ * The colour is the accent read at the call site. A separate `focusRing` token
+ * would be a second value a shade off it, and ADR 0010 reserves colour to the
+ * identity. The cost, and it is the point: an accent *stroke* now means focus
+ * and nothing else may claim one, the way ADR 0025 rule 2 spends the two fills.
+ *
+ * Touch never draws it — a touch click focuses nothing — so this is a keyboard
+ * and accessibility treatment only, and can afford to be this loud.
+ */
+val FOCUS_RING_WIDTH = 2.dp
+
+/**
+ * Draws the ring on [shape] regardless of real focus. Only one node can hold
+ * focus at a time, so the design gallery cannot show a focused specimen of all
+ * four shapes any other way, and a fixture captured at rest would otherwise put
+ * the treatment outside both guards ADR 0025 built the component layer to be
+ * inside. Nothing in the product provides it.
+ */
+val LocalForceFocusRing = staticCompositionLocalOf { false }
+
+@Composable
+fun focusRingShown(focused: Boolean): Boolean = focused || LocalForceFocusRing.current
+
+@Composable
+fun Modifier.focusRing(shape: Shape): Modifier =
+    border(FOCUS_RING_WIDTH, LocalBodhaColors.current.accent, shape)
 
 /** The spacing scale; hairlines are always 1dp. */
 object BodhaSpacing {

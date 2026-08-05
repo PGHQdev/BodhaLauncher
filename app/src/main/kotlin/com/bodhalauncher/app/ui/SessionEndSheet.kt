@@ -31,12 +31,14 @@ fun SessionEndSheet(
 ) {
     val colors = LocalBodhaColors.current
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = colors.ground) {
-        SessionEndSheetContent(
-            phrase = phrase,
-            onClose = onClose,
-            onAddFive = onAddFive,
-            onContinue = onContinue,
-        )
+        Box(Modifier.escapeDismisses(onDismiss).focusOnOpen()) {
+            SessionEndSheetContent(
+                phrase = phrase,
+                onClose = onClose,
+                onAddFive = onAddFive,
+                onContinue = onContinue,
+            )
+        }
     }
 }
 

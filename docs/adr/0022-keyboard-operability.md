@@ -39,6 +39,8 @@ So **the rail is out of the keyboard's reach by design**. It needs no code: it i
 
 **Escape is back**, and it is the single exception to focus-plus-Enter. Its justification is that back has no node to focus, so there is nothing for the general mechanism to attach to. It is cheap because ADR 0011 made back uniform: one binding at root, returning to root, with no per-surface variation. It binds on the non-preview `onKeyEvent` so a focused child may consume Escape first.
 
+**Amended by the build (#26): one binding per Compose root, not one per app.** A key event travels up the focus chain of the root the focused node lives in, and every sheet and dialog composes into a window of its own, so the activity's binding covers the activity's window and nothing else. Sheets and dialogs take `Modifier.escapeDismisses`, which calls the same dismissal their scrim and their back already perform. Pressing the back dispatcher from inside a sheet was measured and is wrong in both directions: a `ModalBottomSheet` handles back in its own window and registers no callback the composition can see, so `hasEnabledCallbacks()` is false and Escape does nothing; where it is true the enabled callback is the *screen's*, which would leave the sheet open over a changed surface. This is still uniform back — one behaviour, two bindings because Compose has two roots — but "one binding at root" was wrong as written. A second measured consequence: with nothing focused, a key event never reaches the root at all, so a surface that autofocuses nothing has no back key until the user presses Tab. Autofocus is load-bearing on Escape rather than a convenience beside it.
+
 Binding arrow keys on Home's root to perform the four swipes was rejected. It reads as the natural mapping for a radial model, but arrow keys are already Compose's two-dimensional focus search, so it would either fight traversal or work only while nothing else holds focus.
 
 ## Gestures acquire focus-revealed affordances
@@ -49,11 +51,17 @@ Permanent visible affordances were rejected as the design change ADR 0011's radi
 
 `longPressEmpty` is one of the six, so "Edit layout" is covered here rather than below.
 
+**Amended by the build (#26): five of the six, not six.** `doubleTapEmpty` carries a null label — the pending lock stub — and `GestureAction`'s existing rule is that a null label performs but is never announced. An affordance for it would be a node named nothing, so it gets none, on the same reasoning that already denied it a custom action. Lock has no keyboard route until it has a label, which is the same gap TalkBack already has rather than a second one.
+
+**And each labelled gesture is now found twice by a screen reader** — once as a focus-revealed button and once as Home's custom action, since the affordances were added beside #111's actions rather than instead of them. That is a real consequence of building this ADR on top of that one, and which route survives is not decided here (issue #130).
+
 ## Per-item actions: a node reached by Right, and the Menu key beside it
 
 What long-press still owes is the context menu on a focused item — Home's pins (`optionsFor`) and the Library's apps (`actionsFor`).
 
 **Each focused row reveals an Actions node, reached by the Right arrow rather than Tab.** Compose's two-dimensional focus search already binds arrows, so the node costs zero tab stops: tabbing the Library stays one stop per app, and Right from a focused row reaches its actions. Putting it in the tab order was rejected because it doubles traversal through a three-hundred-row list to serve the rarer of the two intents.
+
+**Amended by the build (#26): the mechanism is not the one described.** Compose's arrows and Tab traverse the *same* focusable set, so a focusable node is a tab stop whatever reaches it, and there is no property that keeps one out of the tab order. What was built instead is `focusProperties { canFocus = revealed }`: the node is unfocusable until Right asks for it, and unfocusable again the moment it loses focus, so Right performs the reveal rather than merely arriving at something already there. Both things the ADR asked for hold — one stop per app, Right reaches the actions — and the traversal guard asserts the first positively.
 
 **`KEYCODE_MENU` is an accelerator on the same node.** Android's `Generic.kl` maps scancode 139 (`KEY_MENU`) and scancode 127 (`KEY_COMPOSE`, what a PC keyboard's Application key sends) to `MENU`, so a full-size external keyboard does deliver it.
 
@@ -65,11 +73,13 @@ It cannot be the only route, and the check that established this is worth keepin
 
 Branching on `Configuration.hardKeyboardHidden` was considered and rejected: it would preserve touch behaviour byte-for-byte, but it makes behaviour diverge by input model, which nothing else in Bodha does. One behaviour for everyone was preferred over an additive branch.
 
+**Amended by the build (#26): two of the surfaces that owe this cannot take it yet, and the sheets deliberately do not.** The App Library's field autofocuses and `PlaceholderSurface` takes focus on arrival, which is what gives an unbuilt surface a back key at all. Home has no field — its "Search" is a clickable entry point to another surface, not an input — so there is nothing to attach to, and Home is root, so the Escape dependency does not apply either; a docked user's first Tab lands on the first gesture affordance. Search's own field does not exist yet, so half of the Down clause below is unbuilt and unbuildable until Search ships. And the four text fields inside sheets and dialogs are left unfocused on arrival: they are ADR 0011's single-sheet layer rather than surfaces, no fixture reaches them (ADR 0021), and autofocusing something no guard can see would have changed touch behaviour for nothing observable.
+
 The cost is real and is accepted rather than hidden. **Compose has no supported "focus without showing the IME".** It exposes `SoftwareKeyboardController.hide()` and `FocusRequester`, and the implementation is therefore hide-on-focus-gain — a hide *after* a show, which can flash the IME on slow devices. `windowSoftInputMode="stateAlwaysHidden"` does not cover it, since it governs window focus rather than a composable's `requestFocus`. This is buildable and not clean, and it is the residual most likely to need revisiting.
 
 ## Down enters the list beneath a field
 
-On the App Library and Search, **Down from the text field moves focus into the first result row**. Enter then activates it through the row's existing `clickable`, for free. A single-line `BasicTextField` is expected to consume Up and Down as cursor commands and swallow them rather than pass them to focus search, so the binding must be explicit; that behaviour needs confirming against `TextFieldKeyInput` at implementation time.
+On the App Library and Search, **Down from the text field moves focus into the first result row**. Enter then activates it through the row's existing `clickable`, for free. A single-line `BasicTextField` is expected to consume Up and Down as cursor commands and swallow them rather than pass them to focus search, so the binding must be explicit; that behaviour needs confirming against `TextFieldKeyInput` at implementation time. **Confirmed by the build (#26):** it does swallow Down, and the binding is on `onPreviewKeyEvent` rather than `onKeyEvent` for that reason. It consumes only when focus actually moves, so the field keeps its own behaviour at the end of a list.
 
 A true combobox — the field keeps focus, Down drives a highlighted row, Enter activates it — is what a desktop user's fingers expect and is one keystroke faster on re-query, since typing more query text here means Up or Shift+Tab back to the field. It was rejected because it introduces a **selection** distinct from focus, which nothing in Bodha has: the highlighted row would not be the focused node, so neither the guard below nor the focus-plus-Enter rule would describe what is actually happening on the two surfaces a docked user spends the most time in. Bodha's queries are prefix-matched and short (ADR 0014), so the re-query path is Up-then-type rather than a long round trip.
 
@@ -81,11 +91,17 @@ Extending ADR 0020's existing tree-walk with "every node carrying `OnClick` is f
 
 Two consequences follow. Home's focus-revealed affordances are **lifted into the gallery** so the traversal can see them — the same move ADR 0020 made for `AppRow`, `IconCell` and the rail, for the same reason, and the sixteen goldens re-record again. And key injection under Robolectric with Compose focus traversal is unverified in this repo's test setup; if it does not work, the fallback is ADR 0020's walk plus a CI grep banning `pointerInput` outside a named allowlist, which is weaker and closer to the lint rule ADR 0020 left open.
 
+**Amended by the build (#26). Key injection works, and the assertion above was the wrong one.**
+
+Robolectric key injection does drive Compose focus traversal here: `performKeyInput { pressKey(Key.Tab) }` moves focus, and the guard is eleven tests over the gallery. No fallback is needed, and ADR 0024 has superseded that fallback anyway. The one constraint is graphics mode — traversal does not run under `@GraphicsMode(NATIVE)`, which is why the suite takes the default mode and why the screenshot suites force the ring instead of holding real focus.
+
+The expected set is **`OnClick` or `CustomActions`**, not `OnClick` alone, and the correction is the same vacuity this ADR accused the walk of. A hand-rolled gesture publishes no clickable node, so under an `OnClick`-only comparison it is absent from both the reached count and the expected count and the assertion holds by construction — against precisely the failure it exists for. Measured rather than argued: adding `Box(Modifier.homeGestures(...))` to the gallery fails the strengthened guard with `expected:<[]> but was:<[Home]>`, a node carrying six custom actions and no focusable affordance, and passes the old form untouched.
+
 ## What this ADR does not settle
 
 Right-arrow-to-actions is a convention a docked user must discover, and nothing announces it. The node being focus-revealed is the only hint, and it reveals only once the key has already been pressed. **Settled since, by ADR 0023**: the focused *row* carries the hint, so it arrives before the guess, and it retires the first time the key is pressed. Only this one convention is taught — the others have a fallback in ADR 0019's Navigation section, and this one has none.
 
-**What focus looks like is still open**, and ADR 0023 surfaced it rather than answering it. This ADR settled where focus goes and what Enter does, not how a focused node shows it. A focus-revealed affordance indicates itself by appearing; an ordinary focused row does not, and the traversal guard asserts reachability rather than visibility.
+**What focus looks like is still open**, and ADR 0023 surfaced it rather than answering it. This ADR settled where focus goes and what Enter does, not how a focused node shows it. A focus-revealed affordance indicates itself by appearing; an ordinary focused row does not, and the traversal guard asserts reachability rather than visibility. **Settled since, by ADR 0026**: a 2dp accent ring on the focused component's own outline, taking the component's own shape, with no exemption for a focus-revealed affordance — appearing says *this control exists*, the ring says *this is where focus is*. That ADR also verified what this one assumed both ways: a touch click focuses nothing, so every keyboard feature here is invisible to a touch-only user.
 
 The residual ADR 0020 recorded is unchanged and now has a sibling: neither #111's semantics nor this ADR's traversal has been exercised against a physical device — TalkBack for the first, a real docked keyboard for the second.
 

@@ -73,6 +73,8 @@ fun OpenCheckRuleDialog(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .escapeDismisses(onDismiss)
+                .focusOnOpen()
                 .clip(RoundedCornerShape(4.dp))
                 .background(colors.ground)
                 .padding(horizontal = 24.dp, vertical = 8.dp),
@@ -240,6 +242,8 @@ fun ProBoundaryDialog(boundary: ProBoundary, onDismiss: () -> Unit) {
             style = BodhaType.voicePassage,
             modifier = Modifier
                 .fillMaxWidth()
+                .escapeDismisses(onDismiss)
+                .focusOnOpen()
                 .clip(RoundedCornerShape(4.dp))
                 .background(colors.ground)
                 .touchTargetFloor()

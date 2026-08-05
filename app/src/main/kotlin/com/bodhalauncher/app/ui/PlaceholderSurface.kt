@@ -14,7 +14,13 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 
-/** Stands in for a surface that hasn't shipped; tap anywhere (or back) returns Home. */
+/**
+ * Stands in for a surface that hasn't shipped; tap anywhere (or back) returns Home.
+ *
+ * It takes focus on arrival for the reason a real surface's first field does
+ * (ADR 0022) — and because Escape reaches the root binding along the focus
+ * chain, so a surface where nothing holds focus is a surface with no back key.
+ */
 @Composable
 fun PlaceholderSurface(title: String, onBack: () -> Unit) {
     val colors = LocalBodhaColors.current
@@ -23,6 +29,7 @@ fun PlaceholderSurface(title: String, onBack: () -> Unit) {
             .fillMaxSize()
             .background(colors.ground)
             .semantics { contentDescription = "$title — coming soon. Tap to go back." }
+            .focusOnOpen()
             .clickable(onClick = onBack),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
