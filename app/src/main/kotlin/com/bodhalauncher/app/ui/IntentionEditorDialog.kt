@@ -40,6 +40,8 @@ fun IntentionEditorDialog(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .escapeDismisses(onDismiss)
+                .focusOnOpen()
                 .clip(RoundedCornerShape(4.dp))
                 .background(colors.ground)
                 .padding(24.dp),

@@ -46,4 +46,8 @@ The copy is **"→ for actions"**, set in `caption`. It is the shortest phrasing
 
 Whether a touch user ever sees the hint depends on that same decision. Compose does not request focus on a touch click of a `clickable`, so in principle only a keyboard or accessibility user reaches a focused row — but that is a consequence of how focus is drawn, not a claim this ADR verifies.
 
+**Settled since, by ADR 0026**, which is the indicator: a 2dp accent ring on the component's own outline, an outline against the hint's muted `caption`, so the two do not compete and the trailing slot is untouched. The same decision verified the claim above on this toolchain — a touch click focuses nothing — which makes **the hint and its persisted flag keyboard-only features**. On a device that is never docked the boolean stays false forever, correctly, so its population is small; that is a fact about who this teaches, not a defect. The one thing ADR 0026 could not settle is the trailing slot itself, where the hint and rule 3's chevron both want to sit: live in principle, empty today because Home pins and Library apps both act in place and neither draws a chevron, and hint-then-chevron in reading order when a row needs both.
+
+**Amended by the build (#26): the hint's copy needed no change, and its home did.** It is drawn from `ActionsSlot` alongside the actions node rather than from each row's trailing content, because both appear on focus and disappear together; the persisted flag is `ActionsKeyStore`, its own SharedPreferences file, so ADR 0019's clear-behavioural-history cannot reach it by accident rather than merely by intent.
+
 Resolved in issue #121.

@@ -30,7 +30,13 @@ fun EducationSheet(
 ) {
     val colors = LocalBodhaColors.current
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = colors.ground) {
-        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = BodhaSpacing.page)) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .escapeDismisses(onDismiss)
+                .focusOnOpen()
+                .padding(horizontal = BodhaSpacing.page),
+        ) {
             Text(
                 text = screen.feature,
                 color = colors.ink,

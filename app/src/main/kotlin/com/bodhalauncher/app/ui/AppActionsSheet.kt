@@ -48,7 +48,13 @@ fun AppActionsSheet(
 ) {
     val colors = LocalBodhaColors.current
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = colors.ground) {
-        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp)) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .escapeDismisses(onDismiss)
+                .focusOnOpen()
+                .padding(horizontal = 28.dp),
+        ) {
             Text(
                 // An app's own name is machinery, not Bodha's voice (ADR 0021).
                 text = app.label,

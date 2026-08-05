@@ -1,5 +1,6 @@
 package com.bodhalauncher.app.ui
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -15,11 +16,17 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
@@ -45,6 +52,7 @@ import androidx.compose.ui.unit.dp
 private val CARD_RADIUS = 14.dp
 private val CHIP_RADIUS = 10.dp
 private val CHIP_SIZE = 34.dp
+private val MARK_SIZE = 32.dp
 
 /**
  * Rule 2, and the whole of it: fill means exactly two things.
@@ -70,22 +78,31 @@ private fun inkFor(emphasis: Emphasis) = when (emphasis) {
     else -> LocalBodhaColors.current.ink
 }
 
-/** The card surface itself: rule 1's block, without any behaviour. */
+/**
+ * The card surface itself: rule 1's block, without any behaviour.
+ *
+ * [focused] is passed down rather than sensed here because the focusable node is
+ * the click chain inside [CardRow], not this box.
+ */
 @Composable
 fun BodhaCard(
     modifier: Modifier = Modifier,
     emphasis: Emphasis = Emphasis.Plain,
+    focused: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     val colors = LocalBodhaColors.current
+    val shape = RoundedCornerShape(CARD_RADIUS)
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(CARD_RADIUS))
+            .clip(shape)
             .background(fillFor(emphasis))
             .then(
-                if (emphasis == Emphasis.Plain) Modifier.border(
-                    1.dp, colors.hairline, RoundedCornerShape(CARD_RADIUS)
-                ) else Modifier
+                when {
+                    focused -> Modifier.focusRing(shape)
+                    emphasis == Emphasis.Plain -> Modifier.border(1.dp, colors.hairline, shape)
+                    else -> Modifier
+                }
             ),
     ) { content() }
 }
@@ -105,6 +122,19 @@ fun IconChip(content: @Composable () -> Unit) {
             .background(colors.hairline),
         contentAlignment = Alignment.Center,
     ) { content() }
+}
+
+/**
+ * Rule 5's other side: **a third party's mark, bare** — no chip, no ground, so an
+ * app's own icon never reads as something Bodha drew. The size is decided here
+ * rather than at each row, which is the whole reason it is a component.
+ *
+ * No `contentDescription`: the row it leads is named by its title, and a second
+ * name on the icon would have a reader say the app twice (ADR 0020).
+ */
+@Composable
+fun AppMark(icon: ImageBitmap) {
+    Image(bitmap = icon, contentDescription = null, modifier = Modifier.size(MARK_SIZE))
 }
 
 /** Rule 3: a chevron means *this navigates*. Its absence means it acts in place. */
@@ -132,13 +162,21 @@ fun CardRow(
     trailing: (@Composable () -> Unit)? = null,
 ) {
     val colors = LocalBodhaColors.current
-    BodhaCard(modifier = modifier.fillMaxWidth(), emphasis = emphasis) {
+    var focused by remember { mutableStateOf(false) }
+    val actions = rememberRowActions(onLongClick)
+    BodhaCard(
+        modifier = modifier.fillMaxWidth(),
+        emphasis = emphasis,
+        focused = focusRingShown(focused),
+    ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(BodhaSpacing.m),
             modifier = Modifier
                 .fillMaxWidth()
                 .touchTargetFloor()
+                .onFocusChanged { focused = it.isFocused }
+                .actionsKeys(actions, onLongClick)
                 .then(
                     if (onLongClick != null) Modifier.combinedClickable(
                         onClick = onClick, onLongClick = onLongClick
@@ -153,6 +191,7 @@ fun CardRow(
                     Text(subtitle, style = BodhaType.caption, color = colors.inkMuted)
                 }
             }
+            ActionsSlot(actions, onLongClick, focused)
             trailing?.invoke()
         }
     }
@@ -176,14 +215,30 @@ fun ListRow(
     trailing: (@Composable () -> Unit)? = null,
 ) {
     val colors = LocalBodhaColors.current
-    Column(modifier = modifier.fillMaxWidth()) {
-        Box(Modifier.fillMaxWidth().height(1.dp).background(colors.hairline))
+    var focused by remember { mutableStateOf(false) }
+    val actions = rememberRowActions(onLongClick)
+    // Square, at the row's own bounds (ADR 0026): a rounded ring would make a
+    // scrolling row card-shaped on focus and conflate the two rule-1 idioms.
+    val ring = focusRingShown(focused)
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .then(if (ring) Modifier.focusRing(RectangleShape) else Modifier),
+    ) {
+        // The strip stays 1dp whether or not it is painted, so focus costs no
+        // layout; the ring's top edge is what occupies that pixel.
+        Box(
+            Modifier.fillMaxWidth().height(1.dp)
+                .background(if (ring) Color.Transparent else colors.hairline)
+        )
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(BodhaSpacing.m),
             modifier = Modifier
                 .fillMaxWidth()
                 .touchTargetFloor()
+                .onFocusChanged { focused = it.isFocused }
+                .actionsKeys(actions, onLongClick)
                 .then(
                     if (onLongClick != null) Modifier.combinedClickable(
                         onClick = onClick, onLongClick = onLongClick
@@ -198,6 +253,7 @@ fun ListRow(
                     Text(subtitle, style = BodhaType.caption, color = colors.inkMuted)
                 }
             }
+            ActionsSlot(actions, onLongClick, focused)
             trailing?.invoke()
         }
     }
@@ -209,6 +265,10 @@ fun ListRow(
  * [Emphasis.Solid] is the screen's one primary action — Open, Continue writing.
  * A destructive pill stays [Emphasis.Plain] and colours its own label, because
  * red never means "look here" (#26).
+ *
+ * Width is the label's, not the parent's: a discrete button sized to its text is
+ * what lets several sit in a row (the Library's layout switcher). A pill that
+ * spans a surface asks for `Modifier.fillMaxWidth()` at the call site.
  */
 @Composable
 fun BodhaPill(
@@ -222,17 +282,21 @@ fun BodhaPill(
 ) {
     val colors = LocalBodhaColors.current
     val shape = RoundedCornerShape(percent = 50)
+    var focused by remember { mutableStateOf(false) }
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier
-            .fillMaxWidth()
             .clip(shape)
             .background(fillFor(emphasis))
             .then(
-                if (emphasis == Emphasis.Plain) Modifier.border(1.dp, colors.hairline, shape)
-                else Modifier
+                when {
+                    focusRingShown(focused) -> Modifier.focusRing(shape)
+                    emphasis == Emphasis.Plain -> Modifier.border(1.dp, colors.hairline, shape)
+                    else -> Modifier
+                }
             )
             .touchTargetFloor()
+            .onFocusChanged { focused = it.isFocused }
             .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = BodhaSpacing.l, vertical = BodhaSpacing.m),
     ) {
@@ -259,19 +323,25 @@ fun BodhaPill(
  * Rule 4's other half: a **field** takes the pill shape, so what you type into
  * and what you press read as the same order of thing.
  *
- * [name] is required rather than optional. Compose gives a text field click
- * semantics, so an unnamed one is an actionable node reading as an edit box for
- * nothing in particular (ADR 0020).
+ * **The name belongs on the caller's [field], not here.** A text field's click
+ * semantics live on its own inner node, so that node is what a reader activates
+ * and what ADR 0020's walk measures; a name on this Row does not reach it and
+ * this Row does not merge, so naming both has a reader say the field twice —
+ * the same duplicate [AppMark] declines to create. A caller whose content is not
+ * a field names whatever it wraps this in, the way Home's Search does with its
+ * own `clickable`.
  */
 @Composable
 fun BodhaField(
-    name: String,
     modifier: Modifier = Modifier,
     trailing: (@Composable () -> Unit)? = null,
     field: @Composable () -> Unit,
 ) {
     val colors = LocalBodhaColors.current
     val shape = RoundedCornerShape(percent = 50)
+    // hasFocus, not isFocused: the focus target is the caller's text field, a
+    // descendant rather than a node in this chain.
+    var focused by remember { mutableStateOf(false) }
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(BodhaSpacing.m),
@@ -279,9 +349,13 @@ fun BodhaField(
             .fillMaxWidth()
             .clip(shape)
             .background(colors.surface)
-            .border(1.dp, colors.hairline, shape)
-            .semantics { contentDescription = name }
+            .then(
+                if (focusRingShown(focused)) Modifier.focusRing(shape)
+                else Modifier.border(1.dp, colors.hairline, shape)
+            )
+            .onFocusChanged { focused = it.hasFocus }
             .padding(horizontal = BodhaSpacing.l)
+            // Stays last: ADR 0020's caveat in BodhaTheme.kt.
             .touchTargetFloor(),
     ) {
         Box(Modifier.weight(1f)) { field() }
@@ -292,13 +366,57 @@ fun BodhaField(
 /**
  * The group label above a set of rows. Carried from the built Library rather
  * than decided — it already existed on both sides of ADR 0025's divergence.
+ *
+ * [onLongClick] is the Library's group sections: a rename lives on the label
+ * because there is nowhere else for it, and an overline is not a row — a tap
+ * does nothing. Given one, the overline takes the floor and is named by its own
+ * text (ADR 0020), which is why the case belongs here rather than in a second
+ * actionable node beside the one the screen already draws.
+ *
+ * It carries the same actions node and keys as the two rows, because it is the
+ * same case: a long-press with no other route (ADR 0022). Enter on the label
+ * itself stays inert, matching what a tap does — parity is over outcomes, and
+ * the outcome here is the rename, which Right and Menu reach.
  */
 @Composable
-fun SectionOverline(text: String, modifier: Modifier = Modifier) {
-    Text(
-        text = text,
-        style = BodhaType.overline,
-        color = LocalBodhaColors.current.inkMuted,
-        modifier = modifier.padding(top = BodhaSpacing.l, bottom = BodhaSpacing.s),
-    )
+fun SectionOverline(
+    text: String,
+    modifier: Modifier = Modifier,
+    onLongClick: (() -> Unit)? = null,
+) {
+    val colors = LocalBodhaColors.current
+    if (onLongClick == null) {
+        Text(
+            text = text,
+            style = BodhaType.overline,
+            color = colors.inkMuted,
+            modifier = modifier.padding(top = BodhaSpacing.l, bottom = BodhaSpacing.s),
+        )
+        return
+    }
+    var focused by remember { mutableStateOf(false) }
+    val actions = rememberRowActions(onLongClick)
+    Row(
+        // Top, so the label sits where it sits without the actions node: the
+        // slot is 48dp and the overline is one short line.
+        verticalAlignment = Alignment.Top,
+        modifier = modifier
+            .fillMaxWidth()
+            .touchTargetFloor()
+            // Square, at the label's own bounds — an overline has no box, for
+            // the reason a ListRow has none (ADR 0026).
+            .then(if (focusRingShown(focused)) Modifier.focusRing(RectangleShape) else Modifier)
+            .onFocusChanged { focused = it.isFocused }
+            .actionsKeys(actions, onLongClick)
+            .combinedClickable(onClick = {}, onLongClick = onLongClick)
+            .padding(top = BodhaSpacing.l, bottom = BodhaSpacing.s),
+    ) {
+        Text(
+            text = text,
+            style = BodhaType.overline,
+            color = colors.inkMuted,
+            modifier = Modifier.weight(1f),
+        )
+        ActionsSlot(actions, onLongClick, focused)
+    }
 }

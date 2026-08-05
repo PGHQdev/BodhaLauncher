@@ -23,7 +23,12 @@ import org.robolectric.annotation.GraphicsMode
 // it: the actionable components sit below the fold, and the large-type captures
 // were cropped long before they were added — so "the layout holds at large type"
 // was being asserted about the top third of the gallery.
-@Config(sdk = [35], qualifiers = "w320dp-h3000dp", application = android.app.Application::class)
+//
+// Raised from 3000 when ADR 0026's focused specimens were added: the large-type
+// gallery already measured exactly 3000, which is the silent-clip signature.
+// Raised again for ADR 0022's revealed affordances, which took the large-type
+// fixture to 3975 — inside 4200, but a component away from clipping again.
+@Config(sdk = [35], qualifiers = "w320dp-h5200dp", application = android.app.Application::class)
 class DesignGalleryScreenshotTest {
 
     @get:Rule

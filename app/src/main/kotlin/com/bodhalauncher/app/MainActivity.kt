@@ -9,6 +9,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -20,6 +21,7 @@ import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import com.bodhalauncher.app.home.ActionsKeyStore
 import com.bodhalauncher.app.home.AppCatalog
 import com.bodhalauncher.app.home.GroupStore
 import com.bodhalauncher.app.home.IntentionStore
@@ -38,6 +40,7 @@ import com.bodhalauncher.app.opencheck.OpenCheckStateStore
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalContext
 import com.bodhalauncher.app.ui.ActionOptionsDialog
+import com.bodhalauncher.app.ui.ActionsKeyHint
 import com.bodhalauncher.app.ui.AppActionsSheet
 import com.bodhalauncher.app.ui.AppPickerDialog
 import com.bodhalauncher.app.ui.BodhaTheme
@@ -48,6 +51,8 @@ import com.bodhalauncher.app.ui.HomeGestures
 import com.bodhalauncher.app.ui.HomeScreen
 import com.bodhalauncher.app.ui.IntentPromptSheet
 import com.bodhalauncher.app.ui.IntentionEditorDialog
+import com.bodhalauncher.app.ui.LocalActionsKeyHint
+import com.bodhalauncher.app.ui.escapeIsBack
 import com.bodhalauncher.app.ui.EducationSheet
 import com.bodhalauncher.app.ui.LibraryScreen
 import com.bodhalauncher.app.ui.OpenCheckRuleDialog
@@ -116,9 +121,21 @@ class MainActivity : ComponentActivity() {
             groupStore.removeApps(ids)
         }
         catalog.startWatching()
+        val actionsKeyStore = ActionsKeyStore(this)
         setContent {
             BodhaTheme {
-                HomeRoot(pinStore, intentionStore, libraryStore, groupStore, openCheckStore, entitlementStore, catalog, app.intentPrompt, app.events)
+                // One Escape binding for every surface, and one answer to whether
+                // a focused row still teaches the actions key (ADR 0022, 0023).
+                CompositionLocalProvider(
+                    LocalActionsKeyHint provides ActionsKeyHint(
+                        shown = !actionsKeyStore.retired.value,
+                        onKeyUsed = actionsKeyStore::retire,
+                    )
+                ) {
+                    Box(modifier = Modifier.fillMaxSize().escapeIsBack()) {
+                        HomeRoot(pinStore, intentionStore, libraryStore, groupStore, openCheckStore, entitlementStore, catalog, app.intentPrompt, app.events)
+                    }
+                }
             }
         }
     }
@@ -552,6 +569,8 @@ private fun HomeRoot(
             onActionLongPress = { optionsFor = it },
             onAddAction = { pickerOpen = true },
             onEditIntention = { editingIntention = true },
+            iconFor = { catalog.icon(it.id) },
+            iconKey = catalog.version.intValue,
             // Labels name the destination, so they stay true when ADR 0011's
             // reassignment lands and a swipe points somewhere else.
             gestures = HomeGestures(

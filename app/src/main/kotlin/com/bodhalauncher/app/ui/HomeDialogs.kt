@@ -31,6 +31,8 @@ fun AppPickerDialog(
         LazyColumn(
             modifier = Modifier
                 .fillMaxWidth()
+                .escapeDismisses(onDismiss)
+                .focusOnOpen()
                 .heightIn(max = 480.dp)
                 .clip(RoundedCornerShape(4.dp))
                 .background(colors.ground)
@@ -70,6 +72,8 @@ fun ActionOptionsDialog(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .escapeDismisses(onDismiss)
+                .focusOnOpen()
                 .clip(RoundedCornerShape(4.dp))
                 .background(colors.ground)
                 .padding(horizontal = 24.dp, vertical = 8.dp),
@@ -105,6 +109,8 @@ fun EditHomeDialog(onAddPin: () -> Unit, onDismiss: () -> Unit) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .escapeDismisses(onDismiss)
+                .focusOnOpen()
                 .clip(RoundedCornerShape(4.dp))
                 .background(colors.ground)
                 .padding(horizontal = 24.dp, vertical = 8.dp),

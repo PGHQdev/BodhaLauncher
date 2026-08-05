@@ -1,10 +1,8 @@
 package com.bodhalauncher.app.ui
 
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -12,19 +10,17 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.bodhalauncher.engine.HomeAction
@@ -36,9 +32,14 @@ import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
 /**
- * ADR 0010 "Centered Axis": centered serif clock and intention (the voice),
- * left-aligned hairline-rule action list and sans operational text (the machinery).
- * Renders [HomeState] and nothing else — no logic beyond mapping state to layout.
+ * ADR 0010 "Centered Axis": centered serif clock and intention (the voice), sans
+ * operational text below (the machinery). Renders [HomeState] and nothing else —
+ * no logic beyond mapping state to layout.
+ *
+ * The actions are **cards**, not the hairline list ADR 0010 described: ADR 0025
+ * names "Home's actions" as the card idiom by name and reserves the hairline row
+ * for lists that scroll, and it is the later decision on that question. The
+ * centered axis, the serif voice and the sans machinery are untouched by it.
  */
 @Composable
 fun HomeScreen(
@@ -49,6 +50,9 @@ fun HomeScreen(
     onAddAction: (() -> Unit)? = null,
     /** Temporary editor entry point until Today (#5) is the intention's editor. */
     onEditIntention: (() -> Unit)? = null,
+    iconFor: (HomeAction) -> ImageBitmap? = { null },
+    /** Changes when any package changes, so cached icons refresh with their apps. */
+    iconKey: Any = Unit,
     gestures: HomeGestures? = null,
     onSearch: () -> Unit = {},
 ) {
@@ -62,6 +66,9 @@ fun HomeScreen(
             .padding(horizontal = 28.dp, vertical = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        // First in the traversal because that is what a skip link is: a docked
+        // user's route off Home arrives before the content, not after the pins.
+        if (gestures != null) HomeGestureAffordances(gestures)
         Spacer(Modifier.height(48.dp))
         Clock()
         state.contextLabel?.let {
@@ -69,46 +76,72 @@ fun HomeScreen(
             Text(text = it, color = colors.inkMuted, style = BodhaType.overline)
         }
         val intention = state.dailyIntention
-        if (intention != null) {
+        if (intention != null || onEditIntention != null) {
             Spacer(Modifier.height(36.dp))
-            Text(
-                text = intention,
-                color = colors.ink,
-                style = BodhaType.voiceLine,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.touchTargetFloor()
-                    .clickable(enabled = onEditIntention != null) { onEditIntention?.invoke() },
-            )
-        } else if (onEditIntention != null) {
-            // Temporary empty-state entry point; Today (#5) owns this moment once it exists.
-            Spacer(Modifier.height(36.dp))
-            Text(
-                text = "Set today's intention",
-                color = colors.inkMuted,
-                style = BodhaType.voiceLine,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.touchTargetFloor().clickable { onEditIntention() },
+            IntentionCard(
+                // Temporary empty-state entry point; Today (#5) owns this moment once it exists.
+                text = intention ?: "Set today's intention",
+                muted = intention == null,
+                onEdit = onEditIntention,
             )
         }
         Spacer(Modifier.height(48.dp))
-        Column(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(BodhaSpacing.s),
+        ) {
             state.actions.forEach { action ->
-                PinRow(action, onAction, onActionLongPress)
+                val icon = remember(action.id, iconKey) { iconFor(action) }
+                CardRow(
+                    title = action.label,
+                    onClick = { onAction(action) },
+                    onLongClick = { onActionLongPress(action) },
+                    // The app's own mark, so bare rather than chipped (rule 5).
+                    leading = if (icon != null) ({ AppMark(icon) }) else null,
+                )
             }
             if (onAddAction != null && state.actions.size < MAX_ACTIONS) {
-                AddPinRow(onAddAction)
+                CardRow(
+                    title = "Add a pin",
+                    onClick = onAddAction,
+                    // Bodha's own glyph, so it takes the chip (rule 5).
+                    leading = { IconChip { Text("＋", style = BodhaType.body, color = colors.inkMuted) } },
+                )
             }
         }
         state.inboxDigest?.let {
             Spacer(Modifier.height(28.dp))
-            Text(text = it, color = colors.inkMuted, style = BodhaType.label)
+            // Summarising, which is one of the two things a tint may mean (rule 2).
+            BodhaCard(modifier = Modifier.fillMaxWidth(), emphasis = Emphasis.Tinted) {
+                Text(
+                    text = it,
+                    color = colors.inkMuted,
+                    style = BodhaType.label,
+                    modifier = Modifier.padding(BodhaSpacing.m),
+                )
+            }
         }
         if (state.focusActive) {
             Spacer(Modifier.height(20.dp))
-            Box(Modifier.size(6.dp).background(colors.accent, CircleShape))
+            // A word, not a dot: a status indicator is neither of rule 2's two
+            // meanings, so it cannot hold a fill, and a coloured dot said nothing
+            // to a reader anyway (#26).
+            Text(text = "Focus session", color = colors.inkMuted, style = BodhaType.overline)
         }
         Spacer(Modifier.weight(1f))
-        SearchField(onSearch)
+        BodhaField(
+            // Clickable also consumes taps, so double-tap here never falls through
+            // to lock; it is also what names the field, from the label inside it.
+            modifier = Modifier.clickable(onClick = onSearch),
+        ) {
+            Text(
+                text = "Search",
+                color = colors.inkMuted,
+                style = BodhaType.body,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
     }
 }
 
@@ -134,65 +167,35 @@ private fun Clock() {
     )
 }
 
-@OptIn(ExperimentalFoundationApi::class)
+/**
+ * The daily intention in the tinted card rule 2 gives *the current thing*, still
+ * the centered serif italic line ADR 0010 draws — the container changed, the
+ * voice did not.
+ *
+ * The ring is passed to [BodhaCard] rather than sensed by it because the
+ * focusable node is the line's own click chain, one level in.
+ */
 @Composable
-internal fun PinRow(
-    action: HomeAction,
-    onAction: (HomeAction) -> Unit,
-    onLongPress: (HomeAction) -> Unit,
-) {
+internal fun IntentionCard(text: String, muted: Boolean, onEdit: (() -> Unit)?) {
     val colors = LocalBodhaColors.current
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Box(Modifier.fillMaxWidth().height(1.dp).background(colors.hairline))
+    var focused by remember { mutableStateOf(false) }
+    BodhaCard(
+        modifier = Modifier.fillMaxWidth(),
+        emphasis = Emphasis.Tinted,
+        focused = focusRingShown(focused),
+    ) {
         Text(
-            text = action.label,
-            color = colors.ink,
-            style = BodhaType.body,
-            modifier = Modifier
-                .fillMaxWidth()
-                .touchTargetFloor()
-                .combinedClickable(
-                    onClick = { onAction(action) },
-                    onLongClick = { onLongPress(action) },
-                )
-                .padding(vertical = 16.dp),
-        )
-    }
-}
-
-@Composable
-internal fun AddPinRow(onAdd: () -> Unit) {
-    val colors = LocalBodhaColors.current
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Box(Modifier.fillMaxWidth().height(1.dp).background(colors.hairline))
-        Text(
-            text = "＋",
-            color = colors.inkMuted,
-            style = BodhaType.body,
-            modifier = Modifier
-                .fillMaxWidth()
-                .semantics { contentDescription = "Add a pin" }
-                .touchTargetFloor()
-                .clickable(onClick = onAdd)
-                .padding(vertical = 16.dp),
-        )
-    }
-}
-
-@Composable
-private fun SearchField(onSearch: () -> Unit) {
-    val colors = LocalBodhaColors.current
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Text(
-            text = "Search",
-            color = colors.inkMuted,
-            style = BodhaType.body,
-            // Clickable also consumes taps, so double-tap here never falls through to lock.
-            modifier = Modifier.fillMaxWidth().touchTargetFloor().clickable(onClick = onSearch)
-                .padding(vertical = 12.dp),
+            text = text,
+            color = if (muted) colors.inkMuted else colors.ink,
+            style = BodhaType.voiceLine,
             textAlign = TextAlign.Center,
+            modifier = Modifier
+                .fillMaxWidth()
+                .touchTargetFloor()
+                .onFocusChanged { focused = it.isFocused }
+                .clickable(enabled = onEdit != null) { onEdit?.invoke() }
+                .padding(BodhaSpacing.m),
         )
-        Box(Modifier.fillMaxWidth().height(1.dp).background(colors.hairline))
     }
 }
 

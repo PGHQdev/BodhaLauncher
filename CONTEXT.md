@@ -112,6 +112,10 @@ _Avoid_: keyboard shortcut, hotkey (both suggest an invented chord)
 A control that draws nothing at rest and appears when it takes focus. How a gesture-only action gets a node without adding anything to a screen at rest, and how that node stays real enough to meet the 48dp floor.
 _Avoid_: hidden control, invisible target (an invisible actionable node is the thing this exists instead of)
 
+**Actions node**:
+What a focused row reveals to answer long-press — a Home pin's options, an app's actions. Reached by the Right arrow and never by Tab, so a three-hundred-row library stays one stop per app; the Menu key performs the same actions in one press where a keyboard has one. The focused row carries "→ for actions" until the first time the key is pressed, which is the only keyboard convention Bodha teaches, because it is the only one whose absence costs an outcome rather than keystrokes.
+_Avoid_: context menu, overflow (both name a menu; this is the node that opens one), kebab
+
 **Voice**:
 Text Bodha authored and means — the clock, the intention, a question it asks, a closing line. Set in the serif. Which face a string takes is decided by who wrote it, not by how big it is.
 _Avoid_: display type, heading (says something about rank, nothing about authorship)
@@ -119,6 +123,10 @@ _Avoid_: display type, heading (says something about rank, nothing about authors
 **Machinery**:
 Operational text — controls, data, labels, and anything a third party wrote, an app's own name included. Set in the sans, which is also the inherited default. An app name is machinery even when it's the largest thing on the sheet.
 _Avoid_: UI text, body copy, chrome
+
+**Focus ring**:
+What a focused actionable component draws: a 2dp accent outline inset within its own bounds, following its own shape — 14dp on a card, round on a pill or field, square on a hairline row — replacing the 1dp hairline rather than stacking inside it. It is the accent's outline, and the outline now means focus and nothing else, the way tinted and solid fills mean the current thing and the one primary action. A touch click focuses nothing, so only a keyboard or accessibility user ever sees it.
+_Avoid_: highlight, selection (selection is state that persists; focus is where the keyboard is), active state
 
 **Visual vocabulary**:
 The parts of `bodhalauncher.png` that are binding: an element belongs if it encodes something a reader decodes — card versus hairline row (does this scroll), tinted versus solid fill (the current thing versus the one primary action), a trailing chevron (this navigates), pill versus card, chip versus bare icon. The picture decides these; ADRs decide what goes inside them and win wherever they speak.

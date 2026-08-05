@@ -55,15 +55,17 @@ fun OpenCheckSheet(
 ) {
     val colors = LocalBodhaColors.current
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = colors.ground) {
-        OpenCheckSheetContent(
-            appLabel = app.label,
-            icon = icon,
-            lines = lines,
-            onContextNoteTap = onContextNoteTap,
-            onOpen = onOpen,
-            onOpenFor = onOpenFor,
-            onGoBack = onDismiss,
-        )
+        Box(Modifier.escapeDismisses(onDismiss).focusOnOpen()) {
+            OpenCheckSheetContent(
+                appLabel = app.label,
+                icon = icon,
+                lines = lines,
+                onContextNoteTap = onContextNoteTap,
+                onOpen = onOpen,
+                onOpenFor = onOpenFor,
+                onGoBack = onDismiss,
+            )
+        }
     }
 }
 
