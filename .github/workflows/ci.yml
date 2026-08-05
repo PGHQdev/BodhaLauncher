@@ -38,6 +38,21 @@ jobs:
             exit 1
           fi
 
+      # A gesture publishes no node for a guard to walk, and a lint rule could not
+      # tell a decorative scrim from an actionable one — so the marker asserts a
+      # signature, not a verdict (ADR 0024). Per call, since homeGestures chains two.
+      - name: Every pointerInput declares how it is reachable
+        run: |
+          unmarked=$(awk '/\.pointerInput\(/ {
+              line = $0; getline nxt
+              if (line !~ /reachable:/ && nxt !~ /reachable:/) print FILENAME ": " line
+            }' $(grep -rl --include='*.kt' '\.pointerInput(' app/src) || true)
+          if [ -n "$unmarked" ]; then
+            echo "pointerInput without a // reachable: marker (ADR 0024):"
+            echo "$unmarked"
+            exit 1
+          fi
+
       - run: ./gradlew :engine:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
 
       - uses: actions/upload-artifact@v4
