@@ -1,5 +1,6 @@
 package com.bodhalauncher.app
 
+import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -41,12 +42,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalContext
 import com.bodhalauncher.app.ui.ActionOptionsDialog
 import com.bodhalauncher.app.ui.ActionsKeyHint
-import com.bodhalauncher.app.ui.AppActionsSheet
 import com.bodhalauncher.app.ui.AppPickerDialog
 import com.bodhalauncher.app.ui.BodhaTheme
 import com.bodhalauncher.app.ui.EditHomeDialog
 import com.bodhalauncher.app.ui.GestureAction
-import com.bodhalauncher.app.ui.GroupPickerDialog
 import com.bodhalauncher.app.ui.HomeGestures
 import com.bodhalauncher.app.ui.HomeScreen
 import com.bodhalauncher.app.ui.IntentPromptSheet
@@ -54,10 +53,7 @@ import com.bodhalauncher.app.ui.IntentionEditorDialog
 import com.bodhalauncher.app.ui.LocalActionsKeyHint
 import com.bodhalauncher.app.ui.escapeIsBack
 import com.bodhalauncher.app.ui.EducationSheet
-import com.bodhalauncher.app.ui.LibraryScreen
-import com.bodhalauncher.app.ui.OpenCheckRuleDialog
 import com.bodhalauncher.app.ui.OpenCheckSheet
-import com.bodhalauncher.app.ui.ProBoundaryDialog
 import com.bodhalauncher.app.ui.PlaceholderSurface
 import com.bodhalauncher.app.ui.SessionEndSheet
 import com.bodhalauncher.engine.Capability
@@ -67,22 +63,21 @@ import com.bodhalauncher.engine.EducationScreen
 import com.bodhalauncher.engine.EventType
 import com.bodhalauncher.engine.HomeAction
 import com.bodhalauncher.engine.HomeInputs
+import com.bodhalauncher.engine.Place
+import com.bodhalauncher.engine.Surface
+import com.bodhalauncher.engine.resolveBack
+import com.bodhalauncher.engine.resolveRoot
 import com.bodhalauncher.engine.IntentCategory
-import com.bodhalauncher.engine.LibraryInputs
-import com.bodhalauncher.engine.GateDecision
 import com.bodhalauncher.engine.OpenCheckContext
 import com.bodhalauncher.engine.OpenCheckDecision
 import com.bodhalauncher.engine.OpenCheckEngine
 import com.bodhalauncher.engine.OpenCheckMode
-import com.bodhalauncher.engine.ProBoundary
 import com.bodhalauncher.engine.TimedSessionEnd
 import com.bodhalauncher.engine.dayStart
 import com.bodhalauncher.engine.resolveCapability
 import com.bodhalauncher.engine.sessionEndPhrase
 import com.bodhalauncher.engine.resolveOpenCheckLines
-import com.bodhalauncher.engine.resolveOpenCheckRuleWrite
 import com.bodhalauncher.engine.resolveHome
-import com.bodhalauncher.engine.resolveLibrary
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -94,6 +89,20 @@ import java.time.ZoneId
 class MainActivity : ComponentActivity() {
 
     private lateinit var catalog: AppCatalog
+
+    /**
+     * Bumped each time the system Home button re-delivers us. The activity is
+     * `singleTask`, so pressing Home while a surface is open arrives here rather
+     * than recreating anything — which makes this the only place root can be
+     * restored, and the reason the press used to leave the Library showing (#132).
+     */
+    private val homeIntents = mutableIntStateOf(0)
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        homeIntents.intValue++
+    }
 
     override fun onResume() {
         super.onResume()
@@ -133,7 +142,7 @@ class MainActivity : ComponentActivity() {
                     )
                 ) {
                     Box(modifier = Modifier.fillMaxSize().escapeIsBack()) {
-                        HomeRoot(pinStore, intentionStore, libraryStore, groupStore, openCheckStore, entitlementStore, catalog, app.intentPrompt, app.events)
+                        BodhaHost(pinStore, intentionStore, libraryStore, groupStore, openCheckStore, entitlementStore, catalog, app.intentPrompt, app.events, homeIntents.intValue)
                     }
                 }
             }
@@ -146,18 +155,8 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-/** The surfaces Home's swipes fan out to; all but Home are placeholders for now. */
-private enum class HomeSurface(val title: String) {
-    Home("Home"),
-    Search("Search"),
-    Library("App Library"),
-    Awareness("Awareness"),
-    Today("Today"),
-    Focus("Focus"),
-}
-
 /** The label comes from the surface, so renaming one renames what TalkBack announces. */
-private fun openSurface(target: HomeSurface, go: (HomeSurface) -> Unit) =
+private fun openSurface(target: Surface, go: (Surface) -> Unit) =
     GestureAction("Open ${target.title}") { go(target) }
 
 private val homeActionSaver = listSaver<HomeAction?, String>(
@@ -165,8 +164,14 @@ private val homeActionSaver = listSaver<HomeAction?, String>(
     restore = { if (it.isEmpty()) null else HomeAction(it[0], it[1]) },
 )
 
+/**
+ * The one host every surface hangs off. It owns where you are, the single opening
+ * path, and the sheets that may appear over any surface; each surface owns its own
+ * content. Back and root come from the engine (#132), so the rules are asserted in
+ * unit tests rather than by driving this.
+ */
 @Composable
-private fun HomeRoot(
+private fun BodhaHost(
     pinStore: PinStore,
     intentionStore: IntentionStore,
     libraryStore: LibraryStore,
@@ -176,6 +181,7 @@ private fun HomeRoot(
     catalog: AppCatalog,
     intentPrompt: IntentPromptRuntime,
     events: EventLogger,
+    homeIntents: Int,
 ) {
     val pinnedIds by pinStore.pinned
     val hidden by pinStore.hidden
@@ -187,7 +193,11 @@ private fun HomeRoot(
     var optionsFor by remember { mutableStateOf<HomeAction?>(null) }
     var editingIntention by remember { mutableStateOf(false) }
     var editingHome by remember { mutableStateOf(false) }
-    var surface by remember { mutableStateOf(HomeSurface.Home) }
+    // Focus has no producer yet; #9's slice supplies it rather than re-deciding the rule.
+    val focusRunning = false
+    var place by remember { mutableStateOf(Place(resolveRoot(focusRunning))) }
+    // The system Home button lands on root from wherever you were.
+    LaunchedEffect(homeIntents) { place = Place(resolveRoot(focusRunning)) }
     val context = LocalContext.current
     val openCheckStateStore = remember { OpenCheckStateStore(context) }
     // Snapshot-restored so a pending timed session survives Bodha being killed (#75).
@@ -364,180 +374,36 @@ private fun HomeRoot(
         }
     }
 
-    if (surface != HomeSurface.Home) {
-        val back = { surface = HomeSurface.Home }
-        BackHandler(onBack = back)
-        if (surface == HomeSurface.Library) {
-            var query by remember { mutableStateOf("") }
-            var actionsFor by remember { mutableStateOf<HomeAction?>(null) }
-            var groupsFor by remember { mutableStateOf<HomeAction?>(null) }
-            var openCheckFor by remember { mutableStateOf<HomeAction?>(null) }
-            var boundary by remember { mutableStateOf<ProBoundary?>(null) }
-            var educationFor by remember { mutableStateOf<EducationScreen?>(null) }
-            val capabilityEdge = remember { CapabilityEdge(context) }
-            val educationStore = remember { EducationStateStore(context) }
-            val hiddenSearchable by libraryStore.hiddenSearchable
-            val layout by libraryStore.layout
-            val categories by catalog.categories
-            val groups by groupStore.groups
-            // Re-reads on every resume, so granting access in settings shows up on return;
-            // read on demand and never stored (ADR 0009).
-            val lifecycleOwner = LocalLifecycleOwner.current
-            var usageTick by remember { mutableIntStateOf(0) }
-            DisposableEffect(lifecycleOwner) {
-                val observer = LifecycleEventObserver { _, event ->
-                    if (event == Lifecycle.Event.ON_RESUME) usageTick++
-                }
-                lifecycleOwner.lifecycle.addObserver(observer)
-                onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-            }
-            val lastUsed = remember(allApps, usageTick) { usage.lastUsed() }
-            // The grant becomes observable only on return from system settings (#18); log it once (#25).
-            LaunchedEffect(lastUsed != null) {
-                if (lastUsed != null &&
-                    educationStore.shown(Capability.UsageAccess) &&
-                    !educationStore.grantLogged(Capability.UsageAccess)
-                ) {
-                    events.log(EventType.PermissionEnabled)
-                    educationStore.markGrantLogged(Capability.UsageAccess)
-                }
-            }
-            LibraryScreen(
-                state = resolveLibrary(
-                    LibraryInputs(
-                        apps = allApps,
-                        layout = layout,
-                        categories = categories,
-                        groups = groups,
-                        query = query,
-                        hidden = hidden,
-                        hiddenSearchable = hiddenSearchable,
-                        lastUsed = lastUsed,
-                        now = System.currentTimeMillis(),
-                    )
-                ),
-                query = query,
-                onQueryChange = { query = it },
-                onLayoutChange = libraryStore::setLayout,
-                // The layout note is an explicit ask — education precedes any system screen (#18).
-                onLayoutNoteTap = {
-                    val resolution = resolveCapability(
-                        capability = Capability.UsageAccess,
-                        granted = capabilityEdge.granted(Capability.UsageAccess),
-                        educationShown = educationStore.shown(Capability.UsageAccess),
-                        entry = EducationEntry.UserRequest,
-                    )
-                    if (resolution is CapabilityResolution.Educate) {
-                        educationFor = resolution.screen
-                        educationStore.markShown(Capability.UsageAccess)
-                    }
-                },
-                iconFor = { catalog.icon(it.id) },
-                iconKey = catalog.version.intValue,
-                onOpen = openApp,
-                onLongPress = { actionsFor = it },
-                onPin = { pinStore.pin(it.id) },
-                onHide = { pinStore.hide(it.id) },
-                onUnhide = { pinStore.unhide(it.id) },
-                hiddenSearchable = hiddenSearchable,
-                onHiddenSearchableChange = libraryStore::setHiddenSearchable,
-                groupNames = groups.map { it.name },
-                onCreateGroup = groupStore::create,
-                onRenameGroup = groupStore::rename,
-                onDeleteGroup = groupStore::delete,
+    // Always enabled, and a no-op on root. An enabled callback that does nothing is
+    // what keeps back from finishing the activity and having the system relaunch it,
+    // which would read as a flicker on the surface you are most often standing on.
+    val back: () -> Unit = { resolveBack(place, focusRunning)?.let { place = it } }
+    BackHandler(onBack = back)
+
+    when (place.surface) {
+        // Falls through to Home's own content below.
+        Surface.Home -> Unit
+        Surface.Library -> {
+            LibrarySurface(
+                pinStore = pinStore,
+                libraryStore = libraryStore,
+                groupStore = groupStore,
+                openCheckStore = openCheckStore,
+                entitlementStore = entitlementStore,
+                catalog = catalog,
+                usage = usage,
+                bypass = bypass,
+                events = events,
+                openApp = openApp,
+                onPause = { place = Place(Surface.Focus) },
                 onBack = back,
             )
-            educationFor?.let { screen ->
-                EducationSheet(
-                    screen = screen,
-                    // The grant isn't known until observed on return; only the skip is terminal here.
-                    onContinue = {
-                        capabilityEdge.openSystemScreen(screen.capability)
-                        educationFor = null
-                    },
-                    onDismiss = {
-                        events.log(EventType.PermissionSkipped)
-                        educationFor = null
-                    },
-                )
-            }
-            groupsFor?.let { app ->
-                GroupPickerDialog(
-                    app = app,
-                    groups = groups,
-                    onToggle = { groupStore.toggle(it.name, app.id) },
-                    onDismiss = { groupsFor = null },
-                )
-            }
-            openCheckFor?.let { app ->
-                val openCheckRules by openCheckStore.rules
-                OpenCheckRuleDialog(
-                    app = app,
-                    current = openCheckRules[app.id],
-                    onSave = { rule ->
-                        val decision = resolveOpenCheckRuleWrite(
-                            entitlementStore.snapshot.value,
-                            existingRules = openCheckRules.size,
-                            creating = app.id !in openCheckRules,
-                        )
-                        when (decision) {
-                            GateDecision.Allowed -> {
-                                openCheckStore.set(app.id, rule)
-                                // The threshold trigger wants usage access; the rule is
-                                // saved either way and stays inert until granted (#73).
-                                if (rule.mode == OpenCheckMode.DailyThreshold &&
-                                    !capabilityEdge.granted(Capability.UsageAccess)
-                                ) {
-                                    val resolution = resolveCapability(
-                                        capability = Capability.UsageAccess,
-                                        granted = false,
-                                        educationShown = educationStore.shown(Capability.UsageAccess),
-                                        entry = EducationEntry.UserRequest,
-                                    )
-                                    if (resolution is CapabilityResolution.Educate) {
-                                        educationFor = resolution.screen
-                                        educationStore.markShown(Capability.UsageAccess)
-                                    }
-                                }
-                            }
-                            is GateDecision.Capped -> boundary = decision.boundary
-                            is GateDecision.Locked -> boundary = decision.boundary
-                        }
-                    },
-                    onRemove = { openCheckStore.remove(app.id) },
-                    onDismiss = { openCheckFor = null },
-                )
-            }
-            boundary?.let { ProBoundaryDialog(boundary = it, onDismiss = { boundary = null }) }
-            actionsFor?.let { app ->
-                val dismiss = { actionsFor = null }
-                val openCheckRules by openCheckStore.rules
-                AppActionsSheet(
-                    app = app,
-                    shortcuts = remember(app.id) { catalog.shortcuts(app.id) },
-                    isPinned = app.id in pinnedIds,
-                    isHidden = app.id in hidden,
-                    openCheckMode = openCheckRules[app.id]?.mode,
-                    // Emergency/utility apps don't offer friction unless already ruled (#77).
-                    openCheckOffered = app.id in openCheckRules ||
-                        !bypass.bypasses(catalog.primaryPackage(app.id)),
-                    onOpen = { dismiss(); openApp(app) },
-                    onShortcut = { dismiss(); catalog.launchShortcut(it) },
-                    onPin = { dismiss(); pinStore.pin(app.id) },
-                    onUnpin = { dismiss(); pinStore.unpin(app.id) },
-                    onHide = { dismiss(); pinStore.hide(app.id) },
-                    onUnhide = { dismiss(); pinStore.unhide(app.id) },
-                    onGroups = { dismiss(); groupsFor = app },
-                    onPause = { dismiss(); surface = HomeSurface.Focus },
-                    onOpenCheck = { dismiss(); openCheckFor = app },
-                    onAppInfo = { dismiss(); catalog.openAppInfo(app.id) },
-                    onDismiss = dismiss,
-                )
-            }
-        } else {
-            PlaceholderSurface(title = surface.title, onBack = back)
+            return
         }
-        return
+        else -> {
+            PlaceholderSurface(title = place.surface.title, onBack = back)
+            return
+        }
     }
 
     // Once per arrival on Home, not per recomposition (#25).
@@ -574,10 +440,10 @@ private fun HomeRoot(
             // Labels name the destination, so they stay true when ADR 0011's
             // reassignment lands and a swipe points somewhere else.
             gestures = HomeGestures(
-                swipeDown = openSurface(HomeSurface.Search) { surface = it },
-                swipeUp = openSurface(HomeSurface.Library) { surface = it },
-                swipeLeft = openSurface(HomeSurface.Awareness) { surface = it },
-                swipeRight = openSurface(HomeSurface.Today) { surface = it },
+                swipeDown = openSurface(Surface.Search) { place = Place(it) },
+                swipeUp = openSurface(Surface.Library) { place = Place(it) },
+                swipeLeft = openSurface(Surface.Awareness) { place = Place(it) },
+                swipeRight = openSurface(Surface.Today) { place = Place(it) },
                 // Lock mechanism is settled in the permissions spec (#18); stub until
                 // then, so it stays unannounced rather than offering an action that
                 // only reports its own absence.
@@ -586,7 +452,7 @@ private fun HomeRoot(
                 },
                 longPressEmpty = GestureAction("Edit layout") { editingHome = true },
             ),
-            onSearch = { surface = HomeSurface.Search },
+            onSearch = { place = Place(Surface.Search) },
         )
 
         val due by intentPrompt.promptDue
@@ -597,7 +463,7 @@ private fun HomeRoot(
                     events.log(EventType.IntentPromptAnswered)
                     intentPrompt.select(category, text)
                     // The intent flows straight into the action.
-                    if (category == IntentCategory.FindSomething) surface = HomeSurface.Search
+                    if (category == IntentCategory.FindSomething) place = Place(Surface.Search)
                 },
                 onDismiss = {
                     events.log(EventType.IntentPromptDismissed)
