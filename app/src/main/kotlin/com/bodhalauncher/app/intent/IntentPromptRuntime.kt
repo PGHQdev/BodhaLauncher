@@ -112,6 +112,16 @@ class IntentPromptRuntime(context: Context, private val sessions: SessionRuntime
         promptDue.value = null
     }
 
+    /**
+     * The prompt left the screen without the user answering it — another sheet
+     * took the one slot (ADR 0011, #133). Nothing is recorded, because nothing
+     * was said; what matters is that the decision stops being pending, or every
+     * later launch reads as "a prompt is up" and skips its Open Check.
+     */
+    fun withdraw() {
+        promptDue.value = null
+    }
+
     /** Swiped down or tapped outside — recorded, and the cooldown stands. */
     fun dismiss() {
         val decision = promptDue.value ?: return

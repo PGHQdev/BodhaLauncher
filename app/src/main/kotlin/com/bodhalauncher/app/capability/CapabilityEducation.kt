@@ -6,7 +6,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
@@ -15,6 +14,8 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.bodhalauncher.app.data.EventLogger
 import com.bodhalauncher.app.ui.EducationSheet
+import com.bodhalauncher.app.ui.Sheet
+import com.bodhalauncher.app.ui.SheetSlot
 import com.bodhalauncher.engine.Capability
 import com.bodhalauncher.engine.CapabilityResolution
 import com.bodhalauncher.engine.EducationEntry
@@ -36,10 +37,26 @@ class CapabilityEducation(
     private val edge: CapabilityEdge,
     private val store: EducationStateStore,
     private val events: EventLogger,
+    private val sheets: SheetSlot,
 ) {
 
-    var showing by mutableStateOf<EducationScreen?>(null)
-        private set
+    /**
+     * The education sheet goes through the app's one sheet slot like every other
+     * (ADR 0011), so this reads the slot rather than holding a second answer to
+     * what is on screen. Opening a check's explanation therefore replaces the
+     * check: the launch stays gated and the user comes back from system settings
+     * to no sheet rather than a stale one (#133).
+     */
+    val showing: EducationScreen?
+        get() = sheet?.screen
+
+    /**
+     * This flow's own sheet, and only while it is still the one open. Every
+     * answer below goes through it, so an answer arriving from a sheet that has
+     * already been replaced acts on nothing rather than on its successor.
+     */
+    private val sheet: Sheet.Education?
+        get() = sheets.showing()
 
     /**
      * Bumped on every resume. Returning from system settings is the only moment
@@ -71,20 +88,22 @@ class CapabilityEducation(
             entry = entry,
         )
         if (resolution is CapabilityResolution.Educate) {
-            showing = resolution.screen
+            sheets.open(Sheet.Education(resolution.screen))
             store.markShown(capability)
         }
     }
 
     /** The grant isn't known until observed on return; only the skip is terminal here. */
     fun onContinue() {
-        showing?.let { edge.openSystemScreen(it.capability) }
-        showing = null
+        val open = sheet ?: return
+        edge.openSystemScreen(open.screen.capability)
+        sheets.close(open)
     }
 
     fun onSkip() {
+        val open = sheet ?: return
         events.log(EventType.PermissionSkipped)
-        showing = null
+        sheets.close(open)
     }
 
     /**
@@ -93,7 +112,7 @@ class CapabilityEducation(
      * is untouched; the next touch resolves the same way it would have.
      */
     fun close() {
-        showing = null
+        sheet?.let(sheets::close)
     }
 
     /** The education-then-grant outcome, recorded once per capability (#25). */
@@ -116,10 +135,10 @@ class CapabilityEducation(
  * is [CapabilityEducationHost], so the host decides where it sits.
  */
 @Composable
-fun rememberCapabilityEducation(events: EventLogger): CapabilityEducation {
+fun rememberCapabilityEducation(events: EventLogger, sheets: SheetSlot): CapabilityEducation {
     val context = LocalContext.current
     val education = remember {
-        CapabilityEducation(CapabilityEdge(context), EducationStateStore(context), events)
+        CapabilityEducation(CapabilityEdge(context), EducationStateStore(context), events, sheets)
     }
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
