@@ -160,6 +160,34 @@ fun DesignGallery() {
         )
         Spacer(Modifier.height(BodhaSpacing.xl))
 
+        // The Focus session (#166, #170): setup, the running surface and the end
+        // moment, with fixed content so nothing drifts. The setup sheet's picker
+        // is the shared multi-select row, already specimened above; here it
+        // renders with the fixture apps so the whole sheet face is photographed.
+        SectionOverline("Focus session")
+        FocusSetupSheetContent(
+            apps = GALLERY_PICKER_APPS,
+            onStart = { _, _, _ -> },
+            initialLabel = "Deep work",
+            initialAllowed = listOf("gallery.one"),
+        )
+        Spacer(Modifier.height(BodhaSpacing.l))
+        FocusScreenContent(
+            label = "Deep work",
+            remaining = "42 minutes remaining",
+            allowedAppLabels = listOf("Atlas", "Ledger"),
+            onEnd = {},
+        )
+        Spacer(Modifier.height(BodhaSpacing.l))
+        FocusEndSheetContent(
+            label = "Deep work",
+            durationLine = "You focused for 30 minutes.",
+            reachLine = "You reached for something else once.",
+            onExtend = {},
+            onDone = {},
+        )
+        Spacer(Modifier.height(BodhaSpacing.xl))
+
         // Focus (ADR 0026), forced rather than requested: only one node can hold
         // real focus, and the fixture has to show the ring on all four shapes.
         // Screenshots capture at rest, so without these specimens no golden ever

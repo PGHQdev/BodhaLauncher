@@ -42,6 +42,9 @@ class RetentionWorker(context: Context, params: WorkerParameters) : CoroutineWor
         // user-controlled and unlimited by default.
         plan.cutoffs[RetentionCategory.Reflections]?.let { cutoff ->
             IntentRecordStore(applicationContext).pruneBefore(cutoff.toEpochMillis())
+            // Focus records carry the user's own words too (#169, ADR 0029) —
+            // the same category, the same cut, none by default.
+            BodhaDatabase.get(applicationContext).focusRecords().deleteBefore(cutoff.toEpochMillis())
         }
         return Result.success()
     }

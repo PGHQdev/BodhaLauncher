@@ -11,6 +11,8 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.bodhalauncher.app.focus.FocusRecordDao
+import com.bodhalauncher.app.focus.FocusRecordEntity
 import com.bodhalauncher.app.inbox.NotificationLogDao
 import com.bodhalauncher.app.inbox.NotificationRecordEntity
 import com.bodhalauncher.app.session.SessionRecordDao
@@ -55,8 +57,11 @@ interface EventLogDao {
  * with the digest (#161). Device-local only.
  */
 @Database(
-    entities = [EventLogEntity::class, NotificationRecordEntity::class, SessionRecordEntity::class],
-    version = 3,
+    entities = [
+        EventLogEntity::class, NotificationRecordEntity::class,
+        SessionRecordEntity::class, FocusRecordEntity::class,
+    ],
+    version = 4,
     exportSchema = true,
 )
 abstract class BodhaDatabase : RoomDatabase() {
@@ -66,6 +71,8 @@ abstract class BodhaDatabase : RoomDatabase() {
     abstract fun notificationLog(): NotificationLogDao
 
     abstract fun sessionRecords(): SessionRecordDao
+
+    abstract fun focusRecords(): FocusRecordDao
 
     companion object {
         @Volatile
@@ -94,10 +101,22 @@ abstract class BodhaDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `focus_record` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`label` TEXT NOT NULL, `startMillis` INTEGER NOT NULL, " +
+                        "`endMillis` INTEGER NOT NULL, `reaches` INTEGER NOT NULL, " +
+                        "`proceeds` INTEGER NOT NULL, `endedEarly` INTEGER NOT NULL)"
+                )
+            }
+        }
+
         fun get(context: Context): BodhaDatabase = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(
                 context.applicationContext, BodhaDatabase::class.java, "bodha.db"
-            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build().also { instance = it }
+            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build().also { instance = it }
         }
     }
 }

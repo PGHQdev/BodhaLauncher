@@ -54,7 +54,7 @@ import org.robolectric.annotation.GraphicsMode
 // that is not the floor. If this suite reports 0-height nodes, the fixtures outgrew
 // the display — raise this, don't relax the assertion.
 // Raised for #136–#139's specimens (the multi-select rows and four onboarding steps).
-@Config(sdk = [35], qualifiers = "w411dp-h7000dp", application = android.app.Application::class)
+@Config(sdk = [35], qualifiers = "w411dp-h9000dp", application = android.app.Application::class)
 class AccessibilityFloorTest {
 
     @get:Rule

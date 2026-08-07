@@ -54,7 +54,7 @@ import org.robolectric.annotation.Config
 @OptIn(androidx.compose.ui.test.ExperimentalTestApi::class)
 @RunWith(AndroidJUnit4::class)
 // Raised for #136–#139's specimens (the multi-select rows and four onboarding steps).
-@Config(sdk = [35], qualifiers = "w411dp-h7000dp", application = android.app.Application::class)
+@Config(sdk = [35], qualifiers = "w411dp-h9000dp", application = android.app.Application::class)
 class KeyboardOperabilityTest {
 
     @get:Rule

@@ -437,4 +437,47 @@ class OpenCheckEngineTest {
 
         assertEquals(OpenCheckDecision.Proceed, restored.onLaunchAttempt("app", repeated, at(30)))
     }
+
+    // #168: the Focus session's allowed list, in the one decision point.
+
+    @Test
+    fun `a focus check fires with no rule at all, marked as focus-raised`() {
+        val decision = OpenCheckEngine().onLaunchAttempt(
+            "app", rule = null, now = t0,
+            context = OpenCheckContext(focusActive = true, focusCheckDue = true),
+        )
+        val check = assertIs<OpenCheckDecision.ShowCheck>(decision)
+        assertEquals(true, check.raisedByFocus)
+    }
+
+    @Test
+    fun `a classified app off the allowed list still proceeds - the bypass sits ahead of everything`() {
+        val decision = OpenCheckEngine().onLaunchAttempt(
+            "app", always, t0,
+            context = OpenCheckContext(focusActive = true, focusCheckDue = true, bypass = true),
+        )
+        assertEquals(OpenCheckDecision.Proceed, decision)
+    }
+
+    @Test
+    fun `an allowed app carrying its own rule still fires that rule on its own terms`() {
+        val decision = OpenCheckEngine().onLaunchAttempt(
+            "app", always, t0,
+            context = OpenCheckContext(focusActive = true, focusCheckDue = false),
+        )
+        val check = assertIs<OpenCheckDecision.ShowCheck>(decision)
+        assertEquals(false, check.raisedByFocus)
+    }
+
+    @Test
+    fun `proceeding past a focus check grants the launch back through without re-firing`() {
+        val engine = OpenCheckEngine()
+        val focusContext = OpenCheckContext(focusActive = true, focusCheckDue = true)
+        assertIs<OpenCheckDecision.ShowCheck>(engine.onLaunchAttempt("app", null, t0, focusContext))
+        engine.onProceeded("app", t0)
+        // The granted relaunch flows back through the same interception point.
+        assertEquals(OpenCheckDecision.Proceed, engine.onLaunchAttempt("app", null, at(2), focusContext))
+        // The grant is consumed: the next opening is checked again.
+        assertIs<OpenCheckDecision.ShowCheck>(engine.onLaunchAttempt("app", null, at(4), focusContext))
+    }
 }
