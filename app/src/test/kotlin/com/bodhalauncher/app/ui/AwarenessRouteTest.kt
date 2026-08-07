@@ -20,6 +20,7 @@ import com.bodhalauncher.engine.AwarenessUsage
 import com.bodhalauncher.engine.AwarenessView
 import com.bodhalauncher.engine.AwarenessWeek
 import com.bodhalauncher.engine.EntitlementSnapshot
+import com.bodhalauncher.engine.Exclusions
 import com.bodhalauncher.engine.FREE_AWARENESS_DAYS
 import com.bodhalauncher.engine.GateDecision
 import com.bodhalauncher.engine.GatedRequest
@@ -134,6 +135,7 @@ class AwarenessRouteTest {
                 labelFor = { "Atlas" },
                 iconFor = { null },
                 onOpenApp = { openApp = it },
+                onAppActions = {},
             )
 
             view == AwarenessView.Week -> AwarenessWeekScreen(
@@ -149,8 +151,11 @@ class AwarenessRouteTest {
                 sessions = sessions,
                 day = picked ?: today,
                 isToday = (picked ?: today) == today,
+                exclusions = Exclusions(),
                 onPickView = { view = it; picked = null },
                 onOpenSession = { open = it.record.id },
+                onSessionActions = {},
+                onOpenExclusions = {},
                 boundary = boundary,
                 boundaryTitle = terminus,
                 onBoundary = { boundaryShown = boundary },

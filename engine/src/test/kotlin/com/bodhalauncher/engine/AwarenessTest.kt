@@ -970,6 +970,20 @@ class AwarenessTest {
             awarenessIntentWord(intentional = false),
         ) + sessionDetailNotes(
             SessionDetail(session, emptyList(), checks = 3, repeatedOpen = true, statement = null)
+        ) + sessionDetailNotes(
+            // What an exclusion says on the view it emptied (#178): a bare count
+            // of what the reader took out, never a word about what is left.
+            SessionDetail(
+                session, emptyList(), checks = 0, repeatedOpen = false,
+                statement = null, excludedApps = 2,
+            )
+        ) + listOf(
+            exclusionsLine(Exclusions()),
+            exclusionsLine(Exclusions(apps = setOf("atlas"))),
+            exclusionsLine(Exclusions(sessions = setOf(1, 2))),
+            exclusionsLine(Exclusions(apps = setOf("atlas", "ledger"), sessions = setOf(1))),
+            exclusionSessionLine(record(1, start, start.plusMinutes(12))),
+            exclusionSessionLine(record(2, start, null)),
         ) + foregroundLines() + listOfNotNull(
             appOpensSourceLine(AwarenessUsage.Ungranted(offersTurnOn = true)),
             appOpensSourceLine(AwarenessUsage.Revoked),

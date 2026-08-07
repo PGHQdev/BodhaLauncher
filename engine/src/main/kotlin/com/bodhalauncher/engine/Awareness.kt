@@ -164,10 +164,24 @@ fun awarenessSessionLine(
      * are unchanged.
      */
     clock: ClockFormat = ClockFormat.TwentyFourHour,
+): String = awarenessSessionLine(session.record, clock)
+
+/**
+ * The same line, from the record alone (#178).
+ *
+ * The exclusions list has a record and no classification — an exclusion is
+ * reversed from a store of ids, and the signals that would classify the session
+ * are not read on that screen. Fabricating `intentional = false` to reach the
+ * overload above would put a falsehood into the one type whose whole purpose is
+ * the classification, so the line takes what it actually needs instead.
+ */
+fun awarenessSessionLine(
+    record: SessionRecord,
+    clock: ClockFormat = ClockFormat.TwentyFourHour,
 ): String {
-    val started = formatClock(session.record.start.toLocalTime(), clock)
-    val end = session.record.end ?: return "$started · running now"
-    val millis = Duration.between(session.record.start, end).toMillis()
+    val started = formatClock(record.start.toLocalTime(), clock)
+    val end = record.end ?: return "$started · running now"
+    val millis = Duration.between(record.start, end).toMillis()
     return "$started · ${if (millis < 60_000) "under a minute" else spanPhrase(millis)}"
 }
 
@@ -201,6 +215,17 @@ data class SessionDetail(
     val checks: Int,
     val repeatedOpen: Boolean,
     val statement: String?,
+    /**
+     * How many distinct apps this session opened that the reader has excluded
+     * (#178). It exists so the view can tell **an empty record from an emptied
+     * render**: a session that opened nothing and a session whose every open was
+     * excluded look identical from [launches] alone, and saying "nothing was
+     * opened" over the second is a sentence no record supports.
+     *
+     * A count rather than the ids, because the view never names an excluded app —
+     * naming it would be the row the exclusion removed, written out longhand.
+     */
+    val excludedApps: Int = 0,
 )
 
 /**
@@ -212,23 +237,36 @@ data class SessionDetail(
  * Events carry no session — the event log is a type and a timestamp (ADR 0009) —
  * so the span they fell inside is what attributes them, the same rule [IntentSignal]
  * already takes when it names none.
+ *
+ * This is the one resolver [Exclusions] reaches directly rather than through a
+ * filtered input (#178), and the reason is [SessionDetail.excludedApps]: every
+ * other view can be handed a list somebody else already filtered, because a
+ * removed record leaves nothing behind that the view has to account for. Here it
+ * does — a session whose every open was excluded has to say so rather than
+ * report that nothing was opened — so the filter has to happen where both halves
+ * of the split are still in hand.
  */
 fun resolveSessionDetail(
     session: AwarenessSession,
     launches: List<LaunchRecord>,
     events: List<LoggedEvent>,
     signals: List<IntentSignal>,
+    exclusions: Exclusions = Exclusions(),
 ): SessionDetail {
     val record = session.record
     val inSession = events.filter { record.holds(it.at) }
+    val mine = launches.filter { it.session == record.id }.sortedBy { it.at }
     return SessionDetail(
         session = session,
-        launches = launches.filter { it.session == record.id }.sortedBy { it.at },
+        launches = retainedLaunches(mine, exclusions),
         checks = inSession.count { it.type == EventType.OpenCheckDisplayed },
         repeatedOpen = inSession.any { it.type == EventType.RepeatedOpenDetected },
         // The first signal that carried words: a session may hold several, and
         // the one that spoke is the one worth reading back.
         statement = signals.filter { it.belongsTo(record) }.firstNotNullOfOrNull { it.text },
+        // Distinct, because an app opened three times in one session is one app
+        // the reader excluded, not three.
+        excludedApps = mine.map { it.appId }.filter { it in exclusions.apps }.distinct().size,
     )
 }
 
@@ -250,9 +288,18 @@ fun launchTimeLine(
  * The absence of launches is a line here rather than an invented row, which is
  * what keeps "the view never invents a row" true for a session that raised a
  * check and opened nothing.
+ *
+ * **The absence is claimed only where it is true** (#178). A session whose every
+ * open was excluded has an empty [SessionDetail.launches] and did not open
+ * nothing, so the two are told apart here: the first line requires both, and the
+ * exclusion is stated as its own bare count beside it. What the reader took out
+ * of the view is a fact about the view, not about the session.
  */
 fun sessionDetailNotes(detail: SessionDetail): List<String> = buildList {
-    if (detail.launches.isEmpty()) add("Nothing was opened in this session")
+    if (detail.launches.isEmpty() && detail.excludedApps == 0) {
+        add("Nothing was opened in this session")
+    }
+    if (detail.excludedApps > 0) add("${plural(detail.excludedApps.toLong(), "app")} excluded")
     if (detail.checks > 0) add("${plural(detail.checks.toLong(), "Open Check")} fired")
     if (detail.repeatedOpen) add("A repeated open was noticed")
 }
@@ -993,4 +1040,111 @@ fun awarenessWindowTerminusLine(cap: Int?): String = when (cap) {
     1 -> "1 day renders free"
     else -> "${plural(cap.toLong(), "day")} render free"
 }
+
+/**
+ * What the reader has taken out of Awareness (#178, ADR 0013).
+ *
+ * **Nothing is deleted, only unrendered.** An excluded app or session keeps
+ * every record it ever had, which is what makes putting it back exact rather
+ * than approximate — there is nothing to restore, because nothing was pruned.
+ * It is also what keeps an excluded item counted in the privacy dashboard: the
+ * dashboard counts rows, and no row moves. Deleting stays a separate deliberate
+ * act belonging to retention and the dashboard (#24).
+ *
+ * The one figure an exclusion cannot reach is anything derived from the **event
+ * log** — a session's Open Check count, its repeated-open flag. `LoggedEvent`
+ * carries neither an app id nor a session id by construction (ADR 0009, #25), so
+ * there is nothing on those records to filter on. That is a property of the
+ * store rather than an omission here, and it is the only such gap.
+ *
+ * Held as ids rather than as records: the record is the store's and may be gone
+ * to retention while the exclusion outlives it, which is why the exclusions list
+ * prunes what it cannot find rather than assuming both sides agree.
+ */
+data class Exclusions(
+    val apps: Set<String> = emptySet(),
+    val sessions: Set<Long> = emptySet(),
+) {
+    val isEmpty: Boolean get() = apps.isEmpty() && sessions.isEmpty()
+}
+
+/**
+ * The sessions that still render (#178). An app exclusion never removes a
+ * session: the session happened, and what it opened is a separate question the
+ * launches answer.
+ */
+fun retainedSessions(
+    records: List<SessionRecord>,
+    exclusions: Exclusions,
+): List<SessionRecord> = records.filter { it.id !in exclusions.sessions }
+
+/**
+ * The launches that still render (#178), by three clauses that are each a
+ * different way a launch can belong to something excluded.
+ *
+ * An excluded **app** takes its own launches. An excluded **session** takes the
+ * launches that named it — the id was read at the moment of the launch, which is
+ * the same attribution [resolveSessionDetail] trusts over any span.
+ *
+ * The third clause is the unmediated open (#175). A launch Bodha did not mediate
+ * carries no session by construction, so an excluded session would otherwise
+ * remove only the half of its opens that went through Bodha's own path and leave
+ * the other half standing on the App view. The span it fell inside is the only
+ * identity such a record has, so the span is what attributes it here —
+ * deliberately weaker than the id above, and used only where there is no id.
+ *
+ * [excludedSessions] is the caller's read of the excluded sessions' records,
+ * because this module reads nothing. Empty is the honest default: a caller that
+ * did not read them filters by app and by named session, and says so by passing
+ * nothing rather than by silently getting a third clause it cannot support.
+ */
+fun retainedLaunches(
+    launches: List<LaunchRecord>,
+    exclusions: Exclusions,
+    excludedSessions: List<SessionRecord> = emptyList(),
+): List<LaunchRecord> = launches.filter { launch ->
+    when {
+        launch.appId in exclusions.apps -> false
+        launch.session != null -> launch.session !in exclusions.sessions
+        else -> excludedSessions.none { it.holds(launch.at) }
+    }
+}
+
+/**
+ * The line over the exclusions list, and the one under the Excluded row that
+ * opens it (#178): bare counts of what is currently taken out.
+ *
+ * A half that is nothing is left out rather than written as a zero, the rule
+ * [appOpensLine] and [awarenessDayFiguresLine] already take. An empty set says so
+ * in words, because the list is reached from a row that only exists when there
+ * is something in it — but a prune can empty it while the reader is looking, and
+ * a screen that then rendered nothing at all would read as a failure.
+ */
+fun exclusionsLine(exclusions: Exclusions): String {
+    if (exclusions.isEmpty) return "Nothing is excluded"
+    return listOfNotNull(
+        plural(exclusions.apps.size.toLong(), "app").takeIf { exclusions.apps.isNotEmpty() },
+        plural(exclusions.sessions.size.toLong(), "session").takeIf { exclusions.sessions.isNotEmpty() },
+    ).joinToString(" · ")
+}
+
+/**
+ * One excluded session's row in the list that undoes it (#178): the day it fell
+ * on, then when it started and how long it ran.
+ *
+ * The date is here and nowhere else in Awareness's session rows, and it is not
+ * decoration. Two sessions from different days at the same hour render as the
+ * same string under [awarenessSessionLine], and an undo list where two rows are
+ * indistinguishable is a list where the reader cannot tell which one they are
+ * putting back.
+ *
+ * The day is [SessionRecord.day] — stamped at write under the 4am boundary
+ * (ADR 0003) — so a row here files under the same heading the session filed
+ * under everywhere else.
+ */
+fun exclusionSessionLine(
+    record: SessionRecord,
+    clock: ClockFormat = ClockFormat.TwentyFourHour,
+    date: DateFormat = DateFormat.WeekdayAndMonth,
+): String = "${formatDate(record.day, date)} · ${awarenessSessionLine(record, clock)}"
 

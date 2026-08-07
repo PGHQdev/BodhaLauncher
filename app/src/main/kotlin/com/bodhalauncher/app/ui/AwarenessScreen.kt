@@ -33,8 +33,10 @@ import com.bodhalauncher.engine.AwarenessToday
 import com.bodhalauncher.engine.AwarenessUsage
 import com.bodhalauncher.engine.AwarenessView
 import com.bodhalauncher.engine.AwarenessWeek
+import com.bodhalauncher.engine.Exclusions
 import com.bodhalauncher.engine.ProBoundary
 import com.bodhalauncher.engine.SessionDetail
+import com.bodhalauncher.engine.SessionRecord
 import com.bodhalauncher.engine.appDayLine
 import com.bodhalauncher.engine.appOpensLine
 import com.bodhalauncher.engine.appOpensSourceLine
@@ -44,6 +46,8 @@ import com.bodhalauncher.engine.awarenessForegroundLine
 import com.bodhalauncher.engine.awarenessIntentWord
 import com.bodhalauncher.engine.awarenessSessionLine
 import com.bodhalauncher.engine.awarenessWeekRateLine
+import com.bodhalauncher.engine.exclusionSessionLine
+import com.bodhalauncher.engine.exclusionsLine
 import com.bodhalauncher.engine.formatDate
 import com.bodhalauncher.engine.launchTimeLine
 import com.bodhalauncher.engine.sessionDetailNotes
@@ -64,6 +68,12 @@ import java.time.LocalDate
  * back down. The same is true of the day this view is showing — a day picked on
  * the Week view opens here, and Escape from here leaves for root rather than
  * returning to the Week.
+ *
+ * A row's own actions live where every other row's do (#178): long-press on
+ * touch, the Actions node on Right, Menu as an accelerator — all of it
+ * [ListRow]'s, none of it rebuilt here. The exclusions list hangs off the foot of
+ * this view rather than off Settings, because the undo belongs beside the thing
+ * it undoes and nothing in Settings earns it (ADR 0019).
  */
 @Composable
 fun AwarenessScreen(
@@ -74,8 +84,17 @@ fun AwarenessScreen(
     /** Which day is being shown: the live one, or one picked from the Week (#176). */
     day: LocalDate,
     isToday: Boolean,
+    /**
+     * What is currently taken out of every view (#178). The rows above were
+     * filtered before they arrived; this is here only so the foot of the list can
+     * say what is missing and offer the way back.
+     */
+    exclusions: Exclusions,
     onPickView: (AwarenessView) -> Unit,
     onOpenSession: (AwarenessSession) -> Unit,
+    /** The row's own actions, in the shared affordance (#178, ADR 0022, ADR 0023). */
+    onSessionActions: (AwarenessSession) -> Unit,
+    onOpenExclusions: () -> Unit,
     /** Non-null only where the entitlement window withheld one of this day's records (#177). */
     boundary: ProBoundary? = null,
     boundaryTitle: String = "",
@@ -94,9 +113,14 @@ fun AwarenessScreen(
             AwarenessViewSwitch(
                 current = AwarenessView.Today,
                 onPick = onPickView,
-                // Only where there is no row to take it: a day with sessions
-                // arrives on the first of them.
-                arrival = if (sessions.isEmpty()) Modifier.focusOnOpen() else Modifier,
+                // Only where there is no row at all to take it: a day with
+                // sessions arrives on the first of them, and a quiet day with
+                // something excluded arrives on the Excluded row.
+                arrival = if (sessions.isEmpty() && exclusions.isEmpty) {
+                    Modifier.focusOnOpen()
+                } else {
+                    Modifier
+                },
             )
         },
         boundary = boundary,
@@ -107,7 +131,20 @@ fun AwarenessScreen(
             SessionRow(
                 session = session,
                 onOpen = { onOpenSession(session) },
+                onActions = { onSessionActions(session) },
                 modifier = if (index == 0) Modifier.focusOnOpen() else Modifier,
+            )
+        }
+        // Only where there is something in it. A permanent row naming an empty
+        // list would be a control for undoing nothing, sitting under every day
+        // the reader never excluded anything from.
+        if (!exclusions.isEmpty) {
+            ListRow(
+                title = "Excluded",
+                subtitle = exclusionsLine(exclusions),
+                onClick = onOpenExclusions,
+                trailing = { TrailingChevron() },
+                modifier = if (sessions.isEmpty()) Modifier.focusOnOpen() else Modifier,
             )
         }
     }
@@ -400,14 +437,90 @@ fun SessionRow(
     session: AwarenessSession,
     onOpen: () -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * The session's own actions (#178), handed to [ListRow] and to nothing else:
+     * the long-press, the Right-revealed Actions node, the Menu accelerator, the
+     * retiring hint and the focus ring are all already there (ADR 0022, ADR 0023,
+     * #131). Null is a row with no actions — the gallery's specimens — and costs
+     * neither the node nor the keys.
+     */
+    onActions: (() -> Unit)? = null,
 ) {
     ListRow(
         title = awarenessSessionLine(session, LocalBodhaFormats.current.clock),
         subtitle = awarenessIntentWord(session.intentional),
         onClick = onOpen,
+        onLongClick = onActions,
         trailing = { TrailingChevron() },
         modifier = modifier,
     )
+}
+
+/**
+ * The exclusions list (#178): everything currently taken out of Awareness, and
+ * one press to put any of it back.
+ *
+ * It lives here rather than in Settings, and that is the ticket's own decision
+ * rather than an accident of where the code went. Nothing in Settings earns it
+ * under ADR 0019's three clauses, and an undo belongs beside the thing it undoes
+ * — the reader excluded an app while reading Awareness, and this is where they
+ * will look for it.
+ *
+ * **Every row acts in place, so no row wears a chevron** (ADR 0025 rule 3):
+ * pressing one includes the item again and the row leaves the list, which is the
+ * whole interaction. The subtitle names the outcome, because a row whose title is
+ * the thing and whose press is the opposite of the thing needs to say which it
+ * does.
+ *
+ * A session id whose record retention has taken is simply absent: the caller
+ * hands over what it found, and prunes the ids nothing answered to. That is what
+ * keeps this list from holding a row that cannot be undone from.
+ */
+@Composable
+fun ExclusionsScreen(
+    /** The excluded app ids, in the order the caller settled on. */
+    apps: List<String>,
+    /** The excluded sessions' records — empty while the read is in flight. */
+    sessions: List<SessionRecord>,
+    /**
+     * What is excluded, for the line under the title. Read from the store rather
+     * than folded from the two lists above, so a read still in flight draws an
+     * empty list under a true count rather than under "nothing is excluded".
+     */
+    exclusions: Exclusions,
+    /** The app's own name, or its id where it is no longer installed to have one. */
+    labelFor: (String) -> String,
+    iconFor: (String) -> ImageBitmap?,
+    onIncludeApp: (String) -> Unit,
+    onIncludeSession: (Long) -> Unit,
+) {
+    val formats = LocalBodhaFormats.current
+    val empty = apps.isEmpty() && sessions.isEmpty()
+    AwarenessList(
+        title = "Excluded",
+        line = exclusionsLine(exclusions),
+        // Only where there is no row to take arrival: this screen exists for the
+        // populated case, and that case focuses its first row (ADR 0022).
+        focusSelf = empty,
+    ) {
+        apps.forEachIndexed { index, id ->
+            ListRow(
+                title = labelFor(id),
+                subtitle = "Include",
+                onClick = { onIncludeApp(id) },
+                leading = iconFor(id)?.let { { AppMark(it) } },
+                modifier = if (index == 0) Modifier.focusOnOpen() else Modifier,
+            )
+        }
+        sessions.forEachIndexed { index, record ->
+            ListRow(
+                title = exclusionSessionLine(record, formats.clock, formats.date),
+                subtitle = "Include",
+                onClick = { onIncludeSession(record.id) },
+                modifier = if (index == 0 && apps.isEmpty()) Modifier.focusOnOpen() else Modifier,
+            )
+        }
+    }
 }
 
 /**
@@ -443,6 +556,8 @@ fun SessionDetailScreen(
      * the id is what every store is keyed by.
      */
     onOpenApp: (String) -> Unit,
+    /** The app's own actions (#178), by the same id and through the same affordance. */
+    onAppActions: (String) -> Unit,
 ) {
     if (detail == null) return
     val colors = LocalBodhaColors.current
@@ -471,6 +586,7 @@ fun SessionDetailScreen(
                     time = launchTimeLine(launch, clock),
                     icon = iconFor(launch.appId),
                     onOpen = { onOpenApp(launch.appId) },
+                    onActions = { onAppActions(launch.appId) },
                 )
             }
         }
@@ -501,11 +617,14 @@ fun LaunchRow(
     icon: ImageBitmap?,
     onOpen: () -> Unit,
     modifier: Modifier = Modifier,
+    /** The app's own actions (#178), handed to [ListRow] and to nothing else. */
+    onActions: (() -> Unit)? = null,
 ) {
     ListRow(
         title = label,
         subtitle = time,
         onClick = onOpen,
+        onLongClick = onActions,
         leading = icon?.let { { AppMark(it) } },
         trailing = { TrailingChevron() },
         modifier = modifier,

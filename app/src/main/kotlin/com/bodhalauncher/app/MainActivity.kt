@@ -757,6 +757,9 @@ private fun BodhaHost(
                 // The usage grant, and the one way in to asking for it — never a
                 // second copy of the education wiring (#157).
                 education = education,
+                // A row's actions open into the one slot, so an Awareness sheet
+                // replaces whatever was open rather than stacking on it (#178).
+                sheets = sheets,
                 onBack = back,
             )
             return

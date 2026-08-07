@@ -25,6 +25,7 @@ import com.bodhalauncher.engine.AwarenessSession
 import com.bodhalauncher.engine.AwarenessToday
 import com.bodhalauncher.engine.AwarenessView
 import com.bodhalauncher.engine.EntitlementSnapshot
+import com.bodhalauncher.engine.Exclusions
 import com.bodhalauncher.engine.FREE_AWARENESS_DAYS
 import com.bodhalauncher.engine.GateDecision
 import com.bodhalauncher.engine.GatedRequest
@@ -93,7 +94,9 @@ class AwarenessScreenTest {
 
     private val opened = mutableListOf<Long>()
     private val picked = mutableListOf<AwarenessView>()
+    private val actioned = mutableListOf<Long>()
     private var stated = 0
+    private var exclusionsOpened = 0
 
     /** The gate's own copy, read from the gate so a copy edit lands here too. */
     private val gateCopy = (
@@ -107,6 +110,7 @@ class AwarenessScreenTest {
         day: LocalDate = LocalDate.of(2026, 8, 7),
         isToday: Boolean = true,
         boundary: ProBoundary? = null,
+        exclusions: Exclusions = Exclusions(),
     ) = compose.setContent {
         BodhaTheme {
             AwarenessScreen(
@@ -114,8 +118,11 @@ class AwarenessScreenTest {
                 sessions = sessions,
                 day = day,
                 isToday = isToday,
+                exclusions = exclusions,
                 onPickView = { picked += it },
                 onOpenSession = { opened += it.record.id },
+                onSessionActions = { actioned += it.record.id },
+                onOpenExclusions = { exclusionsOpened += 1 },
                 boundary = boundary,
                 boundaryTitle = awarenessWindowTerminusLine(FREE_AWARENESS_DAYS),
                 onBoundary = { stated += 1 },
@@ -254,8 +261,11 @@ class AwarenessScreenTest {
                             sessions = day,
                             day = LocalDate.of(2026, 8, 7),
                             isToday = true,
+                            exclusions = Exclusions(),
                             onPickView = {},
                             onOpenSession = {},
+                            onSessionActions = {},
+                            onOpenExclusions = {},
                             onBack = {},
                         )
                     } else {
@@ -376,8 +386,11 @@ class AwarenessScreenTest {
                             sessions = resolveAwarenessSessions(render.records, emptyList()),
                             day = LocalDate.of(2026, 8, 7),
                             isToday = true,
+                            exclusions = Exclusions(),
                             onPickView = {},
                             onOpenSession = {},
+                            onSessionActions = {},
+                            onOpenExclusions = {},
                             boundary = render.boundary,
                             boundaryTitle = awarenessWindowTerminusLine(window.cap),
                             onBoundary = {},
@@ -399,6 +412,73 @@ class AwarenessScreenTest {
         // and the boundary goes with it, because nothing is withheld any more.
         assertTrue("9:12 · 2 minutes" in drawnText())
         assertTrue(terminus !in drawnText())
+    }
+
+    /**
+     * The route to the undo (#178): one row at the foot of the list, naming what
+     * is currently taken out. It navigates, so it wears the chevron (ADR 0025
+     * rule 3), and it is not there at all where nothing is excluded — a control
+     * for undoing nothing under every day the reader excluded nothing from.
+     */
+    @Test
+    fun `the excluded row names what is taken out and opens the list`() {
+        setScreen(
+            day,
+            AwarenessToday.Sessions(finished = 2, running = true),
+            exclusions = Exclusions(apps = setOf("atlas"), sessions = setOf(9)),
+        )
+
+        assertTrue("Excluded" in drawnText())
+        assertTrue("1 app · 1 session" in drawnText())
+        // Rule 3: it navigates, so it takes the fourth chevron on the view.
+        assertEquals(4, drawnText().count { it == "›" })
+
+        compose.onNodeWithText("Excluded").performClick()
+        assertEquals(1, exclusionsOpened)
+    }
+
+    @Test
+    fun `no excluded row renders where nothing is excluded`() {
+        setScreen(day, AwarenessToday.Sessions(finished = 2, running = true))
+
+        assertTrue(drawnText().none { it == "Excluded" })
+    }
+
+    /**
+     * A day with nothing on it and something excluded still has a row, so arrival
+     * lands on it rather than on the switch — the chain-wide rule read in order
+     * (ADR 0022, #176).
+     */
+    @Test
+    fun `a quiet day with an exclusion still renders a row, and the count is of the day`() {
+        setScreen(
+            emptyList(),
+            AwarenessToday.None,
+            exclusions = Exclusions(sessions = setOf(9)),
+        )
+
+        assertTrue("No sessions yet today" in drawnText())
+        assertTrue("1 session" in drawnText())
+        assertTrue(drawnText().none { it == "0" })
+    }
+
+    /**
+     * The exclusion is offered on the row's own actions and nowhere else (#178,
+     * ADR 0022, ADR 0023): the row keeps its one click for opening the session,
+     * and long-press is what reaches the sheet.
+     */
+    @Test
+    fun `a session row's actions are its own, and its click still opens it`() {
+        setScreen(day, AwarenessToday.Sessions(finished = 2, running = true))
+
+        val row = nodes().single {
+            SemanticsActions.OnClick in it.config && it.spokenName() == "9:41 · 12 minutes"
+        }
+        row.config[SemanticsActions.OnLongClick]?.action?.invoke()
+        assertEquals(listOf(2L), actioned)
+
+        row.config[SemanticsActions.OnClick].action?.invoke()
+        assertEquals(listOf(2L), opened)
     }
 
     @Test

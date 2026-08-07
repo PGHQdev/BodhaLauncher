@@ -1,6 +1,8 @@
 package com.bodhalauncher.app
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -8,6 +10,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.platform.LocalContext
+import com.bodhalauncher.app.awareness.ExclusionStore
 import com.bodhalauncher.app.awareness.toRecord
 import com.bodhalauncher.app.capability.CapabilityEducation
 import com.bodhalauncher.app.data.BodhaDatabase
@@ -20,10 +23,15 @@ import com.bodhalauncher.app.intent.IntentRecordStore
 import com.bodhalauncher.app.session.SessionRuntime
 import com.bodhalauncher.app.session.toRecord
 import com.bodhalauncher.app.ui.AppOpensScreen
+import com.bodhalauncher.app.ui.AwarenessActionsSheet
 import com.bodhalauncher.app.ui.AwarenessScreen
 import com.bodhalauncher.app.ui.AwarenessWeekScreen
+import com.bodhalauncher.app.ui.ExclusionsScreen
+import com.bodhalauncher.app.ui.LocalBodhaFormats
 import com.bodhalauncher.app.ui.ProBoundaryDialog
 import com.bodhalauncher.app.ui.SessionDetailScreen
+import com.bodhalauncher.app.ui.Sheet
+import com.bodhalauncher.app.ui.SheetSlot
 import com.bodhalauncher.app.ui.minuteNow
 import com.bodhalauncher.engine.AWARENESS_WEEK_DAYS
 import com.bodhalauncher.engine.AwarenessView
@@ -37,6 +45,7 @@ import com.bodhalauncher.engine.RetentionConfig
 import com.bodhalauncher.engine.SessionDetail
 import com.bodhalauncher.engine.SessionRecord
 import com.bodhalauncher.engine.awarenessDayRecords
+import com.bodhalauncher.engine.awarenessSessionLine
 import com.bodhalauncher.engine.awarenessWindowTerminusLine
 import com.bodhalauncher.engine.dayKey
 import com.bodhalauncher.engine.dayStart
@@ -50,6 +59,8 @@ import com.bodhalauncher.engine.resolveAwarenessWeek
 import com.bodhalauncher.engine.resolveAwarenessWindow
 import com.bodhalauncher.engine.resolveRetention
 import com.bodhalauncher.engine.resolveSessionDetail
+import com.bodhalauncher.engine.retainedLaunches
+import com.bodhalauncher.engine.retainedSessions
 import com.bodhalauncher.engine.totalForegroundMillis
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -67,6 +78,13 @@ import java.time.ZoneId
 private data class AppReading(
     val launches: List<LaunchRecord>,
     val foreground: Map<String, Long>?,
+    /**
+     * The excluded sessions' records (#178), read here because the App view is
+     * the one place a launch has to be matched against a **span**: an unmediated
+     * open carries no session id, so the only way it can be recognised as having
+     * happened inside an excluded session is the clock.
+     */
+    val excludedSessions: List<SessionRecord>,
 )
 
 /**
@@ -142,13 +160,19 @@ private data class AwarenessWeekReading(
  * session — a switch answers "which view", not "where was I".
  *
  * **Every branch runs the same pipeline, in this order: read unfiltered, then
- * clamp, then resolve** (#177). Nothing that reaches a DAO knows about
- * entitlement, so retention, the privacy dashboard and any later export are
- * unaffected by construction rather than by care — and a Pro flip is a
- * recomposition over a list already in hand rather than a second trip to the
- * database. That last claim rests entirely on `window` being a `remember` key
- * wherever the resolution happens, so the key lists below are load-bearing
- * rather than incidental.
+ * exclude, then clamp, then resolve** (#177, #178). Nothing that reaches a DAO
+ * knows about entitlement or about an exclusion, so retention, the privacy
+ * dashboard and any later export are unaffected by construction rather than by
+ * care — and a Pro flip or an exclusion toggle is a recomposition over a list
+ * already in hand rather than a second trip to the database. That claim rests
+ * entirely on `window` and `exclusions` being `remember` keys wherever the
+ * resolution happens, so the key lists below are load-bearing rather than
+ * incidental.
+ *
+ * **Exclusion runs before the window, and the order matters.** `AwarenessRender`
+ * decides whether to state the Pro boundary by comparing sizes, so a record the
+ * *reader* took out must not be what makes the boundary speak: clamping first
+ * would have an exclusion announce a paywall.
  */
 @Composable
 fun AwarenessSurface(
@@ -159,12 +183,19 @@ fun AwarenessSurface(
     entitlementStore: EntitlementStore,
     usage: UsageReader,
     education: CapabilityEducation,
+    /** The one sheet (ADR 0011, #133): the row actions open into it, never beside it. */
+    sheets: SheetSlot,
     onBack: () -> Unit,
 ) {
     val now = minuteNow()
     val phase by sessions.phase
     val context = LocalContext.current
     val intents = remember { IntentRecordStore(context) }
+    // One construction site, so every view on this surface reads the same
+    // `mutableStateOf` and an exclusion made on one is visible on the next
+    // without a reload (#178).
+    val exclusionStore = remember { ExclusionStore(context) }
+    val exclusions by exclusionStore.exclusions
     var view by remember { mutableStateOf(AwarenessView.Today) }
     // The day the Today view is showing: the live one, until the Week hands it
     // one of its seven.
@@ -201,11 +232,14 @@ fun AwarenessSurface(
     val window = resolveAwarenessWindow(entitlementStore.snapshot.value, now)
     val terminus = awarenessWindowTerminusLine(window.cap)
     var boundaryShown by remember { mutableStateOf<ProBoundary?>(null) }
-    // Clamped here rather than inside the read, so what renders is decided in
-    // composition over a list already in hand — which is what makes flipping the
-    // snapshot to Pro a recomposition rather than a second query. #178 adds the
-    // exclusions to these keys, ahead of the window.
-    val dayRender = remember(day, window) { day?.let { window.sessions(it.records) } }
+    // Excluded, then clamped, both here rather than inside the read: what renders
+    // is decided in composition over a list already in hand, which is what makes
+    // flipping the snapshot to Pro — or putting a session back — a recomposition
+    // rather than a second query. The exclusion goes first, so a record the
+    // reader took out is never what makes the boundary speak (#177, #178).
+    val dayRender = remember(day, exclusions, window) {
+        day?.let { window.sessions(retainedSessions(it.records, exclusions)) }
+    }
     // Resolved here rather than inside the read, so what renders is decided in
     // composition over a list already in hand.
     val shownDay = remember(dayRender, shown, now) {
@@ -253,18 +287,30 @@ fun AwarenessSurface(
         .toInstant().toEpochMilli()
     // Bodha's own package, because time spent reading Awareness is not time
     // spent on the phone's other apps — and counting it would make looking at
-    // the figure move the figure. #178 widens this set (#176).
-    val excludedPackages = remember(context) { setOf(context.packageName) }
+    // the figure move the figure (#176). The excluded apps join it (#178): the
+    // week rate is the one figure a reader can check against their own sense of
+    // the week, and an excluded app still inside it would contradict the rule on
+    // the one number where it shows.
+    val excludedPackages = remember(context, exclusions) {
+        setOf(context.packageName) + exclusions.apps.mapNotNull(catalog::primaryPackage)
+    }
     var open by remember { mutableStateOf<Long?>(null) }
     var openApp by remember { mutableStateOf<String?>(null) }
+    var showExclusions by remember { mutableStateOf(false) }
     val openSession = shownSessions.firstOrNull { it.record.id == open }
-    val appId = openApp
-    // A switch answers "which view", so it drops the day the Week handed over
-    // and the session that was open: neither is a place to come back to.
+    // An app excluded while its own view was open falls back to the view it was
+    // opened from, rather than rendering a screen about a thing that renders
+    // nowhere. The Session branch needs no such guard: `openSession` is resolved
+    // out of the already-filtered list, so an excluded session leaves it null.
+    val appId = openApp?.takeIf { it !in exclusions.apps }
+    // A switch answers "which view", so it drops the day the Week handed over,
+    // the session that was open and the exclusions list: none is a place to come
+    // back to.
     val onPickView: (AwarenessView) -> Unit = { next ->
         view = next
         picked = null
         open = null
+        showExclusions = false
     }
     // One `when` rather than an early return per branch: the four views are the
     // branches, and whatever must render over all of them goes after it. The
@@ -282,11 +328,12 @@ fun AwarenessSurface(
             // that decides what is drawn is the freshest one rather than a
             // composition-old boolean (#175).
             val reading by produceState<AppReading?>(
-                null, appId, usageFrom, usageGranted, education.resumeTick,
+                null, appId, usageFrom, usageGranted, education.resumeTick, exclusions,
             ) {
                 value = withContext(Dispatchers.IO) {
                     runCatching {
-                        val logged = BodhaDatabase.get(context).launchRecords()
+                        val database = BodhaDatabase.get(context)
+                        val logged = database.launchRecords()
                             .forApp(appId)
                             .map { it.toRecord() }
                         AppReading(
@@ -296,6 +343,13 @@ fun AwarenessSurface(
                                 entries = usage.foregroundEntries(usageFrom).orEmpty(),
                             ),
                             foreground = usage.usedSince(usageFrom),
+                            // Read on the same trip rather than in a second
+                            // `produceState`: it is one query against a handful
+                            // of ids, and splitting it would let the launches and
+                            // the spans that filter them arrive out of step.
+                            excludedSessions = database.sessionRecords()
+                                .withIds(exclusions.sessions.toList())
+                                .map { it.toRecord() },
                         )
                     }.getOrNull()
                 }
@@ -306,7 +360,11 @@ fun AwarenessSurface(
             // would be the same rows on a free phone and a different code path
             // on a Pro one — and this view could then never state a boundary,
             // because there would be nothing withheld for it to compare against.
-            val appRender = remember(reading, window) { reading?.let { window.launches(it.launches) } }
+            val appRender = remember(reading, exclusions, window) {
+                reading?.let {
+                    window.launches(retainedLaunches(it.launches, exclusions, it.excludedSessions))
+                }
+            }
             AppOpensScreen(
                 view = reading?.let {
                     resolveAppOpens(
@@ -338,7 +396,12 @@ fun AwarenessSurface(
             // open come from the event log, which carries no session, so the span
             // is what selects them. A running session's span is open, so it ends
             // at now.
-            val detail by produceState<SessionDetail?>(null, openSession, now) {
+            //
+            // Keyed on the exclusions as well, so excluding an app from inside
+            // this view re-resolves it. That costs the launch and event reads
+            // again — rare, cheap, and cheaper than a second state model holding
+            // the unfiltered launches beside the filtered ones (#178).
+            val detail by produceState<SessionDetail?>(null, openSession, now, exclusions) {
                 value = withContext(Dispatchers.IO) {
                     runCatching {
                         val launches = BodhaDatabase.get(context).launchRecords()
@@ -352,6 +415,10 @@ fun AwarenessSurface(
                                 openSession.record.end ?: LocalDateTime.now(),
                             ),
                             signals = day?.signals.orEmpty(),
+                            // The one resolver handed the exclusions directly:
+                            // it has to tell a session that opened nothing from
+                            // one whose every open the reader took out.
+                            exclusions = exclusions,
                         )
                     }.getOrNull()
                 }
@@ -364,6 +431,40 @@ fun AwarenessSurface(
                 labelFor = { id -> labelFor(id) ?: id },
                 iconFor = iconFor,
                 onOpenApp = { openApp = it },
+                onAppActions = { sheets.open(Sheet.AwarenessAppActions(it)) },
+            )
+        }
+
+        showExclusions -> {
+            // Null while the read is in flight and null if it failed, which is
+            // what the prune below is gated on: a failed read must not be read as
+            // "retention took every one of these".
+            val excluded by produceState<List<SessionRecord>?>(null, exclusions) {
+                value = withContext(Dispatchers.IO) {
+                    runCatching {
+                        BodhaDatabase.get(context).sessionRecords()
+                            .withIds(exclusions.sessions.toList())
+                            .map { it.toRecord() }
+                    }.getOrNull()
+                }
+            }
+            // The one Awareness screen with a side effect on a read path, and it
+            // is worth naming: an excluded id whose record retention has taken is
+            // a row that can never be drawn and an undo that can never be reached,
+            // so it is dropped the first time a successful read proves it gone.
+            LaunchedEffect(excluded) {
+                excluded?.let { found -> exclusionStore.pruneSessions(found.map { it.id }.toSet()) }
+            }
+            ExclusionsScreen(
+                // Sorted by the name they render under, so the list has an order
+                // a reader can predict rather than a set's iteration order.
+                apps = exclusions.apps.sortedBy { labelFor(it) ?: it },
+                sessions = excluded.orEmpty(),
+                exclusions = exclusions,
+                labelFor = { id -> labelFor(id) ?: id },
+                iconFor = iconFor,
+                onIncludeApp = exclusionStore::includeApp,
+                onIncludeSession = exclusionStore::includeSession,
             )
         }
 
@@ -404,10 +505,10 @@ fun AwarenessSurface(
                     }.getOrNull()
                 } ?: value
             }
-            val week = remember(reading, usageState, now, excludedPackages) {
+            val week = remember(reading, usageState, now, exclusions, excludedPackages) {
                 reading?.let {
                     resolveAwarenessWeek(
-                        records = it.records,
+                        records = retainedSessions(it.records, exclusions),
                         signals = it.signals,
                         // Both rates are readings of the device rather than
                         // records Bodha kept, so the window does not govern them
@@ -454,19 +555,49 @@ fun AwarenessSurface(
             sessions = shownSessions,
             day = shown,
             isToday = isToday,
+            exclusions = exclusions,
             onPickView = onPickView,
             onOpenSession = { open = it.record.id },
+            onSessionActions = { sheets.open(Sheet.AwarenessSessionActions(it.record)) },
+            onOpenExclusions = { showExclusions = true },
             boundary = dayRender?.boundary,
             boundaryTitle = terminus,
             onBoundary = { boundaryShown = dayRender?.boundary },
             onBack = onBack,
         )
     }
-    // The tail the one `when` exists for: a dialog reachable from every branch,
-    // opened by whichever terminus the reader pressed, and stating the same
-    // authored sentence wherever it was opened from (#177).
+    // The tail the one `when` exists for: a dialog and two sheets reachable from
+    // every branch, opened by whichever row the reader pressed, and stating the
+    // same thing wherever they were opened from (#177, #178).
     boundaryShown?.let {
         ProBoundaryDialog(boundary = it, onDismiss = { boundaryShown = null })
+    }
+    // The sheets are about a row on this surface, so they leave with the surface
+    // — the reason the Library's and Search's do (#132).
+    DisposableEffect(Unit) {
+        onDispose {
+            sheets.showing<Sheet.AwarenessSessionActions>()?.let(sheets::close)
+            sheets.showing<Sheet.AwarenessAppActions>()?.let(sheets::close)
+        }
+    }
+    sheets.showing<Sheet.AwarenessSessionActions>()?.let { sheet ->
+        // Told to the slot as well as used here, so a session ending over this
+        // sheet dismisses it the way its own scrim does (ADR 0011, #134).
+        val dismiss = sheets.dismissedBy(sheet) { sheets.close(sheet) }
+        AwarenessActionsSheet(
+            // The session named the way its row names it: a start and a span.
+            title = awarenessSessionLine(sheet.record, LocalBodhaFormats.current.clock),
+            onExclude = { dismiss(); exclusionStore.excludeSession(sheet.record.id) },
+            onDismiss = dismiss,
+        )
+    }
+    sheets.showing<Sheet.AwarenessAppActions>()?.let { sheet ->
+        val dismiss = sheets.dismissedBy(sheet) { sheets.close(sheet) }
+        AwarenessActionsSheet(
+            title = labelFor(sheet.appId) ?: sheet.appId,
+            onExclude = { dismiss(); exclusionStore.excludeApp(sheet.appId) },
+            onDismiss = dismiss,
+        )
     }
 }
 

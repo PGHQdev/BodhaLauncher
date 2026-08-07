@@ -76,6 +76,10 @@ _Avoid_: screen time, usage time (both read as a verdict)
 How much of Awareness renders: seven days free, everything retention kept on Pro. Applied in the render path only, so the records exist either way and export and the privacy dashboard reach all of them. It governs Bodha's own records, not a reading taken from Android — which is why a period rate renders at every tier.
 _Avoid_: retention window (that's what exists, not what renders), history cap, paywall
 
+**Excluded**:
+An app or session unrendered in Awareness's views and figures, reversibly, with the record left in place. Scoped to Awareness, so Search ranking and the Library are unaffected — the control for keeping an app out of Search is the Library's hide.
+_Avoid_: hidden (that's the Library's, and it reaches Search), muted (that's a notification source), deleted, blocked
+
 **Intentional session**:
 A session in which the user stated an intent — answered the Intent Prompt, wrote an Open Check intention, or ran a Focus session. Every other session is unclassified.
 _Avoid_: unintentional session (the phone doesn't know), mindful session
