@@ -104,6 +104,15 @@ class FocusTest {
     }
 
     @Test
+    fun `starting is free by construction - the gate has no ad-hoc request and scheduling stays locked`() {
+        // The seam: startFocusSession takes no entitlement input, so no caller
+        // can consult the gate on the way through — there is no ad-hoc-Focus
+        // GatedRequest to consult with. What is Pro is scheduling (ADR 0005),
+        // and its gate is untouched and still unused by anything in Focus.
+        assertTrue(resolveEntitlement(EntitlementSnapshot(), GatedRequest.FocusScheduling) is GateDecision.Locked)
+    }
+
+    @Test
     fun `the reach line is one neutral fact - no ratio, no praise`() {
         assertEquals("You didn't reach for anything else.", focusReachLine(0))
         assertEquals("You reached for something else once.", focusReachLine(1))

@@ -161,6 +161,22 @@ class FocusStoreTest {
     }
 
     @Test
+    fun `started, completed and abandoned are logged - paused never is`() = runBlocking {
+        val s = store()
+        s.startDefault(minutes = 15)
+        s.resolveEnd(t0.plusSeconds(15 * 60))
+        s.start("Again", 15, emptySet(), t0.plusSeconds(16 * 60))
+        s.endEarly(t0.plusSeconds(17 * 60))
+        drain()
+
+        val types = db.eventLog().between(0, Long.MAX_VALUE).map { it.type }
+        assertEquals(2, types.count { it == "FocusStarted" })
+        assertEquals(1, types.count { it == "FocusCompleted" })
+        assertEquals(1, types.count { it == "FocusAbandoned" })
+        assertEquals(0, types.count { it == "FocusPaused" })
+    }
+
+    @Test
     fun `the final end after an extend leaves exactly one record`() = runBlocking {
         val s = store()
         s.startDefault(minutes = 15)
