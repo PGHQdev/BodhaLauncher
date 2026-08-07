@@ -25,12 +25,14 @@ import com.bodhalauncher.app.home.AppCatalog
 import com.bodhalauncher.app.home.GroupStore
 import com.bodhalauncher.app.home.IntentionStore
 import com.bodhalauncher.app.home.LibraryStore
+import com.bodhalauncher.app.home.ModeStore
 import com.bodhalauncher.app.home.PinStore
 import com.bodhalauncher.app.home.UsageReader
 import com.bodhalauncher.app.capability.CapabilityEducationHost
 import com.bodhalauncher.app.capability.rememberCapabilityEducation
 import com.bodhalauncher.app.data.EventLogger
 import com.bodhalauncher.app.intent.IntentPromptRuntime
+import com.bodhalauncher.app.onboarding.OnboardingStore
 import com.bodhalauncher.app.intent.IntentRecordStore
 import com.bodhalauncher.app.session.SessionRuntime
 import com.bodhalauncher.app.session.applySessionBoundary
@@ -45,12 +47,14 @@ import com.bodhalauncher.app.ui.ActionsKeyHint
 import com.bodhalauncher.app.ui.AppPickerDialog
 import com.bodhalauncher.app.ui.BodhaTheme
 import com.bodhalauncher.app.ui.EditHomeDialog
+import com.bodhalauncher.app.ui.ModeManageDialog
+import com.bodhalauncher.app.ui.ModeSelectorDialog
 import com.bodhalauncher.app.ui.GestureAction
 import com.bodhalauncher.app.ui.HomeGestures
 import com.bodhalauncher.app.ui.HomeScreen
 import com.bodhalauncher.app.ui.IntentPromptSheet
-import com.bodhalauncher.app.ui.IntentionEditorDialog
 import com.bodhalauncher.app.ui.LocalActionsKeyHint
+import com.bodhalauncher.app.ui.OnboardingFlow
 import com.bodhalauncher.app.ui.escapeIsBack
 import com.bodhalauncher.app.ui.OpenCheckSheet
 import com.bodhalauncher.app.ui.PlaceholderSurface
@@ -76,6 +80,8 @@ import com.bodhalauncher.engine.dayStart
 import com.bodhalauncher.engine.sessionEndPhrase
 import com.bodhalauncher.engine.resolveOpenCheckLines
 import com.bodhalauncher.engine.resolveHome
+import com.bodhalauncher.engine.resolveArrangement
+import com.bodhalauncher.engine.resolveOnboardingStep
 import kotlinx.coroutines.delay
 import java.time.Instant
 import java.time.LocalDateTime
@@ -123,6 +129,11 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         val app = application as BodhaApp
         val pinStore = PinStore(this)
+        val modeStore = ModeStore(this, pinStore)
+        // The choice survives process death: resolved before anything composes.
+        pinStore.setActive(
+            resolveArrangement(modeStore.modes.value, modeStore.choice.value) ?: PinStore.DEFAULT_ARRANGEMENT
+        )
         val intentionStore = IntentionStore(this)
         val libraryStore = LibraryStore(this)
         val groupStore = GroupStore(this)
@@ -130,13 +141,36 @@ class MainActivity : ComponentActivity() {
         val entitlementStore = EntitlementStore(this)
         catalog = AppCatalog(this)
         catalog.onAppsRemoved = { ids ->
-            ids.forEach { pinStore.unpin(it); pinStore.unhide(it); openCheckStore.remove(it) }
+            // Every arrangement's pins, not only the active one's (#155).
+            pinStore.removeApps(ids)
+            ids.forEach { pinStore.unhide(it); openCheckStore.remove(it) }
             groupStore.removeApps(ids)
         }
         catalog.startWatching()
         val actionsKeyStore = ActionsKeyStore(this)
+        val onboardingStore = OnboardingStore(this)
         setContent {
             BodhaTheme {
+                // Before any surface composes, something decides between the
+                // flow and Home (#135, ADR 0018): a tested reducer over the
+                // completion flag and the progress marker, and nothing else.
+                val onboardingStep =
+                    resolveOnboardingStep(onboardingStore.complete.value, onboardingStore.furthestPassed.intValue)
+                if (onboardingStep != null) {
+                    OnboardingFlow(
+                        step = onboardingStep,
+                        onAdvance = { step ->
+                            // Type and timestamp only — never step identity (ADR 0009).
+                            app.events.log(EventType.OnboardingStepCompleted)
+                            onboardingStore.advance(step)
+                        },
+                        onExit = ::finish,
+                    )
+                    return@BodhaTheme
+                }
+                // The marker passed the last built step: the flow resolved, the
+                // flag is written, and the radial model begins here (ADR 0018).
+                if (!onboardingStore.complete.value) SideEffect { onboardingStore.finish() }
                 // One Escape binding for every surface, and one answer to whether
                 // a focused row still teaches the actions key (ADR 0022, 0023).
                 CompositionLocalProvider(
@@ -146,7 +180,7 @@ class MainActivity : ComponentActivity() {
                     )
                 ) {
                     Box(modifier = Modifier.fillMaxSize().escapeIsBack()) {
-                        BodhaHost(pinStore, intentionStore, libraryStore, groupStore, openCheckStore, entitlementStore, catalog, app.sessions, app.intentPrompt, app.events, homeIntents.intValue, visible.value)
+                        BodhaHost(pinStore, modeStore, intentionStore, libraryStore, groupStore, openCheckStore, entitlementStore, catalog, app.sessions, app.intentPrompt, app.events, homeIntents.intValue, visible.value)
                     }
                 }
             }
@@ -172,6 +206,7 @@ private fun openSurface(target: Surface, go: (Surface) -> Unit) =
 @Composable
 private fun BodhaHost(
     pinStore: PinStore,
+    modeStore: ModeStore,
     intentionStore: IntentionStore,
     libraryStore: LibraryStore,
     groupStore: GroupStore,
@@ -192,8 +227,16 @@ private fun BodhaHost(
     val pinned = remember(pinnedIds, allApps) { catalog.resolve(pinnedIds) }
     var pickerOpen by remember { mutableStateOf(false) }
     var optionsFor by remember { mutableStateOf<HomeAction?>(null) }
-    var editingIntention by remember { mutableStateOf(false) }
     var editingHome by remember { mutableStateOf(false) }
+    var modeSelectorOpen by remember { mutableStateOf(false) }
+    var modeManageOpen by remember { mutableStateOf(false) }
+    // The active arrangement is a pure resolution over the mode list and the
+    // manual choice (#155); the UI holds none of it. A deleted active mode
+    // resolves to the default here, with no intermediate empty state.
+    val modeNames by modeStore.modes
+    val modeChoice by modeStore.choice
+    val activeMode = resolveArrangement(modeNames, modeChoice)
+    LaunchedEffect(activeMode) { pinStore.setActive(activeMode ?: PinStore.DEFAULT_ARRANGEMENT) }
     // Focus has no producer yet; #9's slice supplies it rather than re-deciding the rule.
     val focusRunning = false
     // The one sheet in the app (ADR 0011, #133). Every surface that opens one
@@ -407,6 +450,10 @@ private fun BodhaHost(
             )
             return
         }
+        Surface.Today -> {
+            TodaySurface(intentionStore = intentionStore, sheets = sheets)
+            return
+        }
         else -> {
             PlaceholderSurface(title = place.surface.title, onBack = back)
             return
@@ -429,6 +476,8 @@ private fun BodhaHost(
     val state = resolveHome(
         HomeInputs(
             dailyIntention = intention?.textOn(now),
+            // Only a non-default mode labels Home; the spare Home stays spare.
+            contextLabel = activeMode,
             pinned = pinned,
             hidden = hidden,
             sessionIntent = sessionIntent,
@@ -441,7 +490,8 @@ private fun BodhaHost(
             onAction = openApp,
             onActionLongPress = { optionsFor = it },
             onAddAction = { pickerOpen = true },
-            onEditIntention = { editingIntention = true },
+            onOpenToday = { place = Place(Surface.Today) },
+            onContextLabelTap = { modeSelectorOpen = true },
             iconFor = { catalog.icon(it.id) },
             iconKey = catalog.version.intValue,
             // Labels name the destination, so they stay true when ADR 0011's
@@ -502,14 +552,28 @@ private fun BodhaHost(
         )
     }
     if (editingHome) {
-        EditHomeDialog(onAddPin = { pickerOpen = true }, onDismiss = { editingHome = false })
+        EditHomeDialog(
+            onAddPin = { pickerOpen = true },
+            onContextModes = { modeManageOpen = true },
+            onDismiss = { editingHome = false },
+        )
     }
-    if (editingIntention) {
-        IntentionEditorDialog(
-            current = intention?.textOn(now),
-            onSave = { intentionStore.set(it, LocalDateTime.now()) },
-            onClear = intentionStore::clear,
-            onDismiss = { editingIntention = false },
+    if (modeSelectorOpen) {
+        ModeSelectorDialog(
+            modes = modeNames,
+            current = activeMode,
+            onPick = modeStore::select,
+            onManage = { modeManageOpen = true; modeSelectorOpen = false },
+            onDismiss = { modeSelectorOpen = false },
+        )
+    }
+    if (modeManageOpen) {
+        ModeManageDialog(
+            modes = modeNames,
+            onCreate = modeStore::create,
+            onRename = modeStore::rename,
+            onDelete = modeStore::delete,
+            onDismiss = { modeManageOpen = false },
         )
     }
     optionsFor?.let { action ->

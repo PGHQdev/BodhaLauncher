@@ -102,6 +102,12 @@ fun DesignGallery() {
             onClick = {},
             trailing = { TrailingChevron() },
         )
+        ListRow(
+            title = "List row, tinted — the current choice",
+            subtitle = "The selected context mode",
+            onClick = {},
+            tinted = true,
+        )
         Spacer(Modifier.height(BodhaSpacing.xl))
 
         // Focus (ADR 0026), forced rather than requested: only one node can hold
@@ -126,6 +132,7 @@ fun DesignGallery() {
                 Text("Field, focused", style = BodhaType.body, color = colors.inkMuted)
             }
             ListRow(title = "List row, focused", onClick = {})
+            ListRow(title = "Mode row, tinted, focused", onClick = {}, tinted = true)
             // The two rows that carry per-item actions, so the hint and the
             // actions node are inside both guards rather than only on a screen.
             CardRow(title = "Pin row, focused", onClick = {}, onLongClick = {})
@@ -144,6 +151,7 @@ fun DesignGallery() {
         // now a bare CardRow or ListRow call is covered by the vocabulary block
         // above, and repeating it here would only inflate the walk's count.
         Text("Actionable components", style = BodhaType.overline, color = colors.inkMuted)
+        OnboardingPromiseStep(onContinue = {})
         IntentionCard(text = "Today's intention, tinted", muted = false, onEdit = {})
         AppRow(app = GALLERY_APP, iconKey = Unit, iconFor = { null }, onOpen = {}, onLongPress = {})
         AppRow(

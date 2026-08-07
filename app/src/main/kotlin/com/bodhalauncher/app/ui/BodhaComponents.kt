@@ -210,6 +210,8 @@ fun ListRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     subtitle: String? = null,
+    /** Rule 2's tinted fill on a row that scrolls: the current choice — the selected context mode. */
+    tinted: Boolean = false,
     onLongClick: (() -> Unit)? = null,
     leading: (@Composable () -> Unit)? = null,
     trailing: (@Composable () -> Unit)? = null,
@@ -236,6 +238,7 @@ fun ListRow(
             horizontalArrangement = Arrangement.spacedBy(BodhaSpacing.m),
             modifier = Modifier
                 .fillMaxWidth()
+                .then(if (tinted) Modifier.background(colors.accentTint) else Modifier)
                 .touchTargetFloor()
                 .onFocusChanged { focused = it.isFocused }
                 .actionsKeys(actions, onLongClick)

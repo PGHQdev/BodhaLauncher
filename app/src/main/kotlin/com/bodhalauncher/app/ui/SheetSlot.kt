@@ -52,6 +52,9 @@ sealed class Sheet {
 
     /** What a capability is for, before any system screen (#18, #157). */
     class Education(val screen: EducationScreen) : Sheet()
+
+    /** Today's intention editor (#158) — the one place the intention is set. */
+    class IntentionEditor : Sheet()
 }
 
 /**

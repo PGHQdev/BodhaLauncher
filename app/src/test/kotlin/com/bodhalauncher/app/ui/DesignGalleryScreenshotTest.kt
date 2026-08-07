@@ -28,7 +28,8 @@ import org.robolectric.annotation.GraphicsMode
 // gallery already measured exactly 3000, which is the silent-clip signature.
 // Raised again for ADR 0022's revealed affordances, which took the large-type
 // fixture to 3975 — inside 4200, but a component away from clipping again.
-@Config(sdk = [35], qualifiers = "w320dp-h5200dp", application = android.app.Application::class)
+// Raised for #135/#155's specimens (the promise step, the tinted list row).
+@Config(sdk = [35], qualifiers = "w320dp-h6500dp", application = android.app.Application::class)
 class DesignGalleryScreenshotTest {
 
     @get:Rule
