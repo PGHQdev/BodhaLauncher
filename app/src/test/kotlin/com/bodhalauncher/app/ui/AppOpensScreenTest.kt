@@ -14,7 +14,13 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.bodhalauncher.engine.AwarenessDuration
+import com.bodhalauncher.engine.AwarenessUsage
+import com.bodhalauncher.engine.ForegroundEntry
 import com.bodhalauncher.engine.LaunchRecord
+import com.bodhalauncher.engine.UnavailableReason
+import com.bodhalauncher.engine.appOpensSourceLine
+import com.bodhalauncher.engine.mergeLaunches
 import com.bodhalauncher.engine.resolveAppOpens
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -25,9 +31,10 @@ import org.robolectric.annotation.Config
 import java.time.LocalDateTime
 
 /**
- * Awareness's App view as it renders (#174): one app's opens under the day they
- * fell in, the counts over what is drawn, and nothing claiming how long the app
- * was in front.
+ * Awareness's App view as it renders (#174, #175): one app's opens under the day
+ * they fell in, the counts over what is drawn, and a foreground figure that is
+ * either a span or the reason there is none — never a 0 filling in for an
+ * unknown.
  */
 @OptIn(androidx.compose.ui.test.ExperimentalTestApi::class)
 @RunWith(AndroidJUnit4::class)
@@ -37,6 +44,8 @@ class AppOpensScreenTest {
     private companion object {
         val TIME = Regex("""\d{1,2}:\d{2}""")
         val DAY_HEADINGS = listOf("Friday, 7 August", "Thursday, 6 August")
+        val SPAN = AwarenessDuration.Span(8_100_000)
+        val NO_ACCESS = AwarenessDuration.Unavailable(UnavailableReason.NoUsageAccess)
     }
 
     @get:Rule
@@ -56,6 +65,9 @@ class AppOpensScreenTest {
         .flatMap { it.config.getOrNull(SemanticsProperties.Text).orEmpty() }
         .map { it.text }
 
+    private fun actionable(): List<SemanticsNode> =
+        nodes().filter { SemanticsActions.OnClick in it.config }
+
     private fun opened(minute: Int, day: Int = 7, hour: Int = 9, session: Long? = 1) =
         LaunchRecord("atlas", LocalDateTime.of(2026, 8, day, hour, minute), session)
 
@@ -65,14 +77,22 @@ class AppOpensScreenTest {
         opened(minute = 10, day = 6, session = 3),
     )
 
+    private var turnedOn = 0
+
     private fun setScreen(
         label: String? = "Atlas",
         launches: List<LaunchRecord> = this.launches,
+        // Access held by default, so a test that is about the opens draws no way
+        // in to the education and does not have to say so.
+        usage: AwarenessUsage = AwarenessUsage.Live,
+        foreground: AwarenessDuration = SPAN,
     ) = compose.setContent {
         BodhaTheme {
             AppOpensScreen(
-                view = resolveAppOpens("atlas", label, launches),
+                view = resolveAppOpens("atlas", label, launches, foreground),
                 label = label ?: "atlas",
+                usage = usage,
+                onTurnOn = { turnedOn++ },
             )
         }
     }
@@ -103,24 +123,131 @@ class AppOpensScreenTest {
     }
 
     /**
-     * Foreground time needs usage access and arrives with it (#175). Nothing here
-     * may stand in for it — least of all a 0, which would be a claim rather than
-     * the absence of one.
+     * With access held the view draws the span, and the opens are both sources'
+     * at once (#175): the 9:15 launch Bodha logged, and an 11:00 opening only
+     * Android saw. The system's entry four seconds after a logged launch is the
+     * same opening and is drawn once.
      */
     @Test
-    fun `no drawn string on the App view is a duration`() {
-        setScreen()
+    fun `with usage access the App view draws the span and both sources' opens`() {
+        val merged = mergeLaunches(
+            appId = "atlas",
+            logged = launches,
+            entries = listOf(
+                ForegroundEntry("atlas", LocalDateTime.of(2026, 8, 7, 9, 15, 4)),
+                ForegroundEntry("ledger", LocalDateTime.of(2026, 8, 7, 10, 30)),
+                ForegroundEntry("atlas", LocalDateTime.of(2026, 8, 7, 11, 0)),
+            ),
+        )
+        setScreen(launches = merged)
 
-        val durationWords = listOf("minute", "hour", "second", "foreground", "screen time")
-        for (line in drawnText()) {
-            for (word in durationWords) {
-                assertTrue(
-                    "\"$line\" reads as a duration before #175 can measure one",
-                    !line.lowercase().contains(word),
-                )
-            }
+        val drawn = drawnText()
+        assertTrue("2 hours 15 minutes in the foreground" in drawn)
+        assertTrue("4 opens · 3 sessions" in drawn)
+        assertEquals(
+            listOf("Friday, 7 August", "21:30", "11:00", "9:15", "Thursday, 6 August", "9:10"),
+            drawn.filter { it in DAY_HEADINGS || it.matches(TIME) },
+        )
+        // Nothing at the foot: with access held there is no absence to name.
+        assertEquals(null, appOpensSourceLine(AwarenessUsage.Live))
+    }
+
+    /**
+     * Both absences named in words, and the one thing neither may be is a 0 —
+     * that would say the app was never in front, which is a claim about the
+     * reader built out of a gap in Bodha's reach (#175, ADR 0013).
+     */
+    @Test
+    fun `without usage access the App view names the absence and draws no zero`() {
+        setScreen(usage = AwarenessUsage.Ungranted(offersTurnOn = true), foreground = NO_ACCESS)
+
+        val drawn = drawnText()
+        assertTrue("Foreground time needs usage access" in drawn)
+        assertTrue("Opens from notifications and other apps need usage access" in drawn)
+        // The launch-log spine is untouched by the absence.
+        assertTrue("3 opens · 3 sessions" in drawn)
+        for (line in drawn) {
             assertTrue("\"$line\" is a bare zero", line.trim() != "0")
+            assertTrue("\"$line\" counts nothing", !line.startsWith("0 "))
         }
+    }
+
+    /** No package to look up is no measurement, and says so rather than reporting nothing. */
+    @Test
+    fun `a work profile app names the profile limit rather than reporting nothing recorded`() {
+        setScreen(foreground = AwarenessDuration.Unavailable(UnavailableReason.OtherProfile))
+
+        val drawn = drawnText()
+        assertTrue("Foreground time is recorded for the main profile only" in drawn)
+        assertTrue("No foreground time recorded" !in drawn)
+    }
+
+    /** A revocation names what stopped; the record it did not touch keeps standing. */
+    @Test
+    fun `a revoked grant names what stopped and leaves the opens standing`() {
+        setScreen(usage = AwarenessUsage.Revoked, foreground = NO_ACCESS)
+
+        val drawn = drawnText()
+        assertTrue("Foreground time stopped when usage access was turned off" in drawn)
+        assertTrue(
+            "Opens from notifications and other apps stopped when usage access was turned off" in drawn,
+        )
+        assertEquals(listOf("21:30", "9:15", "9:10"), drawn.filter { it.matches(TIME) })
+        // A revocation is a state to rest on, not a second chance to ask.
+        assertEquals(emptyList<String>(), actionable().mapNotNull { it.spokenName() })
+    }
+
+    /**
+     * The route in is the one flow (#157) and it is entered by a single node —
+     * a second would be a second copy of the wiring, which is what #157 exists
+     * to prevent.
+     */
+    @Test
+    fun `the turn-on row is one node that enters the education flow once`() {
+        setScreen(usage = AwarenessUsage.Ungranted(offersTurnOn = true), foreground = NO_ACCESS)
+
+        val row = actionable().single()
+        assertEquals("Foreground time needs usage access", row.spokenName())
+        row.config[SemanticsActions.OnClick].action?.invoke()
+        assertEquals(1, turnedOn)
+        // Rule 3: it opens a sheet, so it navigates nowhere and draws no chevron.
+        assertEquals(emptyList<String>(), drawnText().filter { it == "›" })
+    }
+
+    /** ADR 0020's floor, on the one actionable node the degraded state publishes. */
+    @Test
+    fun `the turn-on row is at least 48dp on both axes and named`() {
+        setScreen(usage = AwarenessUsage.Ungranted(offersTurnOn = true), foreground = NO_ACCESS)
+
+        val floor = with(compose.density) { TOUCH_TARGET_MIN.roundToPx() }
+        val row = actionable().single()
+        assertTrue(
+            "${row.spokenName()} = ${row.size.width}x${row.size.height}px",
+            row.size.width >= floor && row.size.height >= floor,
+        )
+        assertTrue(!row.spokenName().isNullOrBlank())
+    }
+
+    /** ADR 0022: focus, then Enter, and no other way in is needed. */
+    @Test
+    fun `Tab reaches the turn-on row and Enter fires it`() {
+        setScreen(usage = AwarenessUsage.Ungranted(offersTurnOn = true), foreground = NO_ACCESS)
+
+        compose.tabTo(ACTIVITY_ROOT, "Foreground time needs usage access")
+        compose.press(ACTIVITY_ROOT, Key.Enter)
+        assertEquals(1, turnedOn)
+    }
+
+    /**
+     * A past refusal degrades quietly (#175, ADR 0017): the state is still named
+     * in full, and the ask is simply not made a second time.
+     */
+    @Test
+    fun `a declined refusal draws a plain note and no actionable node`() {
+        setScreen(usage = AwarenessUsage.Ungranted(offersTurnOn = false), foreground = NO_ACCESS)
+
+        assertTrue("Foreground time needs usage access" in drawnText())
+        assertEquals(emptyList<String>(), actionable().mapNotNull { it.spokenName() })
     }
 
     /** Rule 3: no chevron, because an open row navigates nowhere (ADR 0025). */
@@ -129,10 +256,7 @@ class AppOpensScreenTest {
         setScreen()
 
         assertEquals(emptyList<String>(), drawnText().filter { it == "›" })
-        assertEquals(
-            emptyList<SemanticsNode>(),
-            nodes().filter { SemanticsActions.OnClick in it.config },
-        )
+        assertEquals(emptyList<SemanticsNode>(), actionable())
     }
 
     /**
@@ -147,7 +271,15 @@ class AppOpensScreenTest {
             BodhaTheme {
                 BackHandler { backs++ }
                 Box(Modifier.fillMaxSize().escapeIsBack()) {
-                    AppOpensScreen(view = null, label = "Atlas")
+                    AppOpensScreen(
+                        view = null,
+                        label = "Atlas",
+                        // A read that failed has no figure to state either, so
+                        // the shell says nothing at all rather than blaming a
+                        // grant that is held.
+                        usage = AwarenessUsage.Live,
+                        onTurnOn = {},
+                    )
                 }
             }
         }

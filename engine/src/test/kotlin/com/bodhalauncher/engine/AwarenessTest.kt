@@ -427,22 +427,257 @@ class AwarenessTest {
     }
 
     /**
-     * Foreground time needs usage access and arrives with it (#175). Until then
-     * the view has no field for it — pinned here as a shape, because a field
-     * resolving to 0 would say the app was never in front, which is a different
-     * claim from "nothing measured it".
+     * The shape #174 pinned as absent, now present and pinned as a **named
+     * state** (#175). The field's type is what makes a 0 unsayable: a `Long`
+     * here could be filled in with one and would say the app was never in front,
+     * which is a different claim from "nothing measured it".
+     *
+     * The default is the state a phone without usage access is permanently in,
+     * so a caller that reads no usage at all gets the true answer rather than an
+     * optimistic one.
      */
     @Test
-    fun `the App view carries no duration field at all`() {
-        val fields = AppOpens::class.java.declaredFields.map { it.name }
+    fun `the App view's duration is a named state, defaulting to the absence`() {
+        val field = AppOpens::class.java.declaredFields.single { it.name == "foreground" }
 
-        assertEquals(listOf("appId", "name", "installed", "days", "opens", "sessions"), fields)
-        for (word in listOf("duration", "millis", "seconds", "foreground", "screen")) {
-            assert(fields.none { it.lowercase().contains(word) }) {
-                "AppOpens carries \"$word\" before #175 grants it a reading"
-            }
-        }
+        assertEquals(AwarenessDuration::class.java, field.type)
+        assertEquals(
+            AwarenessDuration.Unavailable(UnavailableReason.NoUsageAccess),
+            resolveAppOpens("atlas", "Atlas", listOf(opened("atlas", now))).foreground,
+        )
     }
+
+    // Durations and the launches Bodha didn't mediate (#175).
+
+    private fun front(appId: String, at: LocalDateTime) = ForegroundEntry(appId, at)
+
+    private val logged = listOf(opened("atlas", day(2026, 8, 7, 9, 15), session = 1))
+
+    @Test
+    fun `a system opening inside the same-launch window is the launch Bodha already logged`() {
+        val merged = mergeLaunches(
+            appId = "atlas",
+            logged = logged,
+            // Bodha writes the record, then starts the activity: the system's
+            // entry is always the later of the two.
+            entries = listOf(front("atlas", day(2026, 8, 7, 9, 15).plusSeconds(4))),
+        )
+
+        assertEquals(1, merged.size)
+        assertEquals(1L, merged.single().session)
+    }
+
+    @Test
+    fun `a system opening outside the window is a launch Bodha did not mediate and names no session`() {
+        val merged = mergeLaunches(
+            appId = "atlas",
+            logged = logged,
+            entries = listOf(front("atlas", day(2026, 8, 7, 9, 15).plusSeconds(11))),
+        )
+
+        assertEquals(2, merged.size)
+        assertEquals(null, merged.last().session)
+        assertEquals(day(2026, 8, 7, 9, 15).plusSeconds(11), merged.last().at)
+    }
+
+    /** One visit continuing — a new activity, a returning dialog, a rotation. */
+    @Test
+    fun `an app resuming its own next activity is one visit continuing`() {
+        val merged = mergeLaunches(
+            appId = "atlas",
+            logged = emptyList(),
+            entries = listOf(
+                front("atlas", day(2026, 8, 7, 11, 0)),
+                front("atlas", day(2026, 8, 7, 11, 1)),
+                front("atlas", day(2026, 8, 7, 11, 2)),
+            ),
+        )
+
+        assertEquals(listOf(day(2026, 8, 7, 11, 0)), merged.map { it.at })
+    }
+
+    /**
+     * The order-of-operations pin. Collapsing after filtering to one app leaves
+     * every survivor with the same predecessor, so exactly one entry would live
+     * however many times the app was opened — a silent one-row bug the shape of
+     * a working feature.
+     */
+    @Test
+    fun `another app between two resumes of the same app leaves two opens standing`() {
+        val merged = mergeLaunches(
+            appId = "atlas",
+            logged = emptyList(),
+            entries = listOf(
+                front("atlas", day(2026, 8, 7, 11, 0)),
+                front("ledger", day(2026, 8, 7, 11, 5)),
+                front("atlas", day(2026, 8, 7, 11, 9)),
+            ),
+        )
+
+        assertEquals(
+            listOf(day(2026, 8, 7, 11, 0), day(2026, 8, 7, 11, 9)),
+            merged.map { it.at },
+        )
+    }
+
+    @Test
+    fun `merged opens come back in time order`() {
+        val merged = mergeLaunches(
+            appId = "atlas",
+            logged = listOf(
+                opened("atlas", day(2026, 8, 7, 13, 0), session = 2),
+                opened("atlas", day(2026, 8, 7, 9, 15), session = 1),
+            ),
+            entries = listOf(
+                front("atlas", day(2026, 8, 7, 20, 0)),
+                front("ledger", day(2026, 8, 7, 10, 55)),
+                front("atlas", day(2026, 8, 7, 11, 0)),
+                front("ledger", day(2026, 8, 7, 15, 0)),
+            ),
+        )
+
+        assertEquals(
+            listOf(
+                day(2026, 8, 7, 9, 15),
+                day(2026, 8, 7, 11, 0),
+                day(2026, 8, 7, 13, 0),
+                day(2026, 8, 7, 20, 0),
+            ),
+            merged.map { it.at },
+        )
+    }
+
+    @Test
+    fun `with no foreground entries the merge is the launch log unchanged`() {
+        assertEquals(logged, mergeLaunches("atlas", logged, entries = emptyList()))
+    }
+
+    @Test
+    fun `usage access never granted resolves the figure to unavailable and offers the way in`() {
+        val state = resolveAwarenessUsage(granted = false, educationShown = false, grantSeen = false)
+
+        assertEquals(AwarenessUsage.Ungranted(offersTurnOn = true), state)
+        assertEquals(
+            AwarenessDuration.Unavailable(UnavailableReason.NoUsageAccess),
+            resolveAppDuration(state, packageName = "com.atlas", reading = mapOf("com.atlas" to 900_000)),
+        )
+        assertEquals("Foreground time needs usage access", awarenessForegroundLine(
+            resolveAppDuration(state, "com.atlas", null), state,
+        ))
+    }
+
+    /** A declined education drops the turn-on; the state itself is unchanged. */
+    @Test
+    fun `a declined education drops the turn-on and rests on the named state`() {
+        val state = resolveAwarenessUsage(granted = false, educationShown = true, grantSeen = false)
+
+        assertEquals(AwarenessUsage.Ungranted(offersTurnOn = false), state)
+        assertEquals(
+            "Foreground time needs usage access",
+            awarenessForegroundLine(AwarenessDuration.Unavailable(UnavailableReason.NoUsageAccess), state),
+        )
+    }
+
+    @Test
+    fun `a grant held this session and gone now names what stopped`() {
+        val state = resolveAwarenessUsage(granted = false, educationShown = true, grantSeen = true)
+
+        assertEquals(AwarenessUsage.Revoked, state)
+        assertEquals(
+            "Foreground time stopped when usage access was turned off",
+            awarenessForegroundLine(resolveAppDuration(state, "com.atlas", emptyMap()), state),
+        )
+        assertEquals(
+            "Opens from notifications and other apps stopped when usage access was turned off",
+            appOpensSourceLine(state),
+        )
+    }
+
+    /**
+     * A work-profile id carries a serial and resolves to no package to look up,
+     * so nothing could have measured it. Flattening the map to a `Long?` before
+     * resolving would turn that into a reading that found nothing.
+     */
+    @Test
+    fun `a granted read that never reached the app is unavailable, not none`() {
+        val state = AwarenessUsage.Live
+
+        assertEquals(
+            AwarenessDuration.Unavailable(UnavailableReason.OtherProfile),
+            resolveAppDuration(state, packageName = null, reading = mapOf("com.atlas" to 900_000)),
+        )
+        assertEquals(
+            AwarenessDuration.Unavailable(UnavailableReason.NoReading),
+            resolveAppDuration(state, packageName = "com.atlas", reading = null),
+        )
+    }
+
+    @Test
+    fun `an app absent from a successful reading is none rather than unavailable`() {
+        val state = AwarenessUsage.Live
+
+        assertEquals(
+            AwarenessDuration.None,
+            resolveAppDuration(state, "com.atlas", reading = mapOf("com.ledger" to 900_000)),
+        )
+        // A recorded zero is the same claim as an absence, and said the same way.
+        assertEquals(
+            AwarenessDuration.None,
+            resolveAppDuration(state, "com.atlas", reading = mapOf("com.atlas" to 0)),
+        )
+        assertEquals(
+            AwarenessDuration.Span(900_000),
+            resolveAppDuration(state, "com.atlas", reading = mapOf("com.atlas" to 900_000)),
+        )
+        assertEquals(null, appOpensSourceLine(state))
+    }
+
+    /** A figure of nothing is a sentence, because a `0` in a field is unreadable as an answer. */
+    @Test
+    fun `no foreground line renders a zero`() {
+        val lines = foregroundLines()
+
+        assertEquals(7, lines.size)
+        for (line in lines) {
+            assert(!line.split(" ").any { it.trimEnd('.', ',') == "0" }) { "\"$line\" renders a zero" }
+            assert(line.isNotBlank()) { "a foreground state rendered nothing at all" }
+        }
+        assertEquals("No foreground time recorded", awarenessForegroundLine(AwarenessDuration.None, AwarenessUsage.Live))
+        assertEquals(
+            "Under a minute in the foreground",
+            awarenessForegroundLine(AwarenessDuration.Span(42_000), AwarenessUsage.Live),
+        )
+        assertEquals(
+            "2 hours 15 minutes in the foreground",
+            awarenessForegroundLine(AwarenessDuration.Span(8_100_000), AwarenessUsage.Live),
+        )
+    }
+
+    /** Every arm of the two statement functions, for the sweep and the zero check alike. */
+    private fun foregroundLines(): List<String> = listOf(
+        awarenessForegroundLine(
+            AwarenessDuration.Unavailable(UnavailableReason.NoUsageAccess),
+            AwarenessUsage.Ungranted(offersTurnOn = true),
+        ),
+        awarenessForegroundLine(
+            AwarenessDuration.Unavailable(UnavailableReason.NoUsageAccess),
+            AwarenessUsage.Revoked,
+        ),
+        awarenessForegroundLine(
+            AwarenessDuration.Unavailable(UnavailableReason.NoUsageAccess),
+            AwarenessUsage.Live,
+        ),
+        awarenessForegroundLine(
+            AwarenessDuration.Unavailable(UnavailableReason.OtherProfile),
+            AwarenessUsage.Live,
+        ),
+        awarenessForegroundLine(
+            AwarenessDuration.Unavailable(UnavailableReason.NoReading),
+            AwarenessUsage.Live,
+        ),
+        awarenessForegroundLine(AwarenessDuration.None, AwarenessUsage.Live),
+        awarenessForegroundLine(AwarenessDuration.Span(8_100_000), AwarenessUsage.Live),
+    )
 
     @Test
     fun `no rendered line carries a delta, a direction word or a ranking`() {
@@ -474,6 +709,11 @@ class AwarenessTest {
             awarenessIntentWord(intentional = false),
         ) + sessionDetailNotes(
             SessionDetail(session, emptyList(), checks = 3, repeatedOpen = true, statement = null)
+        ) + foregroundLines() + listOfNotNull(
+            appOpensSourceLine(AwarenessUsage.Ungranted(offersTurnOn = true)),
+            appOpensSourceLine(AwarenessUsage.Revoked),
+            appOpensSourceLine(AwarenessUsage.Live),
+            AWARENESS_TURN_ON_USAGE,
         )
         val forbidden = listOf("+", "-", "more", "less", "up", "down", "better", "worse", "most", "least")
         for (line in lines) {

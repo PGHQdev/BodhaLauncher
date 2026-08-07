@@ -14,6 +14,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.bodhalauncher.engine.AwarenessSession
 import com.bodhalauncher.engine.AwarenessToday
+import com.bodhalauncher.engine.AwarenessUsage
 import com.bodhalauncher.engine.LaunchRecord
 import com.bodhalauncher.engine.Place
 import com.bodhalauncher.engine.SessionDetail
@@ -81,6 +82,10 @@ class AwarenessRouteTest {
             appId != null -> AppOpensScreen(
                 view = resolveAppOpens(appId, "Atlas", detail.launches),
                 label = "Atlas",
+                // Access held, so the App view carries no way in to the
+                // education and the route under test is the one this walks.
+                usage = AwarenessUsage.Live,
+                onTurnOn = {},
             )
 
             open != null -> SessionDetailScreen(

@@ -20,12 +20,16 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.bodhalauncher.engine.AWARENESS_TURN_ON_USAGE
 import com.bodhalauncher.engine.AppOpens
 import com.bodhalauncher.engine.AwarenessSession
 import com.bodhalauncher.engine.AwarenessToday
+import com.bodhalauncher.engine.AwarenessUsage
 import com.bodhalauncher.engine.SessionDetail
 import com.bodhalauncher.engine.appDayLine
 import com.bodhalauncher.engine.appOpensLine
+import com.bodhalauncher.engine.appOpensSourceLine
+import com.bodhalauncher.engine.awarenessForegroundLine
 import com.bodhalauncher.engine.awarenessIntentWord
 import com.bodhalauncher.engine.awarenessSessionLine
 import com.bodhalauncher.engine.awarenessTodayLine
@@ -269,19 +273,27 @@ fun LaunchRow(
 }
 
 /**
- * Awareness's App view (#174): one app — when Bodha opened it, how often, and
- * how many sessions those opens fell in, all from the launch log, so it renders
- * with no permission granted (ADR 0013).
+ * Awareness's App view (#174, #175): one app — how long it was in front, when it
+ * was opened, how often, and how many sessions those opens fell in.
+ *
+ * The launch log is the spine and needs no permission (ADR 0013). Usage access
+ * fills in what Bodha cannot see on its own — the span, and the opens that came
+ * from a notification, from recents, from another app — and where it is absent
+ * the view **says so in a sentence** and draws nothing in its place. Not a
+ * blank, and never a 0: a zero in a duration field is a claim about the reader's
+ * behaviour built out of a gap in Bodha's reach.
  *
  * The opens sit under day headings, newest day first, because a bare list of
  * times a fortnight long tells a reader nothing about when. Each open is a row
  * **read rather than activated**: it is history, it navigates nowhere, and so it
  * carries no chevron and publishes no actionable node (ADR 0025 rule 3).
  *
- * Nothing here says how long the app was in front. That figure needs usage
- * access and arrives with it (#175); until then the view has no field for it at
- * all, rather than a field resolving to 0 — an unmeasured span and a span of
- * zero are different claims, and only one of them is true.
+ * The one thing on this screen that can be acted on is the route into the usage
+ * education, and it appears only where offering it is honest — never granted,
+ * and never yet declined. A revocation and a past refusal both rest on the
+ * stated absence, which is what "a past refusal degrades quietly" means (#175,
+ * ADR 0017). It is a card row without a chevron: it opens a sheet, and rule 3
+ * says a chevron means navigation and nothing else.
  *
  * Back and Escape leave for **root**, the same as the Session view they were
  * reached through, and for the same reason: ADR 0011 refuses a stack, so a
@@ -299,18 +311,44 @@ fun AppOpensScreen(
     view: AppOpens?,
     /** The title before a read lands: the app's name, or its id where it has none left. */
     label: String,
+    /**
+     * The surface's capability state, which words the degraded sentences the
+     * figure alone cannot: "never granted" and "turned off ten minutes ago" are
+     * the same absence to [AppOpens.foreground] and different things to say.
+     */
+    usage: AwarenessUsage,
+    /** Enters the one capability-education flow (#157), never a second copy of it. */
+    onTurnOn: () -> Unit,
 ) {
+    val colors = LocalBodhaColors.current
     val formats = LocalBodhaFormats.current
     if (view == null) {
         AwarenessList(title = label, line = null, focusSelf = true) {}
         return
     }
     AwarenessList(title = view.name, line = appOpensLine(view), focusSelf = true) {
+        val foreground = awarenessForegroundLine(view.foreground, usage)
+        if (usage is AwarenessUsage.Ungranted && usage.offersTurnOn) {
+            // Plain emphasis and one ink: this is a way in, not the screen's
+            // primary action, and a solid fill here would rank it above the
+            // record it sits over (ADR 0025, ADR 0013).
+            CardRow(title = foreground, subtitle = AWARENESS_TURN_ON_USAGE, onClick = onTurnOn)
+        } else {
+            Text(foreground, color = colors.inkMuted, style = BodhaType.body)
+        }
+        Spacer(Modifier.height(BodhaSpacing.l))
         view.days.forEach { day ->
             SectionOverline(appDayLine(day, formats.date))
             day.opens.forEach { open ->
                 ListRow(title = launchTimeLine(open, formats.clock), onClick = null)
             }
+        }
+        // What the rows are missing, said once at the foot rather than marked on
+        // every row: no row here claims which source it came from, because the
+        // reader opened the app rather than the plumbing.
+        appOpensSourceLine(usage)?.let { source ->
+            Spacer(Modifier.height(BodhaSpacing.l))
+            Text(source, color = colors.inkMuted, style = BodhaType.body)
         }
     }
 }

@@ -64,6 +64,14 @@ _Avoid_: preferred app, favourite, shortcut
 Bodha's own record of launches it mediates — app identity and timestamp, nothing else. The spine of Awareness's per-app views; needs no permission and keeps full history, unlike the system's few-day usage events.
 _Avoid_: usage stats (that's the system's), history, analytics (nothing is transmitted)
 
+**Unmediated launch**:
+An opening Android saw and Bodha did not — from a notification, from recents, from another app. Filled in from the system's usage events where usage access is granted, and carrying no session, because no session id was read at the moment it happened.
+_Avoid_: external launch, background launch, missed launch (nothing was missed; Bodha was not in the path)
+
+**Foreground duration**:
+An app's time in front over a rendered window, from Android's usage statistics. Needs usage access, covers the main profile only, and where it is absent the field states the absence in words and never resolves to 0.
+_Avoid_: screen time, usage time (both read as a verdict)
+
 **Intentional session**:
 A session in which the user stated an intent — answered the Intent Prompt, wrote an Open Check intention, or ran a Focus session. Every other session is unclassified.
 _Avoid_: unintentional session (the phone doesn't know), mindful session

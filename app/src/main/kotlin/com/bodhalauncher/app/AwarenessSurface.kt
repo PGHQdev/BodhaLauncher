@@ -9,10 +9,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import com.bodhalauncher.app.awareness.toRecord
+import com.bodhalauncher.app.capability.CapabilityEducation
 import com.bodhalauncher.app.data.BodhaDatabase
 import com.bodhalauncher.app.data.EventLogger
 import com.bodhalauncher.app.focus.toIntentSignal
 import com.bodhalauncher.app.home.AppCatalog
+import com.bodhalauncher.app.home.UsageReader
 import com.bodhalauncher.app.intent.IntentRecordStore
 import com.bodhalauncher.app.session.SessionRuntime
 import com.bodhalauncher.app.session.toRecord
@@ -22,20 +24,39 @@ import com.bodhalauncher.app.ui.SessionDetailScreen
 import com.bodhalauncher.app.ui.minuteNow
 import com.bodhalauncher.engine.AwarenessSession
 import com.bodhalauncher.engine.AwarenessToday
+import com.bodhalauncher.engine.Capability
+import com.bodhalauncher.engine.EducationEntry
 import com.bodhalauncher.engine.IntentSignal
 import com.bodhalauncher.engine.LaunchRecord
+import com.bodhalauncher.engine.RetentionCategory
+import com.bodhalauncher.engine.RetentionConfig
 import com.bodhalauncher.engine.SessionDetail
 import com.bodhalauncher.engine.dayKey
 import com.bodhalauncher.engine.dayStart
+import com.bodhalauncher.engine.mergeLaunches
+import com.bodhalauncher.engine.resolveAppDuration
 import com.bodhalauncher.engine.resolveAppOpens
 import com.bodhalauncher.engine.resolveAwarenessSessions
 import com.bodhalauncher.engine.resolveAwarenessToday
+import com.bodhalauncher.engine.resolveAwarenessUsage
+import com.bodhalauncher.engine.resolveRetention
 import com.bodhalauncher.engine.resolveSessionDetail
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
+
+/**
+ * What one read of an app yielded (#175): the launch log and Android's usage
+ * statistics, merged and folded on the IO thread, and the raw foreground map
+ * left as it came back so the difference between "absent from a reading" and
+ * "no reading" survives to [resolveAppDuration].
+ */
+private data class AppReading(
+    val launches: List<LaunchRecord>,
+    val foreground: Map<String, Long>?,
+)
 
 /** What one read of the day yielded — resolved together so the count and the rows never disagree. */
 private data class AwarenessDay(
@@ -70,12 +91,19 @@ private data class AwarenessDay(
  * The cost is named rather than hidden: Escape from the App view drops to root
  * and loses the session the reader was in, which is the same trade ADR 0011
  * already accepted for losing a Search query on the way to Settings.
+ *
+ * Where usage access is granted, the App view fills in what the launch log
+ * cannot see (#175). The grant is read here rather than per view, so one state
+ * words every degraded sentence on the surface and no two figures can disagree
+ * about why they are missing.
  */
 @Composable
 fun AwarenessSurface(
     sessions: SessionRuntime,
     events: EventLogger,
     catalog: AppCatalog,
+    usage: UsageReader,
+    education: CapabilityEducation,
     onBack: () -> Unit,
 ) {
     val now = minuteNow()
@@ -124,6 +152,24 @@ fun AwarenessSurface(
         if (id !in icons) icons[id] = runCatching { catalog.icon(id) }.getOrNull()
         icons[id]
     }
+    val usageGranted = education.granted(Capability.UsageAccess)
+    // Seen-held marks a later absence as a revocation rather than never-granted,
+    // the digest slot's rule (#161). Composition-scoped, because no foreground
+    // reading is stored (ADR 0009) and there is nothing else to infer it from.
+    var usageGrantSeen by remember { mutableStateOf(false) }
+    if (usageGranted) usageGrantSeen = true
+    val usageState = resolveAwarenessUsage(
+        granted = usageGranted,
+        educationShown = education.educationShown(Capability.UsageAccess),
+        grantSeen = usageGrantSeen,
+    )
+    // The one window both usage reads take: the 4am-snapped floor `launch_record`
+    // is itself pruned to, so a span and the opens under it provably cover the
+    // same stretch of time. It moves once a day rather than once a minute, which
+    // is what makes it safe to key a read on.
+    val usageFrom = resolveRetention(now, RetentionConfig())
+        .cutoffs.getValue(RetentionCategory.RawUsageEvents)
+        .toInstant().toEpochMilli()
     var open by remember { mutableStateOf<Long?>(null) }
     var openApp by remember { mutableStateOf<String?>(null) }
     val openSession = day?.sessions?.firstOrNull { it.record.id == open }
@@ -138,19 +184,51 @@ fun AwarenessSurface(
             // composition, not in SQL. Resolving in composition rather than
             // inside the read is what lets a catalog that answers later name the
             // app without the log being read again.
-            val launches by produceState<List<LaunchRecord>?>(null, appId) {
+            //
+            // Both usage reads are made unconditionally rather than behind
+            // `if (usageGranted)`: each guards itself on the grant, so the read
+            // that decides what is drawn is the freshest one rather than a
+            // composition-old boolean (#175).
+            val reading by produceState<AppReading?>(
+                null, appId, usageFrom, usageGranted, education.resumeTick,
+            ) {
                 value = withContext(Dispatchers.IO) {
                     runCatching {
-                        BodhaDatabase.get(context).launchRecords()
+                        val logged = BodhaDatabase.get(context).launchRecords()
                             .forApp(appId)
                             .map { it.toRecord() }
+                        AppReading(
+                            launches = mergeLaunches(
+                                appId = appId,
+                                logged = logged,
+                                entries = usage.foregroundEntries(usageFrom).orEmpty(),
+                            ),
+                            foreground = usage.usedSince(usageFrom),
+                        )
                     }.getOrNull()
                 }
             }
             val label = labelFor(appId)
             AppOpensScreen(
-                view = launches?.let { resolveAppOpens(appId, label, it) },
+                view = reading?.let {
+                    resolveAppOpens(
+                        appId = appId,
+                        label = label,
+                        launches = it.launches,
+                        // The one place the id-to-package bridge is needed: the
+                        // merge needs none, because a work-profile id matches no
+                        // usage entry by construction and so collapses to the
+                        // launch log on its own.
+                        foreground = resolveAppDuration(
+                            usage = usageState,
+                            packageName = catalog.primaryPackage(appId),
+                            reading = it.foreground,
+                        ),
+                    )
+                },
                 label = label ?: appId,
+                usage = usageState,
+                onTurnOn = { education.ask(Capability.UsageAccess, EducationEntry.FeatureTouch) },
             )
         }
 

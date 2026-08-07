@@ -747,6 +747,12 @@ private fun BodhaHost(
                 // same log the surfaces write to (#173).
                 events = events,
                 catalog = catalog,
+                // Foreground durations and the opens Bodha did not mediate, from
+                // the same reader Home's context lines already use (#175).
+                usage = usage,
+                // The usage grant, and the one way in to asking for it — never a
+                // second copy of the education wiring (#157).
+                education = education,
                 onBack = back,
             )
             return
