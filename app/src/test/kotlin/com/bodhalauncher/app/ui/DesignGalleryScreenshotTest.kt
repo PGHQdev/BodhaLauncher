@@ -31,7 +31,9 @@ import org.robolectric.annotation.GraphicsMode
 // Raised for #135/#155's specimens (the promise step, the tinted list row).
 // Raised for #136–#139's specimens: the multi-select rows and the four
 // onboarding steps took the large-type fixture past 6500.
-@Config(sdk = [35], qualifiers = "w320dp-h9500dp", application = android.app.Application::class)
+// Raised for Focus (#166, #170): the setup sheet, running surface and end
+// moment took the large-type fixture to exactly 9500 — the clip signature.
+@Config(sdk = [35], qualifiers = "w320dp-h12000dp", application = android.app.Application::class)
 class DesignGalleryScreenshotTest {
 
     @get:Rule

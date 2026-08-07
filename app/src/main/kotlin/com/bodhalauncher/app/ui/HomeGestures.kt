@@ -67,13 +67,14 @@ data class HomeGestures(
         get() = listOf(swipeDown, swipeUp, swipeLeft, swipeRight, doubleTapEmpty, longPressEmpty)
 }
 
-fun Modifier.homeGestures(gestures: HomeGestures): Modifier = this
+/** [surfaceName] because Focus carries the same fan-out (#167): one host, per-surface name. */
+fun Modifier.homeGestures(gestures: HomeGestures, surfaceName: String = "Home"): Modifier = this
     .semantics {
         // Custom actions are offered only on the node holding accessibility
         // focus, and a node with no description is not reliably focusable when
         // its children are. Naming the surface and marking it a traversal group
         // is what makes the actions actually reachable rather than merely present.
-        contentDescription = "Home"
+        contentDescription = surfaceName
         isTraversalGroup = true
         customActions = gestures.all.mapNotNull { action ->
             action.label?.let { label ->

@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import com.bodhalauncher.app.focus.PendingFocusEnd
 import com.bodhalauncher.engine.EducationScreen
 import com.bodhalauncher.engine.HomeAction
 import com.bodhalauncher.engine.PromptDecision
@@ -47,8 +48,12 @@ sealed class Sheet {
      */
     class IntentPrompt(val decision: PromptDecision) : Sheet()
 
-    /** The pause before a ruled app (#8). The launch is gated until this answers. */
-    class OpenCheck(val app: HomeAction) : Sheet()
+    /**
+     * The pause before a ruled app (#8). The launch is gated until this answers.
+     * [raisedByFocus] marks a check the session's allowed list fired (#168), so
+     * the proceed is counted against the session rather than a rule.
+     */
+    class OpenCheck(val app: HomeAction, val raisedByFocus: Boolean = false) : Sheet()
 
     /** A timed session's end moment (#75). */
     class SessionEnd(val end: TimedSessionEnd) : Sheet()
@@ -64,6 +69,12 @@ sealed class Sheet {
 
     /** The snooze duration, one decision after [NotificationActions] replaces it (#163). */
     class SnoozeDurations(val key: String) : Sheet()
+
+    /** Focus setup (#166) — one decision; dismissing starts nothing. */
+    class FocusSetup : Sheet()
+
+    /** A Focus session's end moment (#170), owed to the next arrival at root. */
+    class FocusEnd(val moment: PendingFocusEnd) : Sheet()
 }
 
 /**
@@ -158,12 +169,20 @@ class SheetSlot(initial: Sheet? = null) {
         fun saver(session: () -> SessionId?) = listSaver<SheetSlot, String>(
             save = {
                 (it.current as? Sheet.OpenCheck)
-                    ?.let { sheet -> listOf(sheet.app.id, sheet.app.label, sessionKey(session)) }
+                    ?.let { sheet ->
+                        listOf(
+                            sheet.app.id, sheet.app.label, sessionKey(session),
+                            // Focus-raised survives too, or the restored proceed
+                            // would go uncounted against the session (#168).
+                            if (sheet.raisedByFocus) "1" else "0",
+                        )
+                    }
                     ?: emptyList()
             },
             restore = {
-                if (it[2] == sessionKey(session)) SheetSlot(Sheet.OpenCheck(HomeAction(it[0], it[1])))
-                else SheetSlot()
+                if (it[2] == sessionKey(session)) {
+                    SheetSlot(Sheet.OpenCheck(HomeAction(it[0], it[1]), raisedByFocus = it[3] == "1"))
+                } else SheetSlot()
             },
         )
 

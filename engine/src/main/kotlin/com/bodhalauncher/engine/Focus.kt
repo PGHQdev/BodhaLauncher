@@ -108,7 +108,7 @@ fun extendFocusSession(record: FocusRecord, allowedAppIds: Set<String>, now: Ins
 /** The running surface's time line, derived from the end instant at render (#166). */
 fun focusRemainingPhrase(endsAt: Instant, now: Instant): String {
     val minutes = Duration.between(now, endsAt).toMinutes()
-    return if (minutes < 1) "Under a minute left" else "${plural(minutes, "minute")} left"
+    return if (minutes < 1) "Under a minute remaining" else "${plural(minutes, "minute")} remaining"
 }
 
 /**

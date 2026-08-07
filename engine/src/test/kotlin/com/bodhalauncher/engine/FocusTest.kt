@@ -88,9 +88,9 @@ class FocusTest {
     @Test
     fun `the remaining phrase derives from the end instant`() {
         val s = session(minutes = 30)
-        assertEquals("30 minutes left", focusRemainingPhrase(s.endsAt, start))
-        assertEquals("1 minute left", focusRemainingPhrase(s.endsAt, start.plusSeconds(29 * 60)))
-        assertEquals("Under a minute left", focusRemainingPhrase(s.endsAt, start.plusSeconds(29 * 60 + 30)))
+        assertEquals("30 minutes remaining", focusRemainingPhrase(s.endsAt, start))
+        assertEquals("1 minute remaining", focusRemainingPhrase(s.endsAt, start.plusSeconds(29 * 60)))
+        assertEquals("Under a minute remaining", focusRemainingPhrase(s.endsAt, start.plusSeconds(29 * 60 + 30)))
     }
 
     @Test
