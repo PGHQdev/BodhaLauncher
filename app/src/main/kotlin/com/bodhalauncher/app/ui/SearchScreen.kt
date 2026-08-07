@@ -74,17 +74,21 @@ fun SearchScreen(
                 // The overline is plain text, not an item boundary a key would
                 // protect: sections never reorder, the engine fixes that.
                 item(key = "overline:$section") { SectionOverline(section.heading) }
-                items(count = rows.size, key = { rows[it].key }) { i ->
+                items(count = rows.size, key = { rows[it].result.key }) { i ->
                     val row = rows[i]
-                    val ownerId = when (row) {
-                        is AppResult -> row.app.id
-                        is ShortcutResult -> row.shortcut.appId
+                    val result = row.result
+                    val ownerId = when (result) {
+                        is AppResult -> result.app.id
+                        is ShortcutResult -> result.shortcut.appId
                     }
                     val icon = remember(ownerId, iconKey) { iconFor(ownerId) }
-                    // No long-press yet: result actions are #184's slice.
+                    // No long-press yet: result actions are #184's slice. The
+                    // reason line rides as the subtitle — plain text, no tab
+                    // stop of its own (#182).
                     ListRow(
-                        title = row.label,
-                        onClick = { onOpen(row) },
+                        title = result.label,
+                        subtitle = row.reason,
+                        onClick = { onOpen(result) },
                         // The app's own mark, so bare rather than chipped (rule 5).
                         leading = if (icon != null) ({ AppMark(icon) }) else null,
                     )

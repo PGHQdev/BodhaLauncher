@@ -39,6 +39,7 @@ fun SearchSurface(
 ) {
     val allApps by catalog.apps
     val hidden by pinStore.hidden
+    val pinned by pinStore.pinned
     val hiddenSearchable by libraryStore.hiddenSearchable
     // Re-read when any package changes: a shortcut's lifetime is its app's.
     val shortcuts = remember(catalog.version.intValue) { catalog.allShortcuts() }
@@ -56,6 +57,7 @@ fun SearchSurface(
                 shortcuts = shortcuts.map { SearchShortcut(id = it.shortcutId, appId = it.appId, label = it.label) },
                 query = query,
                 hidden = hidden,
+                pinned = pinned.toSet(),
                 hiddenSearchable = hiddenSearchable,
             )
         ),

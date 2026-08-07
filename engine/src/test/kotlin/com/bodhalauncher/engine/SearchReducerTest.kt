@@ -15,7 +15,10 @@ class SearchReducerTest {
     private val installed = listOf(app("Instagram"), app("Telegram"), app("Camera"))
 
     private fun labels(search: SearchState, section: SearchSection): List<String> =
-        search.sections.firstOrNull { it.section == section }?.rows?.map { it.label }.orEmpty()
+        search.sections.firstOrNull { it.section == section }?.rows?.map { it.result.label }.orEmpty()
+
+    private fun reasons(search: SearchState, section: SearchSection): List<String?> =
+        search.sections.firstOrNull { it.section == section }?.rows?.map { it.reason }.orEmpty()
 
     @Test
     fun `search opens listing nothing at all`() {
@@ -151,6 +154,66 @@ class SearchReducerTest {
             listOf("New chat"),
             labels(resolveSearch(inputs.copy(hiddenSearchable = true)), SearchSection.Shortcuts),
         )
+    }
+
+    @Test
+    fun `an exact label match outranks everything, and says so`() {
+        val search = resolveSearch(
+            SearchInputs(
+                apps = listOf(app("Camera"), app("Camera FV-5"), app("Camcorder")),
+                query = "camera",
+                pinned = setOf("camera fv-5"),
+            )
+        )
+
+        assertEquals(listOf("Camera", "Camera FV-5"), labels(search, SearchSection.Apps))
+        assertEquals(listOf(REASON_EXACT_MATCH, REASON_PINNED), reasons(search, SearchSection.Apps))
+    }
+
+    @Test
+    fun `a pin outranks match quality but not an exact match`() {
+        val search = resolveSearch(
+            SearchInputs(
+                apps = listOf(app("Instagram"), app("iNaturalist")),
+                query = "in",
+                pinned = setOf("instagram"),
+            )
+        )
+
+        assertEquals(listOf("Instagram", "iNaturalist"), labels(search, SearchSection.Apps))
+        assertEquals(listOf(REASON_PINNED, null), reasons(search, SearchSection.Apps))
+    }
+
+    @Test
+    fun `an earlier match in the label outranks a later one`() {
+        val search = resolveSearch(
+            SearchInputs(
+                apps = listOf(app("Google Photos"), app("Photos")),
+                query = "pho",
+            )
+        )
+
+        assertEquals(listOf("Photos", "Google Photos"), labels(search, SearchSection.Apps))
+        assertEquals(listOf(null, null), reasons(search, SearchSection.Apps))
+    }
+
+    @Test
+    fun `ties order identically on repeat runs`() {
+        val inputs = SearchInputs(
+            apps = listOf(app("Notes"), app("Notion"), app("Notebook")),
+            query = "no",
+        )
+
+        val first = resolveSearch(inputs)
+        assertEquals(first, resolveSearch(inputs))
+        assertEquals(listOf("Notebook", "Notes", "Notion"), labels(first, SearchSection.Apps))
+    }
+
+    @Test
+    fun `a row lifted by no tier carries no reason line`() {
+        val search = resolveSearch(SearchInputs(apps = installed, query = "insta"))
+
+        assertEquals(listOf<String?>(null), reasons(search, SearchSection.Apps))
     }
 
     @Test

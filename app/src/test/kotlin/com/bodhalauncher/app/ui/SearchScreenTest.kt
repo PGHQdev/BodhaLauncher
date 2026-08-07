@@ -21,6 +21,7 @@ import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.bodhalauncher.engine.AppResult
 import com.bodhalauncher.engine.HomeAction
+import com.bodhalauncher.engine.REASON_PINNED
 import com.bodhalauncher.engine.SearchInputs
 import com.bodhalauncher.engine.SearchResult
 import com.bodhalauncher.engine.SearchSection
@@ -66,10 +67,12 @@ class SearchScreenTest {
 
     /** The surface's own state loop, so what is driven is a real query round trip. */
     @Composable
-    private fun Search(onOpen: (SearchResult) -> Unit = {}) {
+    private fun Search(pinned: Set<String> = emptySet(), onOpen: (SearchResult) -> Unit = {}) {
         var query by remember { mutableStateOf("") }
         SearchScreen(
-            state = resolveSearch(SearchInputs(apps = installed, shortcuts = shortcuts, query = query)),
+            state = resolveSearch(
+                SearchInputs(apps = installed, shortcuts = shortcuts, query = query, pinned = pinned)
+            ),
             query = query,
             onQueryChange = { query = it },
             iconFor = { null },
@@ -204,6 +207,18 @@ class SearchScreenTest {
         assertTrue("Telegram" in drawnText())
         assertFalse("New chat" in drawnText())
         assertFalse(SearchSection.Shortcuts.heading in drawnText())
+    }
+
+    @Test
+    fun `a lifted result carries its reason line, and only then`() {
+        compose.setContent { BodhaTheme { Search(pinned = setOf("instagram")) } }
+
+        type("insta")
+        assertTrue(REASON_PINNED in drawnText())
+
+        compose.onNodeWithContentDescription(SEARCH_FIELD_LABEL).performTextClearance()
+        type("tele")
+        assertFalse(REASON_PINNED in drawnText())
     }
 
     @Test

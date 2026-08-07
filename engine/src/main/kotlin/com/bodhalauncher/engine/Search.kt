@@ -35,8 +35,22 @@ data class ShortcutResult(val shortcut: SearchShortcut) : SearchResult {
     override val label get() = shortcut.label
 }
 
+/**
+ * A ranked result: what matched, and the one-line reason it sits where it does.
+ * [reason] cites only a tier that actually lifted the row — an exact match or the
+ * user's own pin. Match quality is every row's baseline, so it explains nothing
+ * and a row ranked on it alone carries no line (#182).
+ */
+data class SearchRow(val result: SearchResult, val reason: String? = null)
+
 /** A section that has matches; sections without any are absent rather than empty. */
-data class SearchSectionState(val section: SearchSection, val rows: List<SearchResult>)
+data class SearchSectionState(val section: SearchSection, val rows: List<SearchRow>)
+
+/** The reason line under a result whose label is the whole query. */
+const val REASON_EXACT_MATCH = "Exact match"
+
+/** The reason line under a result the user pinned to Home. */
+const val REASON_PINNED = "Pinned to Home"
 
 /**
  * What Search may draw from. Apps and launcher shortcuts are the two live domains
@@ -55,6 +69,8 @@ data class SearchInputs(
     val query: String = "",
     /** App ids the user has hidden in the App Library (#62). */
     val hidden: Set<String> = emptySet(),
+    /** App ids pinned to Home — the explicit user choice ADR 0014 ranks second. */
+    val pinned: Set<String> = emptySet(),
     /** Whether hidden apps may match; off, a query never surfaces them. */
     val hiddenSearchable: Boolean = false,
 )
@@ -85,14 +101,15 @@ data class SearchState(val sections: List<SearchSectionState>, val nothingFound:
  * "New chat" would be a hole in the hiding.
  *
  * Matching is [matchesQuery], the one rule every domain shares. Ordering within a
- * section is alphabetical: ADR 0014's four ranking tiers need a launch log and a
- * per-query default that this slice has neither of, and a partial tier order
- * would rank on reasons the user could not be shown.
+ * section is ADR 0014's tiers, each a number the user could be shown (#182): an
+ * exact label match first, then the user's own pin, then how early the match
+ * landed, and alphabetical last so ties never swap between keystrokes. The two
+ * remaining tiers — per-query defaults (#185) and the launch log (#183) — slot
+ * between these as their stores arrive. Sections never interleave: ranking runs
+ * inside each one.
  */
 fun resolveSearch(inputs: SearchInputs): SearchState {
     if (isBlankQuery(inputs.query)) return SearchState(sections = emptyList(), nothingFound = false)
-    // Locale-independent, for the reason the library's ordering is.
-    val alphabetical = compareBy(String.CASE_INSENSITIVE_ORDER, SearchResult::label)
     fun visible(appId: String) = inputs.hiddenSearchable || appId !in inputs.hidden
 
     val apps = inputs.apps
@@ -108,8 +125,32 @@ fun resolveSearch(inputs: SearchInputs): SearchState {
         .map(::ShortcutResult)
 
     val sections = listOf(
-        SearchSectionState(SearchSection.Apps, apps.sortedWith(alphabetical)),
-        SearchSectionState(SearchSection.Shortcuts, shortcuts.sortedWith(alphabetical)),
+        SearchSectionState(SearchSection.Apps, rank(apps, inputs)),
+        SearchSectionState(SearchSection.Shortcuts, rank(shortcuts, inputs)),
     ).filter { it.rows.isNotEmpty() }
     return SearchState(sections = sections, nothingFound = sections.isEmpty())
+}
+
+private fun rank(results: List<SearchResult>, inputs: SearchInputs): List<SearchRow> {
+    fun pinned(result: SearchResult) = result is AppResult && result.app.id in inputs.pinned
+    val ordered = results.sortedWith(
+        compareByDescending<SearchResult> { matchesExactly(it.label, inputs.query) }
+            .thenByDescending(::pinned)
+            .thenBy { matchDepth(it.label, inputs.query) }
+            // Locale-independent, for the reason the library's ordering is; the
+            // key falls through to [SearchResult.key] so equal labels still tie
+            // identically on repeat runs.
+            .thenBy(String.CASE_INSENSITIVE_ORDER, SearchResult::label)
+            .thenBy(SearchResult::key)
+    )
+    return ordered.map { result ->
+        SearchRow(
+            result = result,
+            reason = when {
+                matchesExactly(result.label, inputs.query) -> REASON_EXACT_MATCH
+                pinned(result) -> REASON_PINNED
+                else -> null
+            },
+        )
+    }
 }
