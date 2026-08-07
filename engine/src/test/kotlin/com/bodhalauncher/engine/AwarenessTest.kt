@@ -679,6 +679,267 @@ class AwarenessTest {
         awarenessForegroundLine(AwarenessDuration.Span(8_100_000), AwarenessUsage.Live),
     )
 
+    // Awareness's Week view (#176): seven days side by side.
+
+    private fun onDay(day: LocalDate, hour: Int, minutes: Long = 30, id: Long = day.toEpochDay()) =
+        SessionRecord(
+            id = id,
+            start = day.atTime(hour, 0),
+            end = day.atTime(hour, 0).plusMinutes(minutes),
+            day = day,
+        )
+
+    private val weekNow = LocalDateTime.of(2026, 8, 7, 14, 0)
+    private val liveDay: LocalDate = LocalDate.of(2026, 8, 7)
+
+    private fun week(
+        records: List<SessionRecord> = emptyList(),
+        signals: List<IntentSignal> = emptyList(),
+        millis: Long? = null,
+        previousMillis: Long? = null,
+        usage: AwarenessUsage = AwarenessUsage.Live,
+    ) = resolveAwarenessWeek(records, signals, millis, previousMillis, usage, weekNow)
+
+    @Test
+    fun `the week is seven days oldest first, ending on the day now falls in`() {
+        assertEquals(
+            (6L downTo 0L).map { liveDay.minusDays(it) },
+            week().days.map { it.day },
+        )
+        // 2am on the 8th is still the 7th's day, under the 4am boundary.
+        assertEquals(
+            liveDay,
+            resolveAwarenessWeek(
+                emptyList(), emptyList(), null, null, AwarenessUsage.Live,
+                LocalDateTime.of(2026, 8, 8, 2, 0),
+            ).days.last().day,
+        )
+    }
+
+    @Test
+    fun `a day's figures count its own sessions and split them into intentional and unclassified`() {
+        val monday: LocalDate = LocalDate.of(2026, 8, 3)
+        val stated = onDay(monday, hour = 9, id = 1)
+        val figures = week(
+            records = listOf(
+                stated,
+                onDay(monday, hour = 11, id = 2),
+                onDay(monday, hour = 13, id = 3),
+                onDay(monday.plusDays(1), hour = 9, id = 4),
+            ),
+            signals = listOf(IntentSignal(at = monday.atTime(9, 10))),
+        ).days.single { it.day == monday }
+
+        assertEquals(3, figures.sessions)
+        assertEquals(1, figures.intentional)
+        assertEquals(2, figures.unclassified)
+        assertEquals("3 sessions · 1 intentional · 2 unclassified", awarenessDayFiguresLine(figures))
+    }
+
+    /** The day was stamped at write under the 4am boundary; the week reads it back. */
+    @Test
+    fun `a session that spans the boundary counts on the day it started`() {
+        val monday: LocalDate = LocalDate.of(2026, 8, 3)
+        val overnight = SessionRecord(
+            id = 1,
+            start = LocalDateTime.of(2026, 8, 3, 23, 30),
+            end = LocalDateTime.of(2026, 8, 4, 1, 0),
+            day = monday,
+        )
+        val days = week(records = listOf(overnight)).days
+
+        assertEquals(1, days.single { it.day == monday }.sessions)
+        assertEquals(0, days.single { it.day == monday.plusDays(1) }.sessions)
+    }
+
+    /**
+     * The double-count arm. Today's rule keeps an open record whatever day it
+     * started, because a session running now is running on the screen the reader
+     * is holding — fed through seven days it would count one session twice.
+     */
+    @Test
+    fun `a session started three days ago and still open counts once, on its start day`() {
+        val started: LocalDate = LocalDate.of(2026, 8, 4)
+        val stale = SessionRecord(id = 1, start = started.atTime(9, 0), end = null, day = started)
+        val days = week(records = listOf(stale)).days
+
+        assertEquals(listOf(started), days.filter { it.sessions > 0 }.map { it.day })
+        assertEquals(1, days.sumOf { it.sessions })
+    }
+
+    @Test
+    fun `a running session appears on the live day and on no other`() {
+        val running = SessionRecord(id = 1, start = weekNow.minusMinutes(10), end = null, day = liveDay)
+        val days = week(records = listOf(running)).days
+
+        assertEquals(listOf(liveDay), days.filter { it.sessions > 0 }.map { it.day })
+        assertEquals("1 session · 1 unclassified", awarenessDayFiguresLine(days.last()))
+    }
+
+    @Test
+    fun `a day with no intentional sessions omits the intentional half rather than writing zero`() {
+        val figures = AwarenessDayFigures(day = liveDay, sessions = 2, intentional = 0)
+
+        assertEquals("2 sessions · 2 unclassified", awarenessDayFiguresLine(figures))
+    }
+
+    @Test
+    fun `a day with nothing unclassified omits that half rather than writing zero`() {
+        val figures = AwarenessDayFigures(day = liveDay, sessions = 2, intentional = 2)
+
+        assertEquals("2 sessions · 2 intentional", awarenessDayFiguresLine(figures))
+    }
+
+    /** A quiet day is a sentence, never a 0 in a count field (ADR 0013). */
+    @Test
+    fun `a day with no sessions names its absence rather than resolving to a zero`() {
+        val quiet = week().days.first()
+
+        assertEquals(0, quiet.sessions)
+        assertEquals("No sessions", awarenessDayFiguresLine(quiet))
+    }
+
+    @Test
+    fun `an absent usage read leaves both rates unavailable and no figure becomes zero`() {
+        val ungranted = week(usage = AwarenessUsage.Ungranted(offersTurnOn = true), millis = 900_000)
+        assertEquals(
+            AwarenessDuration.Unavailable(UnavailableReason.NoUsageAccess),
+            ungranted.rate,
+        )
+        assertEquals(
+            AwarenessDuration.Unavailable(UnavailableReason.NoUsageAccess),
+            ungranted.previousRate,
+        )
+        assertEquals(null, awarenessWeekRateLine(ungranted))
+
+        // Access held and the read still came back with nothing at all.
+        val granted = week(millis = null, previousMillis = null)
+        assertEquals(AwarenessDuration.Unavailable(UnavailableReason.NoReading), granted.rate)
+        assertEquals(AwarenessDuration.Unavailable(UnavailableReason.NoReading), granted.previousRate)
+    }
+
+    @Test
+    fun `a granted read with an empty window resolves to none rather than to zero`() {
+        assertEquals(AwarenessDuration.None, resolveWeekRate(AwarenessUsage.Live, totalMillis = 0))
+        assertEquals(
+            "No foreground time recorded",
+            awarenessForegroundLine(resolveWeekRate(AwarenessUsage.Live, 0), AwarenessUsage.Live),
+        )
+    }
+
+    /** Time spent reading Awareness is not time spent on the phone's other apps. */
+    @Test
+    fun `the fold excludes the launcher's own package`() {
+        val reading = mapOf(
+            "com.bodhalauncher" to 3_600_000L,
+            "com.atlas" to 900_000L,
+            "com.ledger" to 600_000L,
+        )
+
+        assertEquals(1_500_000L, totalForegroundMillis(reading, setOf("com.bodhalauncher")))
+        assertEquals(5_100_000L, totalForegroundMillis(reading, excluded = emptySet()))
+    }
+
+    @Test
+    fun `the fold over a null reading is null, not zero`() {
+        assertEquals(null, totalForegroundMillis(null, setOf("com.bodhalauncher")))
+        // And an empty reading is a real zero, which resolves to the named none.
+        assertEquals(0L, totalForegroundMillis(emptyMap(), setOf("com.bodhalauncher")))
+    }
+
+    /** Adjacent bare numbers, which is the whole of what ADR 0013 permits here. */
+    @Test
+    fun `the two periods sit adjacent as bare rates with no sign and no delta`() {
+        val both = week(millis = 78_120_000, previousMillis = 85_680_000)
+
+        assertEquals(AwarenessDuration.Span(11_160_000), both.rate)
+        assertEquals("This week 3.1h/day · last week 3.4h/day", awarenessWeekRateLine(both))
+
+        // A period with no rate beside it states its own and stops: a sentence
+        // with one number and one excuse in it invites the comparison it cannot
+        // support.
+        assertEquals("This week 3.1h/day", awarenessWeekRateLine(week(millis = 78_120_000)))
+        assertEquals(null, awarenessWeekRateLine(week(previousMillis = 85_680_000)))
+    }
+
+    @Test
+    fun `days are ordered by date whatever order the records arrive in`() {
+        val records = (0L..6L).map { onDay(liveDay.minusDays(it), hour = 9, id = it) }
+        val shuffled = week(records = records.shuffled())
+
+        assertEquals((6L downTo 0L).map { liveDay.minusDays(it) }, shuffled.days.map { it.day })
+        assertEquals(List(AWARENESS_WEEK_DAYS) { 1 }, shuffled.days.map { it.sessions })
+    }
+
+    /**
+     * The shape pin: the Week renders the session count, the split and the rate,
+     * and no field [computeMetrics] owns. Those metrics are computed off the
+     * event log while these counts come off the session records — two stores
+     * that disagree the moment a record was written by reconciliation with no
+     * event logged, and one row showing two answers to one question is the
+     * failure [INTENT_SIGNAL_EVENTS] exists to prevent.
+     */
+    @Test
+    fun `the week resolves no field computeMetrics owns`() {
+        assertEquals(
+            listOf("days", "rate", "previousRate"),
+            AwarenessWeek::class.java.declaredFields.map { it.name },
+        )
+        assertEquals(
+            listOf("day", "sessions", "intentional"),
+            AwarenessDayFigures::class.java.declaredFields.map { it.name },
+        )
+        val metrics = ProductMetrics::class.java.declaredFields.map { it.name }
+        assertEquals(
+            emptyList<String>(),
+            AwarenessWeek::class.java.declaredFields.map { it.name }.filter { it in metrics },
+        )
+    }
+
+    @Test
+    fun `a picked day's line names its date, and the live day's line still says today`() {
+        val view = AwarenessToday.Sessions(finished = 6, running = false)
+
+        assertEquals("6 sessions today", awarenessDayLine(view, liveDay, isToday = true))
+        assertEquals(
+            "Tuesday, 4 August · 6 sessions",
+            awarenessDayLine(view, LocalDate.of(2026, 8, 4), isToday = false),
+        )
+        assertEquals(
+            "Tuesday, 4 August · No sessions",
+            awarenessDayLine(AwarenessToday.None, LocalDate.of(2026, 8, 4), isToday = false),
+        )
+        assertEquals(
+            "2026-08-04 · No sessions",
+            awarenessDayLine(
+                AwarenessToday.None, LocalDate.of(2026, 8, 4), isToday = false, DateFormat.Numeric,
+            ),
+        )
+    }
+
+    /** The Today path keeps its live-day arm, and every #172 reading is unchanged. */
+    @Test
+    fun `the day view reads a past day by its own records alone`() {
+        val started: LocalDate = LocalDate.of(2026, 8, 4)
+        val stale = SessionRecord(id = 1, start = started.atTime(9, 0), end = null, day = started)
+        val closed = onDay(liveDay, hour = 9, id = 2)
+
+        assertEquals(
+            AwarenessToday.Sessions(finished = 1, running = true),
+            resolveAwarenessDay(listOf(stale, closed), liveDay, weekNow),
+        )
+        assertEquals(
+            AwarenessToday.Sessions(finished = 0, running = true),
+            resolveAwarenessDay(listOf(stale, closed), started, weekNow),
+        )
+        // The live-day arm is the Today path's only: a past day takes its own
+        // records and nothing else.
+        assertEquals(
+            listOf(1L),
+            awarenessDayRecords(listOf(stale, closed), started, weekNow).map { it.id },
+        )
+    }
+
     @Test
     fun `no rendered line carries a delta, a direction word or a ranking`() {
         val start = LocalDateTime.of(2026, 8, 7, 9, 41)
@@ -714,6 +975,17 @@ class AwarenessTest {
             appOpensSourceLine(AwarenessUsage.Revoked),
             appOpensSourceLine(AwarenessUsage.Live),
             AWARENESS_TURN_ON_USAGE,
+        ) + AwarenessView.entries.map { it.label } + listOf(
+            awarenessDayFiguresLine(AwarenessDayFigures(liveDay, sessions = 0, intentional = 0)),
+            awarenessDayFiguresLine(AwarenessDayFigures(liveDay, sessions = 4, intentional = 3)),
+            awarenessDayFiguresLine(AwarenessDayFigures(liveDay, sessions = 1, intentional = 0)),
+            awarenessDayFiguresLine(AwarenessDayFigures(liveDay, sessions = 2, intentional = 2)),
+            awarenessDayLine(AwarenessToday.None, liveDay, isToday = false),
+            awarenessDayLine(AwarenessToday.Sessions(3, running = true), liveDay, isToday = false),
+        ) + listOfNotNull(
+            awarenessWeekRateLine(week(millis = 78_120_000, previousMillis = 85_680_000)),
+            awarenessWeekRateLine(week(millis = 85_680_000, previousMillis = 78_120_000)),
+            awarenessWeekRateLine(week(millis = 78_120_000)),
         )
         val forbidden = listOf("+", "-", "more", "less", "up", "down", "better", "worse", "most", "least")
         for (line in lines) {

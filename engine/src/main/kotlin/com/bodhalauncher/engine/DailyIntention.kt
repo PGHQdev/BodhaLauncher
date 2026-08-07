@@ -9,8 +9,18 @@ import java.time.LocalDateTime
  */
 fun dayKey(now: LocalDateTime): LocalDate = now.minusHours(4).toLocalDate()
 
-/** Where "today" began: 4:00am of the current day key (ADR 0003). */
-fun dayStart(now: LocalDateTime): LocalDateTime = dayKey(now).atTime(4, 0)
+/**
+ * Where a day began: 4:00am of that day key (ADR 0003).
+ *
+ * The 4am literal lives here and nowhere else, which is what this file is
+ * deliberately the only home of. Awareness's Week view needs the start of a day
+ * it names rather than the start of the current one (#176), and a second
+ * `atTime(4, 0)` somewhere else is how a boundary quietly becomes two.
+ */
+fun dayStart(day: LocalDate): LocalDateTime = day.atTime(4, 0)
+
+/** Where "today" began: the same rule, over the day [now] falls in. */
+fun dayStart(now: LocalDateTime): LocalDateTime = dayStart(dayKey(now))
 
 /**
  * The stored daily intention. The record survives its own expiry — Today offers

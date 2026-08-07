@@ -3,14 +3,18 @@ package com.bodhalauncher.app.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -22,34 +26,43 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.bodhalauncher.engine.AWARENESS_TURN_ON_USAGE
 import com.bodhalauncher.engine.AppOpens
+import com.bodhalauncher.engine.AwarenessDayFigures
+import com.bodhalauncher.engine.AwarenessDuration
 import com.bodhalauncher.engine.AwarenessSession
 import com.bodhalauncher.engine.AwarenessToday
 import com.bodhalauncher.engine.AwarenessUsage
+import com.bodhalauncher.engine.AwarenessView
+import com.bodhalauncher.engine.AwarenessWeek
 import com.bodhalauncher.engine.SessionDetail
 import com.bodhalauncher.engine.appDayLine
 import com.bodhalauncher.engine.appOpensLine
 import com.bodhalauncher.engine.appOpensSourceLine
+import com.bodhalauncher.engine.awarenessDayFiguresLine
+import com.bodhalauncher.engine.awarenessDayLine
 import com.bodhalauncher.engine.awarenessForegroundLine
 import com.bodhalauncher.engine.awarenessIntentWord
 import com.bodhalauncher.engine.awarenessSessionLine
-import com.bodhalauncher.engine.awarenessTodayLine
+import com.bodhalauncher.engine.awarenessWeekRateLine
+import com.bodhalauncher.engine.formatDate
 import com.bodhalauncher.engine.launchTimeLine
 import com.bodhalauncher.engine.sessionDetailNotes
+import java.time.LocalDate
 
 /**
- * Awareness's Today view (#171, #172): the day's count, then the day's sessions
- * in time order — when each started, how long it ran, and whether the user
- * stated an intent in it.
+ * Awareness's Today view (#171, #172, #176): one day's count, then that day's
+ * sessions in time order — when each started, how long it ran, and whether the
+ * user stated an intent in it.
  *
  * Drawn as a scrolling list of hairline rows, the only shape ADR 0025's
  * vocabulary yields; a plotted or time-scaled strip would need a sixth rule. The
  * classification is a **word** on the row, because ADR 0013 forbids valence
  * colour and ADR 0025 has already spent tinted fill on the current thing.
  *
- * Each row opens its session (#173), so the first one takes focus on arrival and
- * Escape travels up from it to the root binding (ADR 0022). Back from the
- * Session view returns to root rather than here, which is ADR 0011 read
- * literally: there is no stack to walk back down.
+ * Each row opens its session (#173). Back from the Session view returns to root
+ * rather than here, which is ADR 0011 read literally: there is no stack to walk
+ * back down. The same is true of the day this view is showing — a day picked on
+ * the Week view opens here, and Escape from here leaves for root rather than
+ * returning to the Week.
  */
 @Composable
 fun AwarenessScreen(
@@ -57,15 +70,31 @@ fun AwarenessScreen(
     today: AwarenessToday?,
     /** Empty while [today] is null, and empty on a day with no sessions. */
     sessions: List<AwarenessSession>,
+    /** Which day is being shown: the live one, or one picked from the Week (#176). */
+    day: LocalDate,
+    isToday: Boolean,
+    onPickView: (AwarenessView) -> Unit,
     onOpenSession: (AwarenessSession) -> Unit,
     onBack: () -> Unit,
 ) {
-    val line = today?.let(::awarenessTodayLine)
-    if (sessions.isEmpty()) {
-        AwarenessNote(line, onBack)
+    if (today == null) {
+        AwarenessNote(onBack)
         return
     }
-    AwarenessList(title = "Awareness", line = line) {
+    val formats = LocalBodhaFormats.current
+    AwarenessList(
+        title = "Awareness",
+        line = awarenessDayLine(today, day, isToday, formats.date),
+        switch = {
+            AwarenessViewSwitch(
+                current = AwarenessView.Today,
+                onPick = onPickView,
+                // Only where there is no row to take it: a day with sessions
+                // arrives on the first of them.
+                arrival = if (sessions.isEmpty()) Modifier.focusOnOpen() else Modifier,
+            )
+        },
+    ) {
         sessions.forEachIndexed { index, session ->
             SessionRow(
                 session = session,
@@ -78,35 +107,45 @@ fun AwarenessScreen(
 
 /**
  * A named absence filling the surface, tappable to leave — the pattern the
- * placeholder and the inbox's empty states already use. Never a zero.
+ * placeholder and the inbox's empty states already use.
+ *
+ * **A read that has not landed, and nothing else** (#176). A quiet day used to
+ * come here too, and once the surface carries a switch that would make the Week
+ * unreachable from exactly the day a reader is most likely to go looking for it.
+ * A day with nothing on it names its absence on the list's own line instead.
  */
 @Composable
-private fun AwarenessNote(line: String?, onBack: () -> Unit) {
+private fun AwarenessNote(onBack: () -> Unit) {
     val colors = LocalBodhaColors.current
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(colors.ground)
-            .semantics {
-                contentDescription = listOfNotNull("Awareness.", line?.plus("."), "Tap to go back.")
-                    .joinToString(" ")
-            }
+            .semantics { contentDescription = "Awareness. Tap to go back." }
             .focusOnOpen()
             .clickable(onClick = onBack),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
         Text("Awareness", color = colors.ink, style = BodhaType.title)
-        line?.let {
-            Spacer(Modifier.height(BodhaSpacing.m))
-            // A count is data, so it speaks in the operational voice (ADR 0021)
-            // with one ink and no direction (ADR 0013).
-            Text(it, color = colors.inkMuted, style = BodhaType.body)
-        }
     }
 }
 
-/** The surface's list shape: a title, a line under it, and the rows beneath. */
+/**
+ * The surface's list shape: a title, the view switch, a line under it, and the
+ * rows beneath.
+ *
+ * That order is the sentence the screen makes: the title names the surface, the
+ * pills choose the view, and the line describes the view that was chosen.
+ *
+ * **Where arrival focus lands, stated once for every Awareness view** (#176):
+ * the first rendered **row**, via `Modifier.focusOnOpen()` at the call site;
+ * where a view renders no rows, the current switch pill, via
+ * [AwarenessViewSwitch]'s `arrival`; and where there is no switch at all, the
+ * container itself, via [focusSelf]. Never nowhere — a key event travels up from
+ * the focused node, so a surface that focuses nothing has no Escape until the
+ * reader presses Tab (ADR 0022's build amendment).
+ */
 @Composable
 private fun AwarenessList(
     title: String,
@@ -123,6 +162,11 @@ private fun AwarenessList(
      * would have no chain from a screen the reader is nonetheless looking at.
      */
     focusSelf: Boolean = false,
+    /**
+     * The Today/Week switch (#176). Each of the two views that carry one decides
+     * for itself whether a row takes arrival first; the drill-downs pass none.
+     */
+    switch: (@Composable () -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
     val colors = LocalBodhaColors.current
@@ -143,12 +187,159 @@ private fun AwarenessList(
     ) {
         // A surface name is a label, not a spoken line (ADR 0021).
         Text(title, color = colors.ink, style = BodhaType.title)
+        if (switch != null) {
+            Spacer(Modifier.height(BodhaSpacing.m))
+            switch()
+        }
         line?.let {
             Spacer(Modifier.height(BodhaSpacing.s))
             Text(it, color = colors.inkMuted, style = BodhaType.body)
         }
         Spacer(Modifier.height(BodhaSpacing.l))
         content()
+    }
+}
+
+/**
+ * Awareness's Today/Week switch (#176): two bare pills, the current one tinted.
+ *
+ * It lives here beside its only caller rather than in the shared vocabulary,
+ * which is [LayoutSwitcher]'s precedent — a set of pills over one screen's own
+ * options is a call site, not a component, until a second screen wants it. It is
+ * not a `ChoiceRow` either: that is a *setting* with a title above its answers,
+ * and this is the view you are looking at.
+ *
+ * The pills carry `selected` where [LayoutSwitcher]'s pass none, and that
+ * difference is deliberate. Fill is a colour, a colour is the one channel a
+ * screen reader has no access to, and which view is current is the whole
+ * meaning of this control — so the state goes in the semantics as well as in
+ * the tint.
+ *
+ * Scrolls rather than squeezes, for `LayoutSwitcher`'s stated reason: at 2× text
+ * the 48dp floor wins and the row gives way instead of the targets.
+ */
+@Composable
+fun AwarenessViewSwitch(
+    current: AwarenessView,
+    onPick: (AwarenessView) -> Unit,
+    modifier: Modifier = Modifier,
+    /** Where arrival lands when the view beneath renders no row to take it. */
+    arrival: Modifier = Modifier,
+) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(BodhaSpacing.s),
+        modifier = modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            // Names the pair as one choice, so a reader hears where the current
+            // pill's "selected" belongs.
+            .selectableGroup(),
+    ) {
+        AwarenessView.entries.forEach { view ->
+            BodhaPill(
+                label = view.label,
+                onClick = { onPick(view) },
+                // Rule 2's tint means *the current thing*, which is exactly what
+                // the view being looked at is (ADR 0025).
+                emphasis = if (view == current) Emphasis.Tinted else Emphasis.Plain,
+                selected = view == current,
+                modifier = if (view == current) arrival else Modifier,
+            )
+        }
+    }
+}
+
+/**
+ * One day of the Week view (#176), opening that day in the Today view.
+ *
+ * The date is the row's title and the figures are its line — no bar, no share of
+ * a total, nothing sized by a number. Every day draws the same row whatever it
+ * holds, which is what keeps seven days side by side from becoming seven days
+ * ranked (ADR 0013).
+ *
+ * The chevron is here because the row navigates, and for no other reason
+ * (ADR 0025 rule 3).
+ */
+@Composable
+fun WeekDayRow(
+    figures: AwarenessDayFigures,
+    onOpen: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    ListRow(
+        title = formatDate(figures.day, LocalBodhaFormats.current.date),
+        subtitle = awarenessDayFiguresLine(figures),
+        onClick = onOpen,
+        trailing = { TrailingChevron() },
+        modifier = modifier,
+    )
+}
+
+/**
+ * Awareness's Week view (#176, ADR 0013): the last seven days, oldest first,
+ * each with what it held — and the rate the period ran at, with the period
+ * before it beside it as a bare second number.
+ *
+ * The same rows as Today, one level up: a date and its figures, and picking one
+ * opens that day. Nothing here is plotted, ordered by a figure, coloured by a
+ * verdict or marked with a direction, which is ADR 0013's four prohibitions as
+ * a shape rather than as a rule someone remembers.
+ *
+ * **The usage state is stated once, above the rows, and never per row.** Every
+ * duration on this surface degrades for the same reason at the same moment, so
+ * saying it seven times would be seven copies of one sentence — and the reader
+ * would have to read them all to learn it was the same one.
+ */
+@Composable
+fun AwarenessWeekScreen(
+    /** Null while the stores are still being read — the shell renders, never a stand-in 0. */
+    week: AwarenessWeek?,
+    usage: AwarenessUsage,
+    onPickView: (AwarenessView) -> Unit,
+    onOpenDay: (LocalDate) -> Unit,
+    /** Enters the one capability-education flow (#157), never a second copy of it. */
+    onTurnOnUsage: () -> Unit,
+) {
+    val colors = LocalBodhaColors.current
+    AwarenessList(
+        title = "Awareness",
+        line = week?.let(::awarenessWeekRateLine),
+        switch = {
+            AwarenessViewSwitch(
+                current = AwarenessView.Week,
+                onPick = onPickView,
+                arrival = if (week == null) Modifier.focusOnOpen() else Modifier,
+            )
+        },
+    ) {
+        if (week == null) return@AwarenessList
+        // Where there is a rate it is the line under the title, and this says
+        // nothing. Where there is not — no access, or a read that came back
+        // empty-handed with access held — the absence is named here rather than
+        // left as a line that quietly did not render.
+        if (week.rate !is AwarenessDuration.Span) {
+            val foreground = awarenessForegroundLine(week.rate, usage)
+            if (usage is AwarenessUsage.Ungranted && usage.offersTurnOn) {
+                // Plain emphasis and one ink: this is a way in, not the screen's
+                // primary action, and a solid fill here would rank it above the
+                // record it sits over (ADR 0025, ADR 0013).
+                CardRow(
+                    title = foreground,
+                    subtitle = AWARENESS_TURN_ON_USAGE,
+                    onClick = onTurnOnUsage,
+                )
+            } else {
+                Text(foreground, color = colors.inkMuted, style = BodhaType.body)
+            }
+            Spacer(Modifier.height(BodhaSpacing.l))
+        }
+        week.days.forEachIndexed { index, figures ->
+            WeekDayRow(
+                figures = figures,
+                onOpen = { onOpenDay(figures.day) },
+                modifier = if (index == 0) Modifier.focusOnOpen() else Modifier,
+            )
+        }
     }
 }
 

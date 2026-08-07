@@ -22,6 +22,7 @@ import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.bodhalauncher.engine.AwarenessSession
 import com.bodhalauncher.engine.AwarenessToday
+import com.bodhalauncher.engine.AwarenessView
 import com.bodhalauncher.engine.SessionRecord
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -29,6 +30,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
+import java.time.LocalDate
 import java.time.LocalDateTime
 
 /**
@@ -80,18 +82,26 @@ class AwarenessScreenTest {
     )
 
     private val opened = mutableListOf<Long>()
+    private val picked = mutableListOf<AwarenessView>()
 
-    private fun setScreen(sessions: List<AwarenessSession>, today: AwarenessToday?) =
-        compose.setContent {
-            BodhaTheme {
-                AwarenessScreen(
-                    today = today,
-                    sessions = sessions,
-                    onOpenSession = { opened += it.record.id },
-                    onBack = {},
-                )
-            }
+    private fun setScreen(
+        sessions: List<AwarenessSession>,
+        today: AwarenessToday?,
+        day: LocalDate = LocalDate.of(2026, 8, 7),
+        isToday: Boolean = true,
+    ) = compose.setContent {
+        BodhaTheme {
+            AwarenessScreen(
+                today = today,
+                sessions = sessions,
+                day = day,
+                isToday = isToday,
+                onPickView = { picked += it },
+                onOpenSession = { opened += it.record.id },
+                onBack = {},
+            )
         }
+    }
 
     @Test
     fun `the day's sessions render in time order, each with its span and its word`() {
@@ -123,14 +133,60 @@ class AwarenessScreenTest {
         assertEquals(listOf("Awareness"), drawnText())
     }
 
-    /** Every row opens its own session (#173) — one actionable node each, no more. */
+    /**
+     * Every row opens its own session (#173) — one actionable node each, no
+     * more. The two switch pills are the only other actionable nodes on the
+     * view (#176), and they are named by the views they choose.
+     */
     @Test
     fun `each session row opens that session`() {
         setScreen(day, AwarenessToday.Sessions(finished = 2, running = true))
 
-        assertEquals(3, actionableNames().size)
+        assertEquals(
+            listOf("Today", "Week", "9:12 · 2 minutes", "9:41 · 12 minutes", "9:58 · running now"),
+            actionableNames(),
+        )
         compose.onNodeWithText("9:41 · 12 minutes").performClick()
         assertEquals(listOf(2L), opened)
+    }
+
+    /**
+     * A day handed over by the Week view is read here, and the line says which
+     * day it is: "6 sessions today" over Tuesday's records would be false (#176).
+     */
+    @Test
+    fun `a picked past day names its date rather than saying today`() {
+        setScreen(
+            sessions = day,
+            today = AwarenessToday.Sessions(finished = 3, running = false),
+            day = LocalDate.of(2026, 8, 4),
+            isToday = false,
+        )
+
+        val drawn = drawnText()
+        assertTrue("Tuesday, 4 August · 3 sessions" in drawn)
+        assertTrue(drawn.none { it.endsWith("today") })
+    }
+
+    @Test
+    fun `the live day's line still says today`() {
+        setScreen(day, AwarenessToday.Sessions(finished = 3, running = false))
+
+        assertTrue("3 sessions today" in drawnText())
+    }
+
+    /** Picking the other view is one press on a named, tinted pill (ADR 0025 rule 2). */
+    @Test
+    fun `the switch offers both views and reports exactly one as current`() {
+        setScreen(day, AwarenessToday.Sessions(finished = 2, running = true))
+
+        assertEquals(
+            listOf("Today" to true, "Week" to false),
+            nodes().filter { SemanticsProperties.Selected in it.config }
+                .map { it.spokenName() to it.config[SemanticsProperties.Selected] },
+        )
+        compose.onNodeWithText("Week").performClick()
+        assertEquals(listOf(AwarenessView.Week), picked)
     }
 
     /**
@@ -175,6 +231,9 @@ class AwarenessScreenTest {
                         AwarenessScreen(
                             today = AwarenessToday.Sessions(finished = 2, running = true),
                             sessions = day,
+                            day = LocalDate.of(2026, 8, 7),
+                            isToday = true,
+                            onPickView = {},
                             onOpenSession = {},
                             onBack = {},
                         )

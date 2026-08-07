@@ -16,7 +16,9 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.bodhalauncher.engine.AwarenessDayFigures
 import com.bodhalauncher.engine.AwarenessSession
+import com.bodhalauncher.engine.AwarenessView
 import com.bodhalauncher.engine.DayEvent
 import com.bodhalauncher.engine.HomeAction
 import com.bodhalauncher.engine.LibraryIndexEntry
@@ -191,6 +193,14 @@ fun DesignGallery() {
         // the app's own view (#174), so it draws the chevron and is a node both
         // guards measure.
         LaunchRow(label = "Gallery app", time = "9:42", icon = null, onOpen = {})
+        Spacer(Modifier.height(BodhaSpacing.s))
+        // The Today/Week switch and two of the Week's rows (#176), with fixed
+        // dates and figures. The quiet day is here because naming an absence is
+        // a shape rather than a state — the row is the same row, and what
+        // changes is the sentence under the date, never a 0.
+        AwarenessViewSwitch(current = AwarenessView.Week, onPick = {})
+        WeekDayRow(figures = GALLERY_WEEK_DAY, onOpen = {})
+        WeekDayRow(figures = GALLERY_QUIET_WEEK_DAY, onOpen = {})
         Spacer(Modifier.height(BodhaSpacing.xl))
 
         // The inbox row (#162): a live notification under its section, the
@@ -361,6 +371,14 @@ private fun gallerySession(id: Long, from: Int, to: Int?, intentional: Boolean) 
         end = to?.let { java.time.LocalDateTime.of(2026, 8, 5, 9, it) },
     ),
     intentional = intentional,
+)
+
+/** A day that held something, split both ways, and a day that held nothing. */
+private val GALLERY_WEEK_DAY = AwarenessDayFigures(
+    day = java.time.LocalDate.of(2026, 8, 5), sessions = 3, intentional = 2,
+)
+private val GALLERY_QUIET_WEEK_DAY = AwarenessDayFigures(
+    day = java.time.LocalDate.of(2026, 8, 4), sessions = 0, intentional = 0,
 )
 
 private val GALLERY_INTENTIONAL_SESSION = gallerySession(1, 41, 53, intentional = true)

@@ -117,6 +117,35 @@ class SessionRecordLogTest {
         assertNull(records[0].endMillis)
     }
 
+    /** The Week's read (#176): the seven days it names, plus anything still open. */
+    @Test
+    fun `a range read returns the days in it, plus any session still open`() = runBlocking {
+        log.write(Transition.SessionStarted(SessionId(10), at("2026-08-01T10:00:00")))
+        log.write(Transition.SessionEnded(SessionId(10), at("2026-08-01T10:10:00")))
+        log.write(Transition.SessionStarted(SessionId(11), at("2026-08-07T10:00:00")))
+        log.write(Transition.SessionEnded(SessionId(11), at("2026-08-07T10:10:00")))
+        // Started before the range and never closed: the resolvers place it on
+        // its own day, and this query is only what makes it reachable at all.
+        log.write(Transition.SessionStarted(SessionId(12), at("2026-07-20T10:00:00")))
+
+        val from = dayKey(LocalDateTime.parse("2026-08-01T10:00:00")).toEpochDay()
+        val to = dayKey(LocalDateTime.parse("2026-08-07T10:00:00")).toEpochDay()
+        assertEquals(
+            listOf(12L, 10L, 11L),
+            db.sessionRecords().forDays(from, to).map { it.sessionId },
+        )
+    }
+
+    @Test
+    fun `a day outside the range is not returned`() = runBlocking {
+        log.write(Transition.SessionStarted(SessionId(13), at("2026-07-31T10:00:00")))
+        log.write(Transition.SessionEnded(SessionId(13), at("2026-07-31T10:10:00")))
+
+        val from = dayKey(LocalDateTime.parse("2026-08-01T10:00:00")).toEpochDay()
+        val to = dayKey(LocalDateTime.parse("2026-08-07T10:00:00")).toEpochDay()
+        assertEquals(emptyList<Long>(), db.sessionRecords().forDays(from, to).map { it.sessionId })
+    }
+
     @Test
     fun `the dashboard row carries the count under raw usage with its window`() = runBlocking {
         val session = SessionId(9)

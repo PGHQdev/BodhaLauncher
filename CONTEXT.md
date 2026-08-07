@@ -85,7 +85,7 @@ A place you dwell in and look around: Home, Search, App Library, Awareness, Toda
 _Avoid_: screen (that's the display), page, tab
 
 **Today**:
-The day surface, one swipe right from Home: three fixed slots — daily intention, day slot, inbox digest — under the day key's date. Never ranked, never a task manager.
+The day surface, one swipe right from Home: three fixed slots — daily intention, day slot, inbox digest — under the day key's date. Never ranked, never a task manager. Awareness's day view is also called Today (ADR 0013) and is a view *within* the Awareness surface — one of two positions on its switch, beside Week — not this surface.
 _Avoid_: agenda, dashboard, feed, at-a-glance
 
 **Sheet**:

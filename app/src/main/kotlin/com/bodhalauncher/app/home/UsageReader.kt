@@ -24,7 +24,9 @@ class UsageReader(private val context: Context) {
 
     /** Package name to last-use epoch millis over the past month; null without access. */
     fun lastUsed(): Map<String, Long>? =
-        aggregate(System.currentTimeMillis() - LOOKBACK_MILLIS) { it.lastTimeUsed }
+        aggregate(System.currentTimeMillis() - LOOKBACK_MILLIS, System.currentTimeMillis()) {
+            it.lastTimeUsed
+        }
 
     /**
      * Package name to foreground millis since [startMillis]; null without access.
@@ -32,7 +34,27 @@ class UsageReader(private val context: Context) {
      * for a context line, never for enforcement.
      */
     fun usedSince(startMillis: Long): Map<String, Long>? =
-        aggregate(startMillis) { it.totalTimeInForeground }
+        usedBetween(startMillis, System.currentTimeMillis())
+
+    /**
+     * The same reading over a range that has already ended (#176) — a period
+     * before this one, which is the only thing that wants a closed end.
+     *
+     * **The bucket caveat, stated precisely, because a period figure is built on
+     * it.** `queryAndAggregateUsageStats` aggregates whole daily buckets that
+     * *intersect* the range, and each bucket's `totalTimeInForeground` is that
+     * bucket's own total rather than the part of it inside the range. So the
+     * answer is approximate at both edges, always in the direction of too much,
+     * and by up to a bucket at each end.
+     *
+     * Which is why **no single day is measured this way at all**. Bodha's day
+     * runs 4am to 4am (ADR 0003) and Android's runs midnight to midnight, so a
+     * one-day query intersects two buckets and can come back close to doubled.
+     * Over seven days the same overhang sits against a seven-day divisor, which
+     * is the only shape this reading is used in (#176).
+     */
+    fun usedBetween(startMillis: Long, endMillis: Long): Map<String, Long>? =
+        aggregate(startMillis, endMillis) { it.totalTimeInForeground }
 
     /**
      * Every moment the front of the phone became some app since [startMillis],
@@ -78,11 +100,12 @@ class UsageReader(private val context: Context) {
 
     private fun aggregate(
         startMillis: Long,
+        endMillis: Long,
         field: (UsageStats) -> Long,
     ): Map<String, Long>? {
         if (!capabilities.granted(Capability.UsageAccess)) return null
         return context.getSystemService(UsageStatsManager::class.java)
-            .queryAndAggregateUsageStats(startMillis, System.currentTimeMillis())
+            .queryAndAggregateUsageStats(startMillis, endMillis)
             .mapValues { (_, stats) -> field(stats) }
             .filterValues { it > 0 }
     }
