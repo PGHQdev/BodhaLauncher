@@ -88,7 +88,11 @@ class CapabilityEducation(
             entry = entry,
         )
         if (resolution is CapabilityResolution.Educate) {
-            sheets.open(Sheet.Education(resolution.screen))
+            val sheet = Sheet.Education(resolution.screen)
+            sheets.open(sheet)
+            // Skipping is what this sheet's dismissal means, wherever it comes
+            // from — the user's swipe-down or the session ending under it (#134).
+            sheets.dismissedBy(sheet, ::onSkip)
             store.markShown(capability)
         }
     }

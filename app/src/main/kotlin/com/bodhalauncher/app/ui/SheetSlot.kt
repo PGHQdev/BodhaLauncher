@@ -9,6 +9,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import com.bodhalauncher.engine.EducationScreen
 import com.bodhalauncher.engine.HomeAction
+import com.bodhalauncher.engine.PromptDecision
+import com.bodhalauncher.engine.SessionId
 import com.bodhalauncher.engine.TimedSessionEnd
 
 /**
@@ -35,8 +37,12 @@ sealed class Sheet {
     /** The Library's per-app actions (#7). */
     class AppActions(val app: HomeAction) : Sheet()
 
-    /** The reflexive-use prompt on Home (#4). */
-    class IntentPrompt : Sheet()
+    /**
+     * The reflexive-use prompt on Home (#4). It carries the decision it was
+     * opened for, so its outcome can be recorded against that decision even
+     * once the runtime has stopped treating it as pending (#134).
+     */
+    class IntentPrompt(val decision: PromptDecision) : Sheet()
 
     /** The pause before a ruled app (#8). The launch is gated until this answers. */
     class OpenCheck(val app: HomeAction) : Sheet()
@@ -59,6 +65,7 @@ class SheetSlot(initial: Sheet? = null) {
         private set
 
     private var onReplaced: (() -> Unit)? = null
+    private var onDismiss: (() -> Unit)? = null
 
     /**
      * Put [sheet] in the slot, taking the place of whatever was there.
@@ -74,6 +81,7 @@ class SheetSlot(initial: Sheet? = null) {
         val outgoing = this.onReplaced
         current = sheet
         this.onReplaced = onReplaced
+        this.onDismiss = null
         // After the swap, so a handler that reaches back in finds the new sheet.
         outgoing?.invoke()
     }
@@ -83,6 +91,37 @@ class SheetSlot(initial: Sheet? = null) {
         if (current !== sheet) return
         current = null
         onReplaced = null
+        onDismiss = null
+    }
+
+    /**
+     * How [sheet] dismisses on its own terms — recorded here and handed straight
+     * back, so the render site passes this very lambda to its sheet composable
+     * and there is one dismissal path rather than a copy of one (#134).
+     *
+     * Ignored for a sheet that is no longer the one open: a render site leaving
+     * composition late must not hand its dismissal to the sheet that replaced it.
+     */
+    fun dismissedBy(sheet: Sheet, dismiss: () -> Unit): () -> Unit {
+        if (current === sheet) onDismiss = dismiss
+        return dismiss
+    }
+
+    /**
+     * Dismiss whatever is open, exactly as the user would (ADR 0011, #134): the
+     * session ended, so an Open Check records the turn-back it always records
+     * and an intent prompt records its dismissal — the phone going dark on a
+     * decision is that decision going unmade, which is what dismissal already
+     * means. No outcome kind exists for "cleared by the session".
+     *
+     * A sheet whose render site has not composed yet has no dismissal to run,
+     * so it is simply closed; the ADR's rule holds either way, only its outcome
+     * is unrecordable.
+     */
+    fun dismissCurrent() {
+        val sheet = current ?: return
+        val dismiss = onDismiss
+        if (dismiss != null) dismiss() else close(sheet)
     }
 
     /** The open sheet if it is a [T] — how a render site asks for its own. */
@@ -94,17 +133,32 @@ class SheetSlot(initial: Sheet? = null) {
          * on a rotation would leave its launch with no outcome logged, which is
          * the return rate #25 measures. The other four are re-derived or gone —
          * which is what they already did before the slot existed.
+         *
+         * [session] is the phone session the check is saved under, because a
+         * restore is the one path the session boundary cannot reach: after
+         * process death the engine reconciles and publishes its end and the next
+         * start before composition exists, so no listener hears it (#134). A
+         * check saved under a session that is no longer the one running is
+         * therefore dropped rather than restored — which is the same rule
+         * [dismissCurrent] applies to a live one, minus the outcome, since the
+         * process that owed it is gone.
          */
-        val Saver = listSaver<SheetSlot, String>(
+        fun saver(session: () -> SessionId?) = listSaver<SheetSlot, String>(
             save = {
                 (it.current as? Sheet.OpenCheck)
-                    ?.let { sheet -> listOf(sheet.app.id, sheet.app.label) }
+                    ?.let { sheet -> listOf(sheet.app.id, sheet.app.label, sessionKey(session)) }
                     ?: emptyList()
             },
-            restore = { SheetSlot(Sheet.OpenCheck(HomeAction(it[0], it[1]))) },
+            restore = {
+                if (it[2] == sessionKey(session)) SheetSlot(Sheet.OpenCheck(HomeAction(it[0], it[1])))
+                else SheetSlot()
+            },
         )
+
+        private fun sessionKey(session: () -> SessionId?) = session()?.value?.toString() ?: ""
     }
 }
 
 @Composable
-fun rememberSheetSlot(): SheetSlot = rememberSaveable(saver = SheetSlot.Saver) { SheetSlot() }
+fun rememberSheetSlot(session: () -> SessionId?): SheetSlot =
+    rememberSaveable(saver = SheetSlot.saver(session)) { SheetSlot() }
