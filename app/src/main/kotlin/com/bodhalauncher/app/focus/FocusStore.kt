@@ -89,12 +89,21 @@ data class PendingFocusEnd(
  * seams; this store only persists and logs. Starting never touches the
  * entitlement store — nothing here holds a reference to reach it with.
  */
-class FocusStore(context: Context, private val dao: FocusRecordDao, private val events: EventLogger) {
+class FocusStore(
+    context: Context,
+    private val dao: FocusRecordDao,
+    private val events: EventLogger,
+    /**
+     * The single FIFO lane the record writes ride. Injectable so a test can
+     * join it instead of sleeping and hoping — the CI-speed flake that ruled
+     * out a fixed wait.
+     */
+    @Suppress("OPT_IN_USAGE")
+    private val scope: CoroutineScope =
+        CoroutineScope(SupervisorJob() + Dispatchers.IO.limitedParallelism(1)),
+) {
 
     private val prefs = context.getSharedPreferences("focus_session", Context.MODE_PRIVATE)
-
-    @Suppress("OPT_IN_USAGE")
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO.limitedParallelism(1))
 
     /** The one running session; null reverts root to Home (#167). */
     val active = mutableStateOf(loadActive())

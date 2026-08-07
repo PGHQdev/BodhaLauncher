@@ -8,7 +8,12 @@ import com.bodhalauncher.app.data.EventLogger
 import com.bodhalauncher.engine.FocusSetup
 import java.time.Duration
 import java.time.Instant
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.job
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -45,13 +50,25 @@ class FocusStoreTest {
     @After
     fun tearDown() = db.close()
 
-    private fun store() = FocusStore(context, db.focusRecords(), EventLogger(db.eventLog()))
+    /**
+     * The stores under test share one lane whose jobs [drain] can join —
+     * deterministic where the old fixed sleep flaked on slow CI runners. A
+     * lane-queue marker would not do: the store's writes suspend into Room's
+     * executor and release the lane while still incomplete, so what is joined
+     * is every launched job, not the queue's tail.
+     */
+    @Suppress("OPT_IN_USAGE")
+    private val lane = CoroutineScope(SupervisorJob() + Dispatchers.IO.limitedParallelism(1))
+
+    private fun store() = FocusStore(context, db.focusRecords(), EventLogger(db.eventLog()), lane)
 
     private fun FocusStore.startDefault(minutes: Long = 30, allowed: Set<String> = setOf("com.a")) =
         start("Deep work", minutes, allowed, t0)
 
     /** The single-lane writes are async; a fresh read after settling sees them. */
-    private fun drain() = Thread.sleep(150)
+    private fun drain() = runBlocking {
+        withTimeout(5_000) { lane.coroutineContext.job.children.forEach { it.join() } }
+    }
 
     @Test
     fun `the session survives a restart with remaining time derived from the stored end instant`() {
