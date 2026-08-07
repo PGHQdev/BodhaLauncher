@@ -224,3 +224,116 @@ fun sessionDetailNotes(detail: SessionDetail): List<String> = buildList {
     if (detail.repeatedOpen) add("A repeated open was noticed")
 }
 
+/**
+ * One day of one app's opens (#174). The day is [dayKey]'s — the 4am boundary
+ * (ADR 0003), the same one a session belongs to its start by, so a late-night
+ * open and the session it happened in file under the same heading.
+ *
+ * The key is computed here, at read, where [SessionRecord.day] is stamped at
+ * write. That asymmetry is deliberate and worth naming rather than
+ * rediscovering: `launch_record` has no day column, and adding one would file
+ * every record already written under epoch day 0, because Room requires a
+ * NOT NULL added column to carry a default. There is nothing to backfill from
+ * that a read cannot compute for free.
+ */
+data class AppDay(val day: LocalDate, val opens: List<LaunchRecord>)
+
+/**
+ * Awareness's App view (#174, ADR 0013): one app — when Bodha opened it, how
+ * often over the records it was handed, and how many sessions those opens fell
+ * in. Sessions are a count rather than rows, because a list of sessions here
+ * would be the Session view rendered twice.
+ *
+ * [name] is the catalog's label where the app is still installed and the
+ * recorded id where it is not; [installed] is which of the two happened. An
+ * uninstalled app keeps its records and its recorded identity — dropping it
+ * would edit the record to match what the phone currently holds, which is the
+ * one thing a neutral record must not do (#11).
+ *
+ * **There is no duration field, and its absence is the point.** Foreground time
+ * arrives with usage access (#175); a field standing at 0 until then would say
+ * the app was never in front, which is a different claim from "nothing measured
+ * it" — and the second claim is the true one.
+ */
+data class AppOpens(
+    val appId: String,
+    val name: String,
+    val installed: Boolean,
+    val days: List<AppDay>,
+    val opens: Int,
+    val sessions: Int,
+)
+
+/**
+ * Resolves one app's view from a list of launches the caller has already
+ * prepared (#174).
+ *
+ * Three rules keep this total whatever the caller managed to read, and keep the
+ * tickets after this one out of it. It **reads nothing** — every store is the
+ * caller's. It **filters by [appId] itself**, so handing it the whole log and
+ * handing it one app's records give the same answer. Its counts are **folded
+ * from the records it groups**, never counted separately, so the line under the
+ * title cannot disagree with the rows beneath it.
+ *
+ * What changes after this ticket is what arrives on [launches] and not what
+ * happens to it: a second source of opens merged in (#175), the entitlement
+ * window clamped (#177), excluded records filtered out (#178). None of them
+ * needs a signature here.
+ *
+ * Newest first, both within a day and across days: the list is unbounded in the
+ * past, and the end worth reading is the near one.
+ *
+ * [label] is the app's name where the catalog still has one to give, and null
+ * where it does not — an input rather than a lookup, so "named as uninstalled"
+ * is a rule this module states and a unit test can hold it to.
+ */
+fun resolveAppOpens(appId: String, label: String?, launches: List<LaunchRecord>): AppOpens {
+    val mine = launches.filter { it.appId == appId }.sortedByDescending { it.at }
+    val days = mine.groupBy { dayKey(it.at) }
+        .map { (day, opens) -> AppDay(day, opens) }
+        .sortedByDescending { it.day }
+    return AppOpens(
+        appId = appId,
+        name = label ?: appId,
+        installed = label != null,
+        days = days,
+        opens = mine.size,
+        // Distinct, because a session an app was opened in three times is one
+        // session it appeared in. A launch that named none joins none.
+        sessions = mine.mapNotNull { it.session }.distinct().size,
+    )
+}
+
+/**
+ * The line under the App view's title (#174): bare counts of what the view is
+ * about to draw, and the absences said in words.
+ *
+ * Never a count of nothing — no "0 sessions" for an app only ever opened outside
+ * a session — which is the rule [sessionDetailNotes] already takes. No delta, no
+ * direction word, no ranking against any other app (ADR 0013): this view is
+ * shaped the same for an app opened once and an app opened two hundred times,
+ * and the counts are the only difference between them.
+ */
+fun appOpensLine(view: AppOpens): String = buildList {
+    if (!view.installed) add("No longer installed")
+    if (view.opens == 0) {
+        add("No opens recorded")
+    } else {
+        add(plural(view.opens.toLong(), "open"))
+        if (view.sessions > 0) add(plural(view.sessions.toLong(), "session"))
+    }
+}.joinToString(" · ")
+
+/**
+ * A day heading over the opens that fell in it (#174), spelled the way Today
+ * spells its date (#141).
+ *
+ * The date and nothing else. The rows under a heading already say how many opens
+ * there were and when each happened, so a count on the heading would restate
+ * them — and would put one day's number a scroll above another's, which is a
+ * comparison the reader did not ask for even where ADR 0013 permits bare numbers
+ * to sit adjacent.
+ */
+fun appDayLine(day: AppDay, date: DateFormat = DateFormat.WeekdayAndMonth): String =
+    formatDate(day.day, date)
+

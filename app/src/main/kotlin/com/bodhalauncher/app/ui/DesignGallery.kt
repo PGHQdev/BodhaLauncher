@@ -112,6 +112,15 @@ fun DesignGallery() {
             onClick = {},
             tinted = true,
         )
+        // The inert row (#174): a null onClick publishes no actionable node, so
+        // neither guard walks it — this specimen is roster completeness, not
+        // guard coverage, and it costs nothing because the block re-records
+        // regardless.
+        ListRow(
+            title = "List row, inert — read rather than activated",
+            subtitle = "An app's opens, under their day",
+            onClick = null,
+        )
         // The multi-select row (#137): picked is the accent check in the
         // trailing slot, with no fill or outline change; unavailable is a cap
         // reached, spoken as disabled.
@@ -178,10 +187,10 @@ fun DesignGallery() {
         SessionRow(GALLERY_INTENTIONAL_SESSION, onOpen = {})
         SessionRow(GALLERY_RUNNING_SESSION, onOpen = {})
         Spacer(Modifier.height(BodhaSpacing.s))
-        // The Session view's own row (#173): what was opened and when. Inert by
-        // construction — the row is read, not activated — which is the state no
-        // other specimen here shows.
-        LaunchRow(label = "Gallery app", time = "9:42", icon = null)
+        // The Session view's own row (#173): what was opened and when. It opens
+        // the app's own view (#174), so it draws the chevron and is a node both
+        // guards measure.
+        LaunchRow(label = "Gallery app", time = "9:42", icon = null, onOpen = {})
         Spacer(Modifier.height(BodhaSpacing.xl))
 
         // The inbox row (#162): a live notification under its section, the

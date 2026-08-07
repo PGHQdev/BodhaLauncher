@@ -47,6 +47,25 @@ interface LaunchRecordDao {
     suspend fun forSession(sessionId: Long): List<LaunchRecordEntity>
 
     /**
+     * One app opened up (#174): every launch of it Bodha still holds, newest
+     * first — the list is unbounded in the past and the end worth reading is the
+     * near one.
+     *
+     * **No time predicate, ever.** Retention governs what exists here (ADR 0028)
+     * and entitlement governs what renders (ADR 0005), and the second of those
+     * belongs in the render path where a Pro flip is a recomposition rather than
+     * a re-read. A `fromMillis` parameter would have put the entitlement window
+     * into SQL, where nothing tests it and every caller inherits it.
+     *
+     * No index on `appId`: an index is a schema change, and a schema change is a
+     * version bump, a hand-written migration and a committed schema JSON —
+     * against a table retention caps at 30 days, for a scan nobody has measured
+     * a problem with.
+     */
+    @Query("SELECT * FROM launch_record WHERE appId = :appId ORDER BY atMillis DESC")
+    suspend fun forApp(appId: String): List<LaunchRecordEntity>
+
+    /**
      * The retention worker's cut, under raw usage (#19, ADR 0013). The same
      * window the session records take, because a view reading both against each
      * other would otherwise lie about one of them (ADR 0028).

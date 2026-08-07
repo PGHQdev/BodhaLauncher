@@ -20,9 +20,12 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.bodhalauncher.engine.AppOpens
 import com.bodhalauncher.engine.AwarenessSession
 import com.bodhalauncher.engine.AwarenessToday
 import com.bodhalauncher.engine.SessionDetail
+import com.bodhalauncher.engine.appDayLine
+import com.bodhalauncher.engine.appOpensLine
 import com.bodhalauncher.engine.awarenessIntentWord
 import com.bodhalauncher.engine.awarenessSessionLine
 import com.bodhalauncher.engine.awarenessTodayLine
@@ -105,10 +108,15 @@ private fun AwarenessList(
     title: String,
     line: String?,
     /**
-     * For a view whose rows are all read rather than activated: the surface
-     * itself is then named and focusable, which is the only way Escape has a
-     * chain to travel up (ADR 0022). It holds no click, so ADR 0020's floor does
-     * not reach it. A view with a real first row focuses that instead.
+     * For a view that leads with read content, or whose rows may be absent
+     * altogether: the surface itself is then named and focusable, which is the
+     * only way Escape has a chain to travel up (ADR 0022). It holds no click, so
+     * ADR 0020's floor does not reach it. A view with a real first row focuses
+     * that instead.
+     *
+     * The second half of that is what a failed read needs (#174): a view whose
+     * rows never arrived would otherwise publish nothing to focus, and Escape
+     * would have no chain from a screen the reader is nonetheless looking at.
      */
     focusSelf: Boolean = false,
     content: @Composable () -> Unit,
@@ -171,8 +179,12 @@ fun SessionRow(
  * Back and Escape leave for **root**, not for the Today view: ADR 0011 refuses a
  * stack, and this is the same cost it already accepted for Settings-from-Search.
  * The screen binds neither key; both come from the host's single binding, which
- * the surface's own focus is what makes reachable (ADR 0022) — every row here is
- * read rather than activated, so there is no first row to focus instead.
+ * the surface's own focus is what makes reachable (ADR 0022).
+ *
+ * The surface keeps focus itself rather than handing it to the first launch row
+ * (#174): a session that opened nothing has no rows at all, and conditional
+ * arrival focus would leave exactly that case with no chain for Escape to travel
+ * up.
  */
 @Composable
 fun SessionDetailScreen(
@@ -181,6 +193,12 @@ fun SessionDetailScreen(
     /** The app's own name, or its id where it is no longer installed to have one. */
     labelFor: (String) -> String,
     iconFor: (String) -> ImageBitmap?,
+    /**
+     * Opens the app's own view (#174), by the id the record holds. The id rather
+     * than the label, because the label is what a catalog happened to answer and
+     * the id is what every store is keyed by.
+     */
+    onOpenApp: (String) -> Unit,
 ) {
     if (detail == null) return
     val colors = LocalBodhaColors.current
@@ -208,6 +226,7 @@ fun SessionDetailScreen(
                     label = labelFor(launch.appId),
                     time = launchTimeLine(launch, clock),
                     icon = iconFor(launch.appId),
+                    onOpen = { onOpenApp(launch.appId) },
                 )
             }
         }
@@ -223,24 +242,75 @@ fun SessionDetailScreen(
 
 /**
  * One launch inside a session (#173): the app's mark and name, and when it was
- * opened. Read rather than activated — the record is history, and a row that
- * relaunched from it would be a different feature — so it publishes no click and
- * carries no chevron, and is named as one node rather than two loose strings.
+ * opened. The row opens the app's own view (#174) — still not a way to relaunch,
+ * which remains a different feature, but a way further into the record.
+ *
+ * The chevron is here only because the row now navigates (ADR 0025 rule 3), and
+ * the hand-written merged description went the moment the row gained a click:
+ * `Modifier.clickable` merges the row into one named node on its own, which is
+ * what [SessionRow] has always relied on.
  */
 @Composable
 fun LaunchRow(
     label: String,
     time: String,
     icon: ImageBitmap?,
+    onOpen: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     ListRow(
         title = label,
         subtitle = time,
-        onClick = null,
+        onClick = onOpen,
         leading = icon?.let { { AppMark(it) } },
-        modifier = modifier.semantics(mergeDescendants = true) {
-            contentDescription = "$label. $time."
-        },
+        trailing = { TrailingChevron() },
+        modifier = modifier,
     )
+}
+
+/**
+ * Awareness's App view (#174): one app — when Bodha opened it, how often, and
+ * how many sessions those opens fell in, all from the launch log, so it renders
+ * with no permission granted (ADR 0013).
+ *
+ * The opens sit under day headings, newest day first, because a bare list of
+ * times a fortnight long tells a reader nothing about when. Each open is a row
+ * **read rather than activated**: it is history, it navigates nowhere, and so it
+ * carries no chevron and publishes no actionable node (ADR 0025 rule 3).
+ *
+ * Nothing here says how long the app was in front. That figure needs usage
+ * access and arrives with it (#175); until then the view has no field for it at
+ * all, rather than a field resolving to 0 — an unmeasured span and a span of
+ * zero are different claims, and only one of them is true.
+ *
+ * Back and Escape leave for **root**, the same as the Session view they were
+ * reached through, and for the same reason: ADR 0011 refuses a stack, so a
+ * drill-down two rows deep is still not a stack frame. The accepted cost is that
+ * Escape from here loses the session the reader was in — the trade ADR 0011
+ * already records for losing a Search query.
+ */
+@Composable
+fun AppOpensScreen(
+    /**
+     * Null while the launch log is still being read, and null if the read
+     * failed. The view is a named, focusable shell either way — a screen with
+     * nothing to focus is a screen Escape cannot leave (ADR 0022).
+     */
+    view: AppOpens?,
+    /** The title before a read lands: the app's name, or its id where it has none left. */
+    label: String,
+) {
+    val formats = LocalBodhaFormats.current
+    if (view == null) {
+        AwarenessList(title = label, line = null, focusSelf = true) {}
+        return
+    }
+    AwarenessList(title = view.name, line = appOpensLine(view), focusSelf = true) {
+        view.days.forEach { day ->
+            SectionOverline(appDayLine(day, formats.date))
+            day.opens.forEach { open ->
+                ListRow(title = launchTimeLine(open, formats.clock), onClick = null)
+            }
+        }
+    }
 }

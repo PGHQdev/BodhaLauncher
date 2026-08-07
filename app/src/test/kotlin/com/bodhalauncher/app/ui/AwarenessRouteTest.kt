@@ -19,6 +19,7 @@ import com.bodhalauncher.engine.Place
 import com.bodhalauncher.engine.SessionDetail
 import com.bodhalauncher.engine.SessionRecord
 import com.bodhalauncher.engine.Surface
+import com.bodhalauncher.engine.resolveAppOpens
 import com.bodhalauncher.engine.resolveBack
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -66,40 +67,55 @@ class AwarenessRouteTest {
     )
 
     /**
-     * Which session is open lives inside this branch, exactly as it lives inside
-     * `AwarenessSurface` — so leaving for root is what drops it, and there is no
-     * state anywhere for a second back press to walk down.
+     * Which session is open, and which app inside it, live inside this branch,
+     * exactly as they live inside `AwarenessSurface` — so leaving for root is what
+     * drops both, and there is no state anywhere for a second back press to walk
+     * down. Two levels of drill-down, still no stack.
      */
     @Composable
     private fun AwarenessBranch() {
         var open by remember { mutableStateOf<Long?>(null) }
-        if (open == null) {
-            AwarenessScreen(
+        var openApp by remember { mutableStateOf<String?>(null) }
+        val appId = openApp
+        when {
+            appId != null -> AppOpensScreen(
+                view = resolveAppOpens(appId, "Atlas", detail.launches),
+                label = "Atlas",
+            )
+
+            open != null -> SessionDetailScreen(
+                detail = detail,
+                labelFor = { "Atlas" },
+                iconFor = { null },
+                onOpenApp = { openApp = it },
+            )
+
+            else -> AwarenessScreen(
                 today = AwarenessToday.Sessions(finished = 1, running = false),
                 sessions = sessions,
                 onOpenSession = { open = it.record.id },
                 onBack = {},
             )
-        } else {
-            SessionDetailScreen(detail = detail, labelFor = { "Atlas" }, iconFor = { null })
+        }
+    }
+
+    private fun setHost() = compose.setContent {
+        BodhaTheme {
+            // The host's own binding, over the engine's rule (#132).
+            var place by remember { mutableStateOf(Place(Surface.Awareness)) }
+            BackHandler(enabled = place.surface != Surface.Home) {
+                resolveBack(place)?.let { place = it }
+            }
+            Box(Modifier.fillMaxSize().escapeIsBack()) {
+                if (place.surface == Surface.Awareness) AwarenessBranch()
+                else ListRow("Open Awareness", onClick = { place = Place(Surface.Awareness) })
+            }
         }
     }
 
     @Test
     fun `Enter opens a session, and Escape leaves for root rather than for the list`() {
-        compose.setContent {
-            BodhaTheme {
-                // The host's own binding, over the engine's rule (#132).
-                var place by remember { mutableStateOf(Place(Surface.Awareness)) }
-                BackHandler(enabled = place.surface != Surface.Home) {
-                    resolveBack(place)?.let { place = it }
-                }
-                Box(Modifier.fillMaxSize().escapeIsBack()) {
-                    if (place.surface == Surface.Awareness) AwarenessBranch()
-                    else ListRow("Open Awareness", onClick = { place = Place(Surface.Awareness) })
-                }
-            }
-        }
+        setHost()
 
         compose.tabTo(ACTIVITY_ROOT, "9:41 · 12 minutes")
         compose.press(ACTIVITY_ROOT, Key.Enter)
@@ -114,5 +130,25 @@ class AwarenessRouteTest {
         compose.press(ACTIVITY_ROOT, Key.Enter)
         assertTrue("9:41 · 12 minutes" in compose.drawnTextIn(ACTIVITY_ROOT))
         assertFalse("Atlas" in compose.drawnTextIn(ACTIVITY_ROOT))
+    }
+
+    /**
+     * The second level, walked the same way (#174). Escape from the App view goes
+     * to **root**, not back to the session it was opened from — the cost ADR 0011
+     * accepts for refusing a stack, and the reason nothing here is a [Place].
+     */
+    @Test
+    fun `Enter on a launch row opens the app, and Escape leaves for root rather than for the session`() {
+        setHost()
+
+        compose.tabTo(ACTIVITY_ROOT, "9:41 · 12 minutes")
+        compose.press(ACTIVITY_ROOT, Key.Enter)
+        compose.tabTo(ACTIVITY_ROOT, "Atlas")
+        compose.press(ACTIVITY_ROOT, Key.Enter)
+        assertTrue("1 open · 1 session" in compose.drawnTextIn(ACTIVITY_ROOT))
+        assertFalse("Session" in compose.drawnTextIn(ACTIVITY_ROOT))
+
+        compose.press(ACTIVITY_ROOT, Key.Escape)
+        assertEquals(listOf("Open Awareness"), compose.drawnTextIn(ACTIVITY_ROOT))
     }
 }

@@ -1,5 +1,6 @@
 package com.bodhalauncher.engine
 
+import java.time.LocalDate
 import java.time.LocalDateTime
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -306,10 +307,164 @@ class AwarenessTest {
         assertEquals("0942", launchTimeLine(opened, ClockFormat.Nato))
     }
 
+    // Awareness's App view (#174): one app's opens.
+
+    private fun opened(appId: String, at: LocalDateTime, session: Long? = null) =
+        LaunchRecord(appId = appId, at = at, session = session)
+
+    private fun day(y: Int, m: Int, d: Int, hour: Int, minute: Int = 0) =
+        LocalDateTime.of(y, m, d, hour, minute)
+
+    @Test
+    fun `an app's opens group under the day they fell in, newest first`() {
+        val view = resolveAppOpens(
+            appId = "atlas",
+            label = "Atlas",
+            launches = listOf(
+                opened("atlas", day(2026, 8, 6, 9, 10)),
+                opened("ledger", day(2026, 8, 7, 11, 0)),
+                opened("atlas", day(2026, 8, 7, 21, 30)),
+                opened("atlas", day(2026, 8, 7, 9, 15)),
+                // 2:00am on the 8th is still the 7th's, under the 4am boundary
+                // (ADR 0003) — the same day the evening open belongs to.
+                opened("atlas", day(2026, 8, 8, 2, 0)),
+            ),
+        )
+
+        assertEquals(
+            listOf(LocalDate.of(2026, 8, 7), LocalDate.of(2026, 8, 6)),
+            view.days.map { it.day },
+        )
+        assertEquals(
+            listOf(day(2026, 8, 8, 2, 0), day(2026, 8, 7, 21, 30), day(2026, 8, 7, 9, 15)),
+            view.days[0].opens.map { it.at },
+        )
+        assertEquals(listOf(day(2026, 8, 6, 9, 10)), view.days[1].opens.map { it.at })
+    }
+
+    @Test
+    fun `the counts are of the records the view renders, and a launch that named no session joins none`() {
+        val view = resolveAppOpens(
+            appId = "atlas",
+            label = "Atlas",
+            launches = listOf(
+                opened("atlas", day(2026, 8, 7, 9, 15), session = 1),
+                opened("atlas", day(2026, 8, 7, 9, 40), session = 1),
+                opened("atlas", day(2026, 8, 6, 20, 0), session = 2),
+                opened("atlas", day(2026, 8, 6, 21, 0), session = null),
+                opened("ledger", day(2026, 8, 7, 11, 0), session = 3),
+            ),
+        )
+
+        assertEquals(4, view.opens)
+        assertEquals(view.days.sumOf { it.opens.size }, view.opens)
+        // Two sessions, though four opens fell across them: an app opened three
+        // times in one session appeared in one session.
+        assertEquals(2, view.sessions)
+        assertEquals("4 opens · 2 sessions", appOpensLine(view))
+    }
+
+    /** The record is what Bodha holds; the phone's current inventory does not edit it. */
+    @Test
+    fun `an app with no name left keeps its recorded id and is named as uninstalled`() {
+        val view = resolveAppOpens(
+            appId = "com.example.gone",
+            label = null,
+            launches = listOf(opened("com.example.gone", day(2026, 8, 7, 9, 15), session = 1)),
+        )
+
+        assertEquals("com.example.gone", view.appId)
+        assertEquals("com.example.gone", view.name)
+        assertEquals(false, view.installed)
+        assertEquals(1, view.opens)
+        assertEquals("No longer installed · 1 open · 1 session", appOpensLine(view))
+    }
+
+    @Test
+    fun `one open and two hundred render the same shape`() {
+        fun view(count: Int) = resolveAppOpens(
+            appId = "atlas",
+            label = "Atlas",
+            launches = (1..count).map { opened("atlas", day(2026, 8, 7, 5).plusMinutes(it * 5L), 1) },
+        )
+
+        val one = view(1)
+        val many = view(200)
+        assertEquals(one.days.size, many.days.size)
+        assertEquals(one.installed, many.installed)
+        assertEquals(one.sessions, many.sessions)
+        assertEquals("1 open · 1 session", appOpensLine(one))
+        assertEquals("200 opens · 1 session", appOpensLine(many))
+    }
+
+    @Test
+    fun `an app opened outside every session is never told it had none`() {
+        val view = resolveAppOpens(
+            appId = "atlas",
+            label = "Atlas",
+            launches = listOf(opened("atlas", day(2026, 8, 7, 9, 15), session = null)),
+        )
+
+        assertEquals(0, view.sessions)
+        assertEquals("1 open", appOpensLine(view))
+    }
+
+    /** A read that landed on nothing is a named absence, never a 0 in a count field. */
+    @Test
+    fun `an app with nothing recorded says so rather than counting nothing`() {
+        val view = resolveAppOpens("atlas", "Atlas", launches = listOf(opened("ledger", now)))
+
+        assertEquals(emptyList<AppDay>(), view.days)
+        assertEquals("No opens recorded", appOpensLine(view))
+    }
+
+    @Test
+    fun `a day heading is the date and nothing else, spelled by the chosen format`() {
+        val august = AppDay(LocalDate.of(2026, 8, 7), listOf(opened("atlas", day(2026, 8, 7, 9, 15))))
+
+        assertEquals("Friday, 7 August", appDayLine(august))
+        assertEquals("2026-08-07", appDayLine(august, DateFormat.Numeric))
+    }
+
+    /**
+     * Foreground time needs usage access and arrives with it (#175). Until then
+     * the view has no field for it — pinned here as a shape, because a field
+     * resolving to 0 would say the app was never in front, which is a different
+     * claim from "nothing measured it".
+     */
+    @Test
+    fun `the App view carries no duration field at all`() {
+        val fields = AppOpens::class.java.declaredFields.map { it.name }
+
+        assertEquals(listOf("appId", "name", "installed", "days", "opens", "sessions"), fields)
+        for (word in listOf("duration", "millis", "seconds", "foreground", "screen")) {
+            assert(fields.none { it.lowercase().contains(word) }) {
+                "AppOpens carries \"$word\" before #175 grants it a reading"
+            }
+        }
+    }
+
     @Test
     fun `no rendered line carries a delta, a direction word or a ranking`() {
         val start = LocalDateTime.of(2026, 8, 7, 9, 41)
+        val appDay = AppDay(LocalDate.of(2026, 8, 7), listOf(opened("atlas", start)))
+        fun app(installed: Boolean, opens: Int, sessions: Int) = appOpensLine(
+            AppOpens(
+                appId = "atlas",
+                name = if (installed) "Atlas" else "atlas",
+                installed = installed,
+                days = if (opens == 0) emptyList() else listOf(appDay),
+                opens = opens,
+                sessions = sessions,
+            )
+        )
         val lines = listOf(
+            app(installed = true, opens = 12, sessions = 4),
+            app(installed = true, opens = 1, sessions = 0),
+            app(installed = true, opens = 0, sessions = 0),
+            app(installed = false, opens = 3, sessions = 2),
+            appDayLine(appDay),
+        ) + listOf(
             awarenessTodayLine(AwarenessToday.None),
             awarenessTodayLine(AwarenessToday.Sessions(1, running = false)),
             awarenessTodayLine(AwarenessToday.Sessions(6, running = true)),

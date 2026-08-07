@@ -16,15 +16,18 @@ import com.bodhalauncher.app.home.AppCatalog
 import com.bodhalauncher.app.intent.IntentRecordStore
 import com.bodhalauncher.app.session.SessionRuntime
 import com.bodhalauncher.app.session.toRecord
+import com.bodhalauncher.app.ui.AppOpensScreen
 import com.bodhalauncher.app.ui.AwarenessScreen
 import com.bodhalauncher.app.ui.SessionDetailScreen
 import com.bodhalauncher.app.ui.minuteNow
 import com.bodhalauncher.engine.AwarenessSession
 import com.bodhalauncher.engine.AwarenessToday
 import com.bodhalauncher.engine.IntentSignal
+import com.bodhalauncher.engine.LaunchRecord
 import com.bodhalauncher.engine.SessionDetail
 import com.bodhalauncher.engine.dayKey
 import com.bodhalauncher.engine.dayStart
+import com.bodhalauncher.engine.resolveAppOpens
 import com.bodhalauncher.engine.resolveAwarenessSessions
 import com.bodhalauncher.engine.resolveAwarenessToday
 import com.bodhalauncher.engine.resolveSessionDetail
@@ -56,9 +59,17 @@ private data class AwarenessDay(
  * be read contributes nothing, which leaves a session unclassified rather than
  * asserting something false about it.
  *
- * Which session is open is held here rather than in the navigation model: ADR
- * 0011's depth is a bound on surfaces with a sub-screen to return to, and this
- * view has none — back leaves for root, which drops this state with the surface.
+ * Which session is open, and which app inside it, are held here rather than in
+ * the navigation model — and the drill-down being two levels deep is why that is
+ * worth stating rather than assuming. `MAX_SURFACE_DEPTH` and ADR 0019's
+ * "exactly one level" both bound the depth of *surfaces*, and this surface stays
+ * at depth 0 throughout: every branch's back leaves for **root**, so no branch is
+ * a stack frame and no state is ever popped rather than dropped. That is ADR
+ * 0011 read literally rather than stretched.
+ *
+ * The cost is named rather than hidden: Escape from the App view drops to root
+ * and loses the session the reader was in, which is the same trade ADR 0011
+ * already accepted for losing a Search query on the way to Settings.
  */
 @Composable
 fun AwarenessSurface(
@@ -99,54 +110,91 @@ fun AwarenessSurface(
             }.getOrNull()
         } ?: value
     }
+    // Resolved once per id rather than per recomposition: an icon is a binder
+    // call and a bitmap decode, and a label is a walk of every installed app.
+    // Not getOrPut — an app with no readable icon caches its null, as the
+    // inbox's marks do. Hoisted above the branch because every branch names apps.
+    val icons = remember { mutableMapOf<String, ImageBitmap?>() }
+    val labels = remember(catalog.apps.value) { catalog.apps.value.associateBy { it.id } }
+    // Null is an app uninstalled since the launch: it has no name left to give,
+    // and the engine takes the absence rather than a fallback, because "named as
+    // uninstalled" is its rule to state (#174).
+    val labelFor: (String) -> String? = { id -> labels[id]?.label }
+    val iconFor: (String) -> ImageBitmap? = { id ->
+        if (id !in icons) icons[id] = runCatching { catalog.icon(id) }.getOrNull()
+        icons[id]
+    }
     var open by remember { mutableStateOf<Long?>(null) }
+    var openApp by remember { mutableStateOf<String?>(null) }
     val openSession = day?.sessions?.firstOrNull { it.record.id == open }
-    if (open == null || openSession == null) {
-        AwarenessScreen(
+    val appId = openApp
+    // One `when` rather than an early return per branch: the three views are the
+    // branches, and whatever must render over all of them goes after it. The
+    // entitlement dialog (#177) and the actions sheets (#178) each need a site
+    // reachable from every view, and an early return leaves them nowhere to go.
+    when {
+        appId != null -> {
+            // Read unfiltered and newest-first; what renders is decided here in
+            // composition, not in SQL. Resolving in composition rather than
+            // inside the read is what lets a catalog that answers later name the
+            // app without the log being read again.
+            val launches by produceState<List<LaunchRecord>?>(null, appId) {
+                value = withContext(Dispatchers.IO) {
+                    runCatching {
+                        BodhaDatabase.get(context).launchRecords()
+                            .forApp(appId)
+                            .map { it.toRecord() }
+                    }.getOrNull()
+                }
+            }
+            val label = labelFor(appId)
+            AppOpensScreen(
+                view = launches?.let { resolveAppOpens(appId, label, it) },
+                label = label ?: appId,
+            )
+        }
+
+        openSession != null -> {
+            // The launches are the session's own; the checks and the repeated
+            // open come from the event log, which carries no session, so the span
+            // is what selects them. A running session's span is open, so it ends
+            // at now.
+            val detail by produceState<SessionDetail?>(null, openSession, now) {
+                value = withContext(Dispatchers.IO) {
+                    runCatching {
+                        val launches = BodhaDatabase.get(context).launchRecords()
+                            .forSession(openSession.record.id)
+                            .map { it.toRecord() }
+                        resolveSessionDetail(
+                            session = openSession,
+                            launches = launches,
+                            events = events.between(
+                                openSession.record.start,
+                                openSession.record.end ?: LocalDateTime.now(),
+                            ),
+                            signals = day?.signals.orEmpty(),
+                        )
+                    }.getOrNull()
+                }
+            }
+            SessionDetailScreen(
+                detail = detail,
+                // An app uninstalled since the launch has no name left to give,
+                // and its id is what Bodha actually holds — shown rather than
+                // hidden (#24).
+                labelFor = { id -> labelFor(id) ?: id },
+                iconFor = iconFor,
+                onOpenApp = { openApp = it },
+            )
+        }
+
+        else -> AwarenessScreen(
             today = day?.today,
             sessions = day?.sessions.orEmpty(),
             onOpenSession = { open = it.record.id },
             onBack = onBack,
         )
-        return
     }
-    // The launches are the session's own; the checks and the repeated open come
-    // from the event log, which carries no session, so the span is what selects
-    // them. A running session's span is open, so it ends at now.
-    val detail by produceState<SessionDetail?>(null, openSession, now) {
-        value = withContext(Dispatchers.IO) {
-            runCatching {
-                val launches = BodhaDatabase.get(context).launchRecords()
-                    .forSession(openSession.record.id)
-                    .map { it.toRecord() }
-                resolveSessionDetail(
-                    session = openSession,
-                    launches = launches,
-                    events = events.between(
-                        openSession.record.start,
-                        openSession.record.end ?: LocalDateTime.now(),
-                    ),
-                    signals = day?.signals.orEmpty(),
-                )
-            }.getOrNull()
-        }
-    }
-    // Resolved once per id rather than per recomposition: an icon is a binder
-    // call and a bitmap decode, and a label is a walk of every installed app.
-    // Not getOrPut — an app with no readable icon caches its null, as the
-    // inbox's marks do.
-    val icons = remember { mutableMapOf<String, ImageBitmap?>() }
-    val labels = remember(catalog.apps.value) { catalog.apps.value.associateBy { it.id } }
-    SessionDetailScreen(
-        detail = detail,
-        // An app uninstalled since the launch has no name left to give, and its
-        // id is what Bodha actually holds — shown rather than hidden (#24).
-        labelFor = { id -> labels[id]?.label ?: id },
-        iconFor = { id ->
-            if (id !in icons) icons[id] = runCatching { catalog.icon(id) }.getOrNull()
-            icons[id]
-        },
-    )
 }
 
 private fun LocalDateTime.toInstant(): Instant = atZone(ZoneId.systemDefault()).toInstant()

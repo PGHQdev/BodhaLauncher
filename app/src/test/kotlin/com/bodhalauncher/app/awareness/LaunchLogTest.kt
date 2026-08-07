@@ -78,6 +78,40 @@ class LaunchLogTest {
         )
     }
 
+    /** One app opened up (#174): its own records, and the near end at the top. */
+    @Test
+    fun `forApp returns only that app's records, newest first`() = runBlocking {
+        log.write("atlas", at("2026-08-07T09:42:00"), SessionId(1))
+        log.write("ledger", at("2026-08-07T09:43:00"), SessionId(1))
+        log.write("atlas", at("2026-08-07T21:30:00"), SessionId(2))
+        log.write("atlas", at("2026-08-06T09:10:00"), session = null)
+
+        val records = db.launchRecords().forApp("atlas")
+
+        assertEquals(listOf("atlas", "atlas", "atlas"), records.map { it.appId })
+        assertEquals(
+            listOf(
+                at("2026-08-07T21:30:00").toEpochMilli(),
+                at("2026-08-07T09:42:00").toEpochMilli(),
+                at("2026-08-06T09:10:00").toEpochMilli(),
+            ),
+            records.map { it.atMillis },
+        )
+    }
+
+    /**
+     * Retention governs what exists (ADR 0028) and entitlement governs what
+     * renders (ADR 0005), in the render path. The query knows about neither, which
+     * is what keeps the Pro window a recomposition rather than a second read.
+     */
+    @Test
+    fun `forApp has no time bound, so every retained record reaches the caller`() = runBlocking {
+        log.write("atlas", at("2025-01-01T09:00:00"), session = null)
+        log.write("atlas", at("2026-08-07T09:42:00"), SessionId(1))
+
+        assertEquals(2, db.launchRecords().forApp("atlas").size)
+    }
+
     /**
      * The record carries app identity and a timestamp, and there is no field it
      * could carry anything else in (ADR 0013) — which is the whole reason this

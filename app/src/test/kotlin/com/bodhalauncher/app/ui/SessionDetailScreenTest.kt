@@ -71,12 +71,15 @@ class SessionDetailScreenTest {
         statement: String? = null,
     ) = SessionDetail(session, launches, checks, repeatedOpen, statement)
 
+    private val opened = mutableListOf<String>()
+
     private fun setScreen(detail: SessionDetail?) = compose.setContent {
         BodhaTheme {
             SessionDetailScreen(
                 detail = detail,
                 labelFor = { id -> if (id == "atlas") "Atlas" else id },
                 iconFor = { null },
+                onOpenApp = { opened += it },
             )
         }
     }
@@ -126,22 +129,37 @@ class SessionDetailScreenTest {
     }
 
     /**
-     * The launches are history, not a way to relaunch: the rows publish no click,
-     * so neither ADR 0020's floor nor ADR 0022's traversal has one to measure.
+     * The row opens the app's own view (#174), so it draws the navigate marker
+     * (ADR 0025 rule 3) and publishes one node the click merged — not two loose
+     * strings, and not a hand-written description restating them.
      */
     @Test
-    fun `the launch rows are read rather than activated`() {
-        setScreen(detail())
+    fun `a launch row navigates, so it publishes one named node and one chevron`() {
+        setScreen(detail(launches = listOf(launch("atlas", 42))))
 
-        assertEquals(
-            emptyList<String>(),
-            nodes().filter { SemanticsActions.OnClick in it.config }.mapNotNull { node ->
-                node.config.getOrNull(SemanticsProperties.ContentDescription)?.firstOrNull()
-            },
-        )
+        val rows = nodes()
+            .filter { SemanticsActions.OnClick in it.config }
+            .map { node -> node.config.getOrNull(SemanticsProperties.Text).orEmpty().map { it.text } }
+        assertEquals(listOf(listOf("Atlas", "9:42", "›")), rows)
+        assertEquals(1, drawnText().count { it == "›" })
     }
 
-    /** Which is why the surface takes focus itself — Escape travels up from it. */
+    /** By the id the record holds, never by the label a catalog happened to answer. */
+    @Test
+    fun `activating a launch row hands back the app's id, not its name`() {
+        setScreen(detail(launches = listOf(launch("atlas", 42))))
+
+        nodes().single { SemanticsActions.OnClick in it.config }
+            .config[SemanticsActions.OnClick].action?.invoke()
+
+        assertEquals(listOf("atlas"), opened)
+    }
+
+    /**
+     * A session that opened nothing has no rows at all, so the surface takes
+     * focus itself rather than the first row — and keeps doing so once the rows
+     * are focusable (#174), which is what this walks with them present.
+     */
     @Test
     fun `the surface takes focus on arrival, so back has a key`() {
         var backs = 0
@@ -153,6 +171,7 @@ class SessionDetailScreenTest {
                         detail = detail(),
                         labelFor = { it },
                         iconFor = { null },
+                        onOpenApp = {},
                     )
                 }
             }
