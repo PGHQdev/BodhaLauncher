@@ -186,9 +186,9 @@ class SettingsRouteTest {
         compose.tabTo(ACTIVITY_ROOT, "Date format")
         compose.press(ACTIVITY_ROOT, Key.Enter)
 
-        // Arrival is the row that was searched for, not the first row of Settings.
-        // A choice row's card is inert, so what focus reaches is the row's first
-        // control — its first answer, whichever one currently holds.
-        assertEquals("Weekday and month", compose.focusedNameIn(ACTIVITY_ROOT))
+        // Arrival is the row that was searched for, not the first row of Settings —
+        // and on a choice row it is the answer that holds, so what a reader hears
+        // is the current value rather than an answer that is merely first (#213).
+        assertEquals("Numeric", compose.focusedNameIn(ACTIVITY_ROOT))
     }
 }

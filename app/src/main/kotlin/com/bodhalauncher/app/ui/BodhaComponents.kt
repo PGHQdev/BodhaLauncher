@@ -440,6 +440,14 @@ fun <T> ChoiceRow(
     current: T,
     onPick: (T) -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * Where an arrival on this row lands (#213). The card is inert, so a caller's
+     * focus modifier put on [modifier] would delegate to whichever answer happens
+     * to be declared first — an answer that is not selected, which a reader hears
+     * as a bare label and can only read as the current one. It goes here instead,
+     * and the row decides what it means: the answer that holds.
+     */
+    arrival: Modifier = Modifier,
 ) {
     val colors = LocalBodhaColors.current
     BodhaCard(modifier = modifier.fillMaxWidth()) {
@@ -465,6 +473,7 @@ fun <T> ChoiceRow(
                         // exactly what the held answer is.
                         emphasis = if (value == current) Emphasis.Tinted else Emphasis.Plain,
                         selected = value == current,
+                        modifier = if (value == current) arrival else Modifier,
                     )
                 }
             }

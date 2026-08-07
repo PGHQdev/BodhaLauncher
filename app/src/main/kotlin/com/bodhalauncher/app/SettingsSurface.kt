@@ -85,7 +85,14 @@ fun SettingsSurface(
                 if (row.section != SETTINGS_ROWS.getOrNull(index - 1)?.section) {
                     row.section?.let { SectionOverline(it.title) }
                 }
-                val arriving = if (row.id == landing) Modifier.arriveHere() else Modifier
+                // The two halves of an arrival go to two places. The scroll is
+                // about the whole row — bringing one pill into view without its
+                // title says nothing — so it rides the card. Focus is about a
+                // control, so a choice row takes it on the answer that holds and
+                // a card row on itself, which is its own control (#213).
+                val arriving = row.id == landing
+                val scrollTo = if (arriving) Modifier.scrollHereOnArrival() else Modifier
+                val takeFocus = if (arriving) Modifier.focusOnOpen() else Modifier
                 when (row.id) {
                     SettingsRowId.HomeRole -> CardRow(
                         title = row.label,
@@ -97,28 +104,31 @@ fun SettingsSurface(
                         // holding the role already means the platform has nothing
                         // to ask, so the tap re-reads and the row says what it said.
                         onClick = onRequestHomeRole,
-                        modifier = arriving,
+                        modifier = scrollTo.then(takeFocus),
                     )
                     SettingsRowId.Theme -> ChoiceRow(
                         title = row.label,
                         options = THEME_OPTIONS,
                         current = appearance.theme,
                         onPick = appearance.onTheme,
-                        modifier = arriving,
+                        modifier = scrollTo,
+                        arrival = takeFocus,
                     )
                     SettingsRowId.ClockFormat -> ChoiceRow(
                         title = row.label,
                         options = CLOCK_OPTIONS,
                         current = appearance.clock,
                         onPick = appearance.onClock,
-                        modifier = arriving,
+                        modifier = scrollTo,
+                        arrival = takeFocus,
                     )
                     SettingsRowId.DateFormat -> ChoiceRow(
                         title = row.label,
                         options = DATE_OPTIONS,
                         current = appearance.date,
                         onPick = appearance.onDate,
-                        modifier = arriving,
+                        modifier = scrollTo,
+                        arrival = takeFocus,
                     )
                 }
             }
@@ -127,30 +137,22 @@ fun SettingsSurface(
 }
 
 /**
- * Where an arrival lands: the row takes focus, and the row is scrolled to.
+ * The scroll half of an arrival: put the row on screen.
  *
- * Two halves, because they serve two people. Focus is ADR 0022's arrival and what
- * gives Escape a chain to travel up — but a row is focusable in non-touch mode
- * only, so for the touch user who just tapped a search result it never lands. The
- * scroll is that user's half, and once Settings runs past a screen it is the only
- * thing that makes "opens at that row" true for them (#191).
- *
- * A choice row's card is inert (its answers are the controls), so on one of those
- * focus reaches the first answer rather than the row. The row's own title sits
- * directly above it, and the search result that brought you here said the same
- * word — so the arrival is oriented without a second name on an inert node, which
- * would only have a reader say the row twice.
+ * It is the half that serves the touch user, and it exists because the other half
+ * cannot serve them — a row is focusable in non-touch mode only (ADR 0022), so
+ * for someone who just tapped a search result focus never lands. Once Settings
+ * runs past a screen this is the only thing that makes "opens at that row" true
+ * for them (#191).
  */
 @Composable
-private fun Modifier.arriveHere(): Modifier {
+private fun Modifier.scrollHereOnArrival(): Modifier {
     val bringIntoView = remember { BringIntoViewRequester() }
     // Asked once the row has been placed, not on composition: the request is
     // about where the row is, and until the first placement there is no answer.
     var placed by remember { mutableStateOf(false) }
     LaunchedEffect(placed) { if (placed) bringIntoView.bringIntoView() }
-    return focusOnOpen()
-        .bringIntoViewRequester(bringIntoView)
-        .onGloballyPositioned { placed = true }
+    return bringIntoViewRequester(bringIntoView).onGloballyPositioned { placed = true }
 }
 
 /**
