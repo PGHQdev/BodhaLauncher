@@ -199,8 +199,8 @@ private fun AllFixtures() {
     }
 }
 
-/** Enough for the field and the one row beneath it, which is all this fixture needs. */
-private val SEARCH_FIXTURE_HEIGHT = 240.dp
+/** Enough for the field, the section overline and the one row beneath, which is all this fixture needs. */
+private val SEARCH_FIXTURE_HEIGHT = 300.dp
 
 /** Matches at a word boundary, so the fixture draws a result row as well as the field. */
 private const val SEARCH_QUERY = "gallery"

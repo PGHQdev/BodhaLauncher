@@ -28,6 +28,38 @@ fun matchesQuery(label: String, query: String): Boolean {
 }
 
 /**
+ * Whether [query] is the whole of [label] rather than a prefix into it — same words,
+ * in order, each complete. ADR 0014's first ranking tier: "insta" prefix-matches
+ * Instagram, but only "instagram" matches it exactly.
+ */
+fun matchesExactly(label: String, query: String): Boolean {
+    val queryWords = foldedWords(query)
+    return queryWords.isNotEmpty() && queryWords == foldedWords(label)
+}
+
+/**
+ * How early in [label] the [query] lands: the index of the first label word some
+ * query word prefixes, 0 for a hit on the first word. ADR 0014's third tier —
+ * "which field matched and how early" — with label the one field every domain
+ * has. [Int.MAX_VALUE] when nothing matches, so a non-match always sorts last.
+ */
+fun matchDepth(label: String, query: String): Int {
+    val queryWords = foldedWords(query)
+    if (queryWords.isEmpty()) return 0
+    val labelWords = foldedWords(label)
+    val depth = labelWords.indexOfFirst { word -> queryWords.any { word.startsWith(it) } }
+    return if (depth < 0) Int.MAX_VALUE else depth
+}
+
+/**
+ * The form a query is remembered by (#185): its words, folded as matching folds
+ * them, joined by single spaces. "Mail ", "mail" and "MAIL" are one query, so a
+ * default set against one answers to them all — anything looser and "the next
+ * time that exact query is typed" would hang on invisible whitespace.
+ */
+fun canonicalQuery(query: String): String = foldedWords(query).joinToString(" ")
+
+/**
  * Whether [query] holds no words at all — empty, whitespace, punctuation — and so narrows
  * nothing. Callers that suppress or reshape content while a search is running ask this
  * rather than testing the raw text, so their idea of blank is [matchesQuery]'s idea of it.

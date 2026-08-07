@@ -18,8 +18,13 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.bodhalauncher.engine.ActionResult
+import com.bodhalauncher.engine.AppResult
 import com.bodhalauncher.engine.HomeAction
+import com.bodhalauncher.engine.SearchResult
 import com.bodhalauncher.engine.SearchState
+import com.bodhalauncher.engine.ShortcutResult
+import com.bodhalauncher.engine.SurfaceResult
 
 /**
  * Search: a field and whatever the query found, and nothing else.
@@ -28,6 +33,10 @@ import com.bodhalauncher.engine.SearchState
  * line beneath the field is [SEARCH_NOTHING_FOUND], and it appears only for a
  * query that matched nothing; an untyped field says nothing, because nothing has
  * failed yet.
+ *
+ * Sections draw in the engine's fixed order under their overlines, only those
+ * with matches (#181). A shortcut row wears its owning app's mark: the label
+ * says what it does, the mark says whose it is.
  *
  * Back and Escape are the navigation model's (#132) and appear nowhere here: back
  * is the host's `BackHandler` and Escape reaches the root binding along the focus
@@ -38,10 +47,17 @@ fun SearchScreen(
     state: SearchState,
     query: String,
     onQueryChange: (String) -> Unit,
-    iconFor: (HomeAction) -> ImageBitmap?,
+    /** The launcher icon for an app id — a result's own, or a shortcut's owner's. */
+    iconFor: (String) -> ImageBitmap?,
     /** Changes when any package changes, so cached icons refresh with their apps. */
     iconKey: Any,
-    onOpen: (HomeAction) -> Unit,
+    onOpen: (SearchResult) -> Unit,
+    /**
+     * Long-press (or Right, through the rows' shared Actions node) on an app
+     * result — hide and pin live behind it (#184). Only app rows carry it:
+     * shortcuts, actions and surfaces have nothing to hide or pin.
+     */
+    onAppActions: (HomeAction) -> Unit = {},
 ) {
     val colors = LocalBodhaColors.current
     Column(
@@ -53,8 +69,8 @@ fun SearchScreen(
     ) {
         SearchField(query, onQueryChange)
         if (state.nothingFound) {
-            // Said once, over the whole search: with one domain shipped there is
-            // no section for a per-section empty state to belong to (ADR 0014).
+            // Said once, over the whole search: an absent section is not a
+            // failure, so no section owes its own empty state (ADR 0014).
             Text(
                 text = SEARCH_NOTHING_FOUND,
                 color = colors.inkMuted,
@@ -63,17 +79,33 @@ fun SearchScreen(
             )
         }
         LazyColumn(modifier = Modifier.fillMaxSize()) {
-            items(count = state.rows.size, key = { state.rows[it].id }) { i ->
-                val app = state.rows[i]
-                val icon = remember(app.id, iconKey) { iconFor(app) }
-                // No long-press: hide and pin belong to the Library, which is
-                // where an app's actions are (#61, #62).
-                ListRow(
-                    title = app.label,
-                    onClick = { onOpen(app) },
-                    // The app's own mark, so bare rather than chipped (rule 5).
-                    leading = if (icon != null) ({ AppMark(icon) }) else null,
-                )
+            state.sections.forEach { (section, rows) ->
+                // The overline is plain text, not an item boundary a key would
+                // protect: sections never reorder, the engine fixes that.
+                item(key = "overline:$section") { SectionOverline(section.heading) }
+                items(count = rows.size, key = { rows[it].result.key }) { i ->
+                    val row = rows[i]
+                    val result = row.result
+                    val ownerId = when (result) {
+                        is AppResult -> result.app.id
+                        is ShortcutResult -> result.shortcut.appId
+                        // No app owns an action or a surface, so no mark leads.
+                        is ActionResult, is SurfaceResult -> null
+                    }
+                    val icon = remember(ownerId, iconKey) { ownerId?.let(iconFor) }
+                    // The reason line rides as the subtitle — plain text, no
+                    // tab stop of its own (#182).
+                    ListRow(
+                        title = result.label,
+                        subtitle = row.reason,
+                        onClick = { onOpen(result) },
+                        onLongClick = (result as? AppResult)?.let { { onAppActions(it.app) } },
+                        // The app's own mark, so bare rather than chipped (rule 5).
+                        leading = if (icon != null) ({ AppMark(icon) }) else null,
+                        // Rule 3: only the surface row navigates within Bodha.
+                        trailing = if (result is SurfaceResult) ({ TrailingChevron() }) else null,
+                    )
+                }
             }
         }
     }
@@ -107,7 +139,7 @@ private fun SearchField(query: String, onQueryChange: (String) -> Unit) {
             decorationBox = { field ->
                 Box {
                     if (query.isEmpty()) {
-                        Text(text = "Search apps", color = colors.inkMuted, style = BodhaType.body)
+                        Text(text = "Search", color = colors.inkMuted, style = BodhaType.body)
                     }
                     field()
                 }

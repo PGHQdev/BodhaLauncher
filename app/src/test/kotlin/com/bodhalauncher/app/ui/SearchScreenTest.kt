@@ -17,10 +17,20 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.bodhalauncher.engine.AppResult
 import com.bodhalauncher.engine.HomeAction
+import com.bodhalauncher.engine.REASON_PINNED
 import com.bodhalauncher.engine.SearchInputs
+import com.bodhalauncher.engine.SearchResult
+import com.bodhalauncher.engine.SearchSection
+import com.bodhalauncher.engine.SearchShortcut
+import com.bodhalauncher.engine.ShortcutResult
+import com.bodhalauncher.engine.Surface
+import com.bodhalauncher.engine.SurfaceResult
 import com.bodhalauncher.engine.resolveSearch
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -53,17 +63,36 @@ class SearchScreenTest {
     private val installed =
         listOf("Instagram", "Telegram", "Camera").map { HomeAction(id = it.lowercase(), label = it) }
 
+    private val shortcuts = listOf(
+        SearchShortcut(id = "new-chat", appId = "telegram", label = "New chat"),
+        SearchShortcut(id = "selfie", appId = "camera", label = "New selfie"),
+        SearchShortcut(id = "camera-roll", appId = "instagram", label = "Camera roll"),
+    )
+
     /** The surface's own state loop, so what is driven is a real query round trip. */
     @Composable
-    private fun Search(onOpen: (HomeAction) -> Unit = {}) {
+    private fun Search(
+        pinned: Set<String> = emptySet(),
+        onOpen: (SearchResult) -> Unit = {},
+        onAppActions: (HomeAction) -> Unit = {},
+    ) {
         var query by remember { mutableStateOf("") }
         SearchScreen(
-            state = resolveSearch(SearchInputs(apps = installed, query = query)),
+            state = resolveSearch(
+                SearchInputs(
+                    apps = installed,
+                    shortcuts = shortcuts,
+                    surfaces = listOf(Surface.Home, Surface.Library, Surface.Today),
+                    query = query,
+                    pinned = pinned,
+                )
+            ),
             query = query,
             onQueryChange = { query = it },
             iconFor = { null },
             iconKey = Unit,
             onOpen = onOpen,
+            onAppActions = onAppActions,
         )
     }
 
@@ -136,7 +165,7 @@ class SearchScreenTest {
 
     @Test
     fun `tapping a result opens it`() {
-        var opened: HomeAction? = null
+        var opened: SearchResult? = null
         compose.setContent { BodhaTheme { Search(onOpen = { opened = it }) } }
 
         type("insta")
@@ -147,7 +176,7 @@ class SearchScreenTest {
 
     @Test
     fun `down from the field enters the first result and enter opens it`() {
-        var opened: HomeAction? = null
+        var opened: SearchResult? = null
         compose.setContent { BodhaTheme { Search(onOpen = { opened = it }) } }
 
         type("insta")
@@ -156,5 +185,100 @@ class SearchScreenTest {
 
         press(Key.Enter)
         assertEquals("Instagram", opened?.label)
+    }
+
+    @Test
+    fun `sections draw under their overlines in the fixed order`() {
+        compose.setContent { BodhaTheme { Search() } }
+
+        type("cam")
+
+        val drawn = drawnText()
+        val appsHeading = drawn.indexOf(SearchSection.Apps.heading)
+        val shortcutsHeading = drawn.indexOf(SearchSection.Shortcuts.heading)
+        assertTrue("apps section drawn", appsHeading >= 0)
+        assertTrue("shortcuts section drawn", shortcutsHeading >= 0)
+        assertTrue("apps before shortcuts", appsHeading < shortcutsHeading)
+        assertTrue("Camera" in drawn)
+    }
+
+    @Test
+    fun `a matching shortcut opens as a shortcut`() {
+        var opened: SearchResult? = null
+        compose.setContent { BodhaTheme { Search(onOpen = { opened = it }) } }
+
+        type("chat")
+        compose.onNodeWithText("New chat").performClick()
+
+        assertEquals("new-chat", (opened as? ShortcutResult)?.shortcut?.id)
+    }
+
+    @Test
+    fun `a shortcut whose app also matched stays out of the list`() {
+        compose.setContent { BodhaTheme { Search() } }
+
+        type("tele")
+
+        assertTrue("Telegram" in drawnText())
+        assertFalse("New chat" in drawnText())
+        assertFalse(SearchSection.Shortcuts.heading in drawnText())
+    }
+
+    @Test
+    fun `a lifted result carries its reason line, and only then`() {
+        compose.setContent { BodhaTheme { Search(pinned = setOf("instagram")) } }
+
+        type("insta")
+        assertTrue(REASON_PINNED in drawnText())
+
+        compose.onNodeWithContentDescription(SEARCH_FIELD_LABEL).performTextClearance()
+        type("tele")
+        assertFalse(REASON_PINNED in drawnText())
+    }
+
+    @Test
+    fun `a surface answers to its name and opens as a surface`() {
+        var opened: SearchResult? = null
+        compose.setContent { BodhaTheme { Search(onOpen = { opened = it }) } }
+
+        type("library")
+        compose.onNodeWithText("App Library").performClick()
+
+        assertEquals(Surface.Library, (opened as? SurfaceResult)?.surface)
+    }
+
+    @Test
+    fun `long-pressing an app result reaches its actions`() {
+        var actionsFor: HomeAction? = null
+        compose.setContent { BodhaTheme { Search(onAppActions = { actionsFor = it }) } }
+
+        type("insta")
+        compose.onNodeWithText("Instagram").performTouchInput { longClick() }
+
+        assertEquals("instagram", actionsFor?.id)
+    }
+
+    @Test
+    fun `a shortcut result offers no long-press actions`() {
+        var actionsFor: HomeAction? = null
+        compose.setContent { BodhaTheme { Search(onAppActions = { actionsFor = it }) } }
+
+        type("chat")
+        compose.onNodeWithText("New chat").performTouchInput { longClick() }
+
+        assertEquals(null, actionsFor)
+    }
+
+    @Test
+    fun `down from the field enters the first row of the first section`() {
+        var opened: SearchResult? = null
+        compose.setContent { BodhaTheme { Search(onOpen = { opened = it }) } }
+
+        type("cam")
+        press(Key.DirectionDown)
+        assertEquals("Camera", focusedName())
+
+        press(Key.Enter)
+        assertEquals("camera", (opened as? AppResult)?.app?.id)
     }
 }

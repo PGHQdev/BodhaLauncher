@@ -29,6 +29,7 @@ import com.bodhalauncher.app.home.IntentionStore
 import com.bodhalauncher.app.home.LibraryStore
 import com.bodhalauncher.app.home.ModeStore
 import com.bodhalauncher.app.home.PinStore
+import com.bodhalauncher.app.home.SearchDefaultStore
 import com.bodhalauncher.app.home.UsageReader
 import com.bodhalauncher.app.capability.CapabilityEducationHost
 import com.bodhalauncher.app.capability.rememberCapabilityEducation
@@ -194,6 +195,7 @@ class MainActivity : ComponentActivity() {
         )
         val intentionStore = IntentionStore(this)
         val libraryStore = LibraryStore(this)
+        val defaultStore = SearchDefaultStore(this)
         val groupStore = GroupStore(this)
         val openCheckStore = OpenCheckRuleStore(this)
         val entitlementStore = EntitlementStore(this)
@@ -260,7 +262,7 @@ class MainActivity : ComponentActivity() {
                     )
                 ) {
                     Box(modifier = Modifier.fillMaxSize().escapeIsBack()) {
-                        BodhaHost(pinStore, modeStore, intentionStore, libraryStore, groupStore, openCheckStore, entitlementStore, catalog, app.sessions, app.intentPrompt, app.events, homeIntents.intValue, visible.value, homeRoleHeld.value)
+                        BodhaHost(pinStore, modeStore, intentionStore, libraryStore, defaultStore, groupStore, openCheckStore, entitlementStore, catalog, app.sessions, app.intentPrompt, app.events, homeIntents.intValue, visible.value, homeRoleHeld.value)
                     }
                 }
             }
@@ -274,6 +276,15 @@ class MainActivity : ComponentActivity() {
 }
 
 /** The label comes from the surface, so renaming one renames what TalkBack announces. */
+/**
+ * The surfaces the `when` below renders as themselves rather than as a
+ * placeholder — what Search may offer by name (#189). Search is left out: a row
+ * that navigates to where you already stand goes nowhere. Grows as the
+ * placeholder arms of the `when` are replaced.
+ */
+private val BUILT_SURFACES =
+    listOf(Surface.Home, Surface.Library, Surface.Today)
+
 private fun openSurface(target: Surface, go: (Surface) -> Unit) =
     GestureAction("Open ${target.title}") { go(target) }
 
@@ -289,6 +300,7 @@ private fun BodhaHost(
     modeStore: ModeStore,
     intentionStore: IntentionStore,
     libraryStore: LibraryStore,
+    defaultStore: SearchDefaultStore,
     groupStore: GroupStore,
     openCheckStore: OpenCheckRuleStore,
     entitlementStore: EntitlementStore,
@@ -507,9 +519,13 @@ private fun BodhaHost(
             SearchSurface(
                 pinStore = pinStore,
                 libraryStore = libraryStore,
+                defaultStore = defaultStore,
                 catalog = catalog,
                 session = sessions.currentSession,
+                surfaces = BUILT_SURFACES,
+                sheets = sheets,
                 openApp = openApp,
+                openSurface = { place = Place(it) },
             )
             return
         }
