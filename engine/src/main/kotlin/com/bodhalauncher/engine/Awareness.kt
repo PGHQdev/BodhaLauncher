@@ -3,7 +3,6 @@ package com.bodhalauncher.engine
 import java.time.Duration
 import java.time.LocalDate
 import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
 
 /**
  * One phone session as Awareness reads it (#171, ADR 0028): the engine's
@@ -108,8 +107,17 @@ fun awarenessTodayLine(view: AwarenessToday): String = when (view) {
  * Nothing is marked short. The spec names short sessions, but no threshold
  * exists anywhere and inventing one here would invent a judgement (ADR 0013).
  */
-fun awarenessSessionLine(session: AwarenessSession): String {
-    val started = session.record.start.format(SESSION_TIME)
+fun awarenessSessionLine(
+    session: AwarenessSession,
+    /**
+     * The chosen clock (#141): a session's start is a wall-clock time Bodha
+     * writes, so it is spelled the way Home's clock spells it. The default is
+     * what this line already read, so callers that have no preference to hand
+     * are unchanged.
+     */
+    clock: ClockFormat = ClockFormat.TwentyFourHour,
+): String {
+    val started = formatClock(session.record.start.toLocalTime(), clock)
     val end = session.record.end ?: return "$started · running now"
     val millis = Duration.between(session.record.start, end).toMillis()
     return "$started · ${if (millis < 60_000) "under a minute" else spanPhrase(millis)}"
@@ -122,4 +130,3 @@ fun awarenessIntentWord(intentional: Boolean): String =
 private fun sessionsCount(finished: Int): String =
     if (finished == 1) "1 session" else "$finished sessions"
 
-private val SESSION_TIME: DateTimeFormatter = DateTimeFormatter.ofPattern("H:mm")

@@ -26,10 +26,11 @@ import androidx.compose.ui.unit.dp
 import com.bodhalauncher.engine.HomeAction
 import com.bodhalauncher.engine.HomeState
 import com.bodhalauncher.engine.MAX_PINS
+import com.bodhalauncher.engine.formatClock
+import com.bodhalauncher.engine.formatDate
 import kotlinx.coroutines.delay
 import java.time.Duration
 import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
 
 /**
  * ADR 0010 "Centered Axis": centered serif clock and intention (the voice), sans
@@ -165,6 +166,9 @@ fun HomeScreen(
 @Composable
 private fun Clock() {
     val colors = LocalBodhaColors.current
+    // Read rather than passed: the formats are the chosen ones the moment they
+    // are chosen, so leaving Settings lands on a clock already re-rendered (#141).
+    val formats = LocalBodhaFormats.current
     var now by remember { mutableStateOf(LocalDateTime.now()) }
     LaunchedEffect(Unit) {
         while (true) {
@@ -173,12 +177,12 @@ private fun Clock() {
         }
     }
     Text(
-        text = now.format(timeFormat),
+        text = formatClock(now.toLocalTime(), formats.clock),
         color = LocalBodhaColors.current.ink,
         style = BodhaType.voiceClock,
     )
     Text(
-        text = now.format(dateFormat),
+        text = formatDate(now.toLocalDate(), formats.date),
         color = colors.inkMuted,
         style = BodhaType.label,
     )
@@ -216,5 +220,3 @@ internal fun IntentionCard(text: String, muted: Boolean, onEdit: (() -> Unit)?) 
     }
 }
 
-private val timeFormat = DateTimeFormatter.ofPattern("H:mm")
-private val dateFormat = DateTimeFormatter.ofPattern("EEEE, d MMMM")

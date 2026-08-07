@@ -18,6 +18,9 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import com.bodhalauncher.app.R
+import com.bodhalauncher.engine.ClockFormat
+import com.bodhalauncher.engine.DateFormat
+import com.bodhalauncher.engine.ThemeChoice
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -197,11 +200,42 @@ class BodhaMotion(private val reduced: Boolean) {
     val standardMillis: Int get() = if (reduced) 0 else 200
 }
 
+/**
+ * How Bodha writes times and dates (#141) — a rendering preference, so it rides
+ * here beside the palette and the motion tokens rather than through every
+ * screen's parameters. Home's clock and Today's day key are its two readers
+ * today; a third surface reads it by asking, not by being handed it.
+ *
+ * The defaults are what the screens already drew, so a device that has made no
+ * choice renders identically.
+ */
+data class BodhaFormats(
+    val clock: ClockFormat = ClockFormat.TwentyFourHour,
+    val date: DateFormat = DateFormat.WeekdayAndMonth,
+)
+
 val LocalBodhaColors = staticCompositionLocalOf { Light }
 val LocalBodhaMotion = staticCompositionLocalOf { BodhaMotion(reduced = false) }
+val LocalBodhaFormats = staticCompositionLocalOf { BodhaFormats() }
+
+/**
+ * Which palette the choice asks for. [ThemeChoice.System] asks the platform
+ * *here*, on every composition, which is what makes a system theme change land
+ * while Settings is open rather than at the next launch.
+ */
+@Composable
+fun ThemeChoice.isDark(): Boolean = when (this) {
+    ThemeChoice.Light -> false
+    ThemeChoice.Dark -> true
+    ThemeChoice.System -> isSystemInDarkTheme()
+}
 
 @Composable
-fun BodhaTheme(darkTheme: Boolean = isSystemInDarkTheme(), content: @Composable () -> Unit) {
+fun BodhaTheme(
+    darkTheme: Boolean = isSystemInDarkTheme(),
+    formats: BodhaFormats = BodhaFormats(),
+    content: @Composable () -> Unit,
+) {
     val colors = if (darkTheme) Dark else Light
     val context = LocalContext.current
     val reduced = Settings.Global.getFloat(
@@ -210,6 +244,7 @@ fun BodhaTheme(darkTheme: Boolean = isSystemInDarkTheme(), content: @Composable 
     CompositionLocalProvider(
         LocalBodhaColors provides colors,
         LocalBodhaMotion provides BodhaMotion(reduced),
+        LocalBodhaFormats provides formats,
         // Sans is the machinery and therefore the default: every Text that
         // doesn't ask for the serif voice gets it without naming a face.
         LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = SansMachinery),

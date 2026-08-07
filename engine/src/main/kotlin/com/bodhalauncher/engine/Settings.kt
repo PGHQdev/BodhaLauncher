@@ -25,7 +25,7 @@ enum class SettingsSection(val title: String) {
  * fails to compile rather than failing to draw. Same move as `openCheckModeLabel`
  * — every future entry has to bring its own words.
  */
-enum class SettingsRowId { HomeRole }
+enum class SettingsRowId { HomeRole, Theme, ClockFormat, DateFormat }
 
 /**
  * One row of Settings, defined once (#140): its label, the section it sits in,
@@ -48,10 +48,17 @@ data class SettingsRow(
  * list are this one value, which is what makes "the rendered rows and the
  * catalogue are the same set" a fact rather than two lists agreeing.
  *
- * The six sections' rows arrive in later slices (#141–#153); this one ships the
- * shape and the single row above them. Nothing reads the catalogue as a search
- * domain yet — that is #191's, once there are rows worth finding.
+ * The remaining sections' rows arrive in later slices (#142–#153). Nothing reads
+ * the catalogue as a search domain yet — that is #191's, once there are rows
+ * worth finding.
+ *
+ * Labels are what someone types (ADR 0019): "Theme", "Clock format", "Date
+ * format", so a prefix at a word boundary finds each by the word it is about.
  */
 val SETTINGS_ROWS: List<SettingsRow> = listOf(
     SettingsRow(SettingsRowId.HomeRole, "Home app"),
+    // Accent is #142's; clay and slate have no colour values yet.
+    SettingsRow(SettingsRowId.Theme, "Theme", SettingsSection.Appearance),
+    SettingsRow(SettingsRowId.ClockFormat, "Clock format", SettingsSection.Appearance),
+    SettingsRow(SettingsRowId.DateFormat, "Date format", SettingsSection.Appearance),
 )

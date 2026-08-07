@@ -22,6 +22,9 @@ import com.bodhalauncher.app.ui.escapeIsBack
 import com.bodhalauncher.app.ui.focusedNameIn
 import com.bodhalauncher.app.ui.press
 import com.bodhalauncher.app.ui.tabTo
+import com.bodhalauncher.engine.ClockFormat
+import com.bodhalauncher.engine.DateFormat
+import com.bodhalauncher.engine.ThemeChoice
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -43,6 +46,7 @@ class SettingsRouteTest {
     fun `edit mode reaches Settings, whose row reaches the role request, and Escape leaves`() {
         var requests = 0
         var backs = 0
+        var theme = ThemeChoice.System
         compose.setContent {
             BodhaTheme {
                 var editing by remember { mutableStateOf(false) }
@@ -53,6 +57,11 @@ class SettingsRouteTest {
                         SettingsSurface(
                             homeRoleHeld = false,
                             onRequestHomeRole = { requests++ },
+                            appearance = AppearanceChoices(
+                                theme = ThemeChoice.System, onTheme = { theme = it },
+                                clock = ClockFormat.TwentyFourHour, onClock = {},
+                                date = DateFormat.WeekdayAndMonth, onDate = {},
+                            ),
                         )
                     } else {
                         HomeGestureAffordances(
@@ -89,6 +98,12 @@ class SettingsRouteTest {
         assertEquals("Home app", compose.focusedNameIn(ACTIVITY_ROOT))
         compose.press(ACTIVITY_ROOT, Key.Enter)
         assertEquals(1, requests)
+
+        // A choice row's answers are ordinary targets in the same traversal, so
+        // the theme is settable without ever leaving the keyboard (#141).
+        compose.tabTo(ACTIVITY_ROOT, "Dark")
+        compose.press(ACTIVITY_ROOT, Key.Enter)
+        assertEquals(ThemeChoice.Dark, theme)
 
         compose.press(ACTIVITY_ROOT, Key.Escape)
         assertEquals(1, backs)

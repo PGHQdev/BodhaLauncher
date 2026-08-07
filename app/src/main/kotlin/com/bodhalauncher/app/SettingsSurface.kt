@@ -17,21 +17,26 @@ import androidx.compose.ui.unit.dp
 import com.bodhalauncher.app.ui.BodhaSpacing
 import com.bodhalauncher.app.ui.BodhaType
 import com.bodhalauncher.app.ui.CardRow
+import com.bodhalauncher.app.ui.ChoiceRow
 import com.bodhalauncher.app.ui.LocalBodhaColors
+import com.bodhalauncher.app.ui.SectionOverline
 import com.bodhalauncher.app.ui.focusOnOpen
+import com.bodhalauncher.engine.ClockFormat
+import com.bodhalauncher.engine.DateFormat
 import com.bodhalauncher.engine.SETTINGS_ROWS
 import com.bodhalauncher.engine.SettingsRow
 import com.bodhalauncher.engine.SettingsRowId
+import com.bodhalauncher.engine.ThemeChoice
 
 /**
  * Settings (#140, ADR 0019), reached from Home's long-press edit mode: the
- * ungrouped home-role row and, for now, nothing else. The six sections arrive in
- * later slices, each adding rows to the engine's catalogue rather than to a
- * layout here.
+ * ungrouped home-role row, then Appearance's three format and theme controls
+ * (#141). The remaining sections arrive in later slices, each adding rows to the
+ * engine's catalogue rather than to a layout here.
  *
- * Rows are the vocabulary's card row (ADR 0025 rule 1) and draw no chevron: this
- * one opens the system role request, which is acting in place rather than
- * navigating (rule 3).
+ * Rows are the vocabulary's card row (ADR 0025 rule 1). None draws a chevron:
+ * every row here acts in place — the home-role one opens the system role
+ * request, and the three choices settle where they stand (rule 3).
  *
  * Back and Escape come from the navigation model's single binding (#132); this
  * surface binds neither, and takes focus on arrival only because that is what
@@ -42,6 +47,7 @@ fun SettingsSurface(
     /** Read on every resume, so losing the role while Settings is open shows here (#136). */
     homeRoleHeld: Boolean,
     onRequestHomeRole: () -> Unit,
+    appearance: AppearanceChoices,
 ) {
     val colors = LocalBodhaColors.current
     Column(
@@ -57,6 +63,12 @@ fun SettingsSurface(
         Spacer(Modifier.height(BodhaSpacing.l))
         Column(verticalArrangement = Arrangement.spacedBy(BodhaSpacing.s)) {
             SETTINGS_ROWS.forEachIndexed { index, row ->
+                // The overline appears where the section changes, so the
+                // catalogue's order is the render order and there is no second
+                // list of sections to keep in step with it.
+                if (row.section != SETTINGS_ROWS.getOrNull(index - 1)?.section) {
+                    row.section?.let { SectionOverline(it.title) }
+                }
                 val arriving = if (index == 0) Modifier.focusOnOpen() else Modifier
                 when (row.id) {
                     SettingsRowId.HomeRole -> CardRow(
@@ -71,8 +83,94 @@ fun SettingsSurface(
                         onClick = onRequestHomeRole,
                         modifier = arriving,
                     )
+                    SettingsRowId.Theme -> ChoiceRow(
+                        title = row.label,
+                        options = THEME_OPTIONS,
+                        current = appearance.theme,
+                        onPick = appearance.onTheme,
+                        modifier = arriving,
+                    )
+                    SettingsRowId.ClockFormat -> ChoiceRow(
+                        title = row.label,
+                        options = CLOCK_OPTIONS,
+                        current = appearance.clock,
+                        onPick = appearance.onClock,
+                        modifier = arriving,
+                    )
+                    SettingsRowId.DateFormat -> ChoiceRow(
+                        title = row.label,
+                        options = DATE_OPTIONS,
+                        current = appearance.date,
+                        onPick = appearance.onDate,
+                        modifier = arriving,
+                    )
                 }
             }
         }
+    }
+}
+
+/**
+ * What Appearance holds and what changes it — the store's three values and three
+ * setters, gathered so the surface takes one parameter per section rather than
+ * six per section, and so a test can hand it plain state.
+ */
+data class AppearanceChoices(
+    val theme: ThemeChoice,
+    val onTheme: (ThemeChoice) -> Unit,
+    val clock: ClockFormat,
+    val onClock: (ClockFormat) -> Unit,
+    val date: DateFormat,
+    val onDate: (DateFormat) -> Unit,
+)
+
+/**
+ * Everything a row publishes as an actionable node: itself, where the row is its
+ * own control, or its answers, where the row is a choice.
+ *
+ * The rendering above and this list are the same values, so "the surface renders
+ * exactly the catalogue" stays a fact rather than two lists agreeing — the
+ * property #140 built [SETTINGS_ROWS] for, held now that a row's label and its
+ * controls are no longer the same string. The `when` is exhaustive, so a row
+ * added without declaring what it publishes fails to compile.
+ */
+internal fun settingsRowControls(row: SettingsRow): List<String> =
+    when (row.id) {
+        SettingsRowId.HomeRole -> listOf(row.label)
+        SettingsRowId.Theme -> THEME_OPTIONS.map { it.second }
+        SettingsRowId.ClockFormat -> CLOCK_OPTIONS.map { it.second }
+        SettingsRowId.DateFormat -> DATE_OPTIONS.map { it.second }
+    }
+
+/**
+ * The words on the pills, decoupled from the names the store persists — the same
+ * move `openCheckModeLabel` makes, and for its reason: the exhaustive `when`
+ * forces every future entry to bring its own.
+ *
+ * The date formats are named rather than shown as samples. A pill wide enough to
+ * read "Wednesday, 5 August" leaves two answers off screen, and the result is one
+ * tap away on Home and Today, where the date actually lives.
+ */
+private val THEME_OPTIONS: List<Pair<ThemeChoice, String>> = ThemeChoice.entries.map {
+    it to when (it) {
+        ThemeChoice.Light -> "Light"
+        ThemeChoice.Dark -> "Dark"
+        ThemeChoice.System -> "System"
+    }
+}
+
+private val CLOCK_OPTIONS: List<Pair<ClockFormat, String>> = ClockFormat.entries.map {
+    it to when (it) {
+        ClockFormat.TwelveHour -> "12-hour"
+        ClockFormat.TwentyFourHour -> "24-hour"
+        ClockFormat.Nato -> "NATO"
+    }
+}
+
+private val DATE_OPTIONS: List<Pair<DateFormat, String>> = DateFormat.entries.map {
+    it to when (it) {
+        DateFormat.WeekdayAndMonth -> "Weekday and month"
+        DateFormat.Short -> "Short"
+        DateFormat.Numeric -> "Numeric"
     }
 }

@@ -29,8 +29,13 @@
         android:supportsRtl="true"
         android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
 
+        <!-- uiMode is handled rather than restarted (#141): the theme is a
+             composition-local read, so Compose repaints in place, and a system
+             theme change made while Settings is open lands there instead of
+             recreating the activity and putting the user back on root. -->
         <activity
             android:name=".MainActivity"
+            android:configChanges="uiMode"
             android:exported="true"
             android:launchMode="singleTask"
             android:stateNotNeeded="true">
