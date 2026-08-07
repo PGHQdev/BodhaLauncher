@@ -28,12 +28,16 @@ import com.bodhalauncher.engine.FocusSetup
 import com.bodhalauncher.engine.HomeAction
 import com.bodhalauncher.engine.REASON_PINNED
 import com.bodhalauncher.engine.SEARCH_CONTACTS_OFF
+import com.bodhalauncher.engine.SETTINGS_ROWS
 import com.bodhalauncher.engine.SearchContact
 import com.bodhalauncher.engine.UngrantedResult
 import com.bodhalauncher.engine.SearchInputs
 import com.bodhalauncher.engine.SearchResult
 import com.bodhalauncher.engine.SearchSection
 import com.bodhalauncher.engine.SearchShortcut
+import com.bodhalauncher.engine.SettingsRow
+import com.bodhalauncher.engine.SettingsRowId
+import com.bodhalauncher.engine.SettingsRowResult
 import com.bodhalauncher.engine.ShortcutResult
 import com.bodhalauncher.engine.Surface
 import com.bodhalauncher.engine.SurfaceResult
@@ -82,6 +86,7 @@ class SearchScreenTest {
         contacts: List<SearchContact> = emptyList(),
         contactsGranted: Boolean = true,
         focusSetups: List<FocusSetup> = emptyList(),
+        settingsRows: List<SettingsRow> = emptyList(),
         onOpen: (SearchResult) -> Unit = {},
         onAppActions: (HomeAction) -> Unit = {},
         onContactActions: (SearchContact) -> Unit = {},
@@ -98,6 +103,7 @@ class SearchScreenTest {
                     contacts = contacts,
                     contactsGranted = contactsGranted,
                     focusSetups = focusSetups,
+                    settingsRows = settingsRows,
                 )
             ),
             query = query,
@@ -355,4 +361,37 @@ class SearchScreenTest {
 
         assertEquals(setup, (opened as? FocusActionResult)?.setup)
     }
+
+    // --- Bodha's own Settings rows (#191) ---
+
+    @Test
+    fun `a settings row is reached by Down and opens as that row`() {
+        var opened: SearchResult? = null
+        compose.setContent {
+            BodhaTheme { Search(settingsRows = SETTINGS_ROWS, onOpen = { opened = it }) }
+        }
+
+        type("theme")
+        press(Key.DirectionDown)
+        assertEquals("Theme", focusedName())
+        press(Key.Enter)
+
+        assertEquals(SettingsRowId.Theme, (opened as? SettingsRowResult)?.row?.id)
+    }
+
+    /** Rule 3, read the other way: the chevron is the promise that this goes somewhere. */
+    @Test
+    fun `a settings row wears the chevron and a shortcut does not`() {
+        compose.setContent { BodhaTheme { Search(settingsRows = SETTINGS_ROWS) } }
+
+        type("theme")
+        assertEquals(1, drawnText().count { it == CHEVRON })
+
+        compose.onNodeWithContentDescription(SEARCH_FIELD_LABEL).performTextClearance()
+        type("chat")
+        assertFalse(CHEVRON in drawnText())
+    }
 }
+
+/** The glyph [TrailingChevron] draws; asserted here because rule 3 is about what it means. */
+private const val CHEVRON = "›"

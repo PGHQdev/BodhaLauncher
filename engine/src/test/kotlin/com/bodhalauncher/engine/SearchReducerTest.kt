@@ -551,4 +551,65 @@ class SearchReducerTest {
         assertTrue(search.sections.none { section -> section.rows.any { it.result is FocusActionResult } })
         assertTrue(search.nothingFound)
     }
+
+    // --- Bodha's own Settings rows (#191, ADR 0019) ---
+
+    @Test
+    fun `a settings row answers to its label in the actions section`() {
+        val search = resolveSearch(SearchInputs(settingsRows = SETTINGS_ROWS, query = "theme"))
+
+        assertEquals(listOf(SearchSection.Actions), search.sections.map { it.section })
+        assertEquals(listOf("Theme"), labels(search, SearchSection.Actions))
+        assertEquals(
+            SettingsRowId.Theme,
+            (search.sections.single().rows.single().result as SettingsRowResult).row.id,
+        )
+    }
+
+    @Test
+    fun `a section is not a target — the control is what people search for`() {
+        val search = resolveSearch(SearchInputs(settingsRows = SETTINGS_ROWS, query = "appearance"))
+
+        assertTrue(search.sections.isEmpty())
+        assertTrue(search.nothingFound)
+    }
+
+    /**
+     * The clause that makes a row added later free: the catalogue is walked, so a
+     * row whose label the rule cannot find fails here rather than shipping unfindable.
+     */
+    @Test
+    fun `every row in the catalogue answers to its own label`() {
+        SETTINGS_ROWS.forEach { row ->
+            val search = resolveSearch(SearchInputs(settingsRows = SETTINGS_ROWS, query = row.label))
+
+            assertTrue(row.label in labels(search, SearchSection.Actions), row.label)
+        }
+    }
+
+    @Test
+    fun `a row this build does not render never appears`() {
+        val search = resolveSearch(
+            SearchInputs(
+                settingsRows = SETTINGS_ROWS.filterNot { it.id == SettingsRowId.Theme },
+                query = "theme",
+            )
+        )
+
+        assertTrue(search.sections.isEmpty())
+        assertTrue(search.nothingFound)
+    }
+
+    @Test
+    fun `Bodha's rows and Android's screens rank together in the one actions section`() {
+        val search = resolveSearch(
+            SearchInputs(
+                actions = listOf(SearchAction(id = "settings:date", label = "Date and time")),
+                settingsRows = SETTINGS_ROWS,
+                query = "date",
+            )
+        )
+
+        assertEquals(listOf("Date and time", "Date format"), labels(search, SearchSection.Actions))
+    }
 }

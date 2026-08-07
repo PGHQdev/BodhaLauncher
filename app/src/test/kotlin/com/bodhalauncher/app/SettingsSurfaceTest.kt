@@ -7,6 +7,8 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.isSelected
@@ -19,6 +21,7 @@ import com.bodhalauncher.app.ui.BodhaTheme
 import com.bodhalauncher.engine.ClockFormat
 import com.bodhalauncher.engine.DateFormat
 import com.bodhalauncher.engine.SETTINGS_ROWS
+import com.bodhalauncher.engine.SettingsRowId
 import com.bodhalauncher.engine.SettingsSection
 import com.bodhalauncher.engine.ThemeChoice
 import org.junit.Assert.assertEquals
@@ -60,13 +63,18 @@ class SettingsSurfaceTest {
         }
     }
 
-    private fun setSurface(homeRoleHeld: Boolean = true, onRequestHomeRole: () -> Unit = {}) =
+    private fun setSurface(
+        homeRoleHeld: Boolean = true,
+        onRequestHomeRole: () -> Unit = {},
+        target: SettingsRowId? = null,
+    ) =
         compose.setContent {
             BodhaTheme {
                 SettingsSurface(
                     homeRoleHeld = homeRoleHeld,
                     onRequestHomeRole = onRequestHomeRole,
                     appearance = fixedChoices(),
+                    target = target,
                 )
             }
         }
@@ -186,5 +194,28 @@ class SettingsSurfaceTest {
 
         assertEquals(ClockFormat.Nato, clock)
         assertEquals(DateFormat.Numeric, date)
+    }
+
+    /**
+     * The touch half of arriving on a row (#191). Focus is the docked user's and
+     * lands only in non-touch mode (ADR 0022), so a viewport short enough to
+     * scroll is what shows the other half doing anything — and the first clause
+     * is what says the row was off screen to begin with.
+     */
+    @Test
+    @Config(qualifiers = "w411dp-h240dp")
+    fun `opened on a row, that row is scrolled to`() {
+        setSurface(target = SettingsRowId.DateFormat)
+
+        compose.onNodeWithText("Date format").assertIsDisplayed()
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h240dp")
+    fun `and opened on nothing in particular, the first row still is`() {
+        setSurface()
+
+        compose.onNodeWithText("Home app").assertIsDisplayed()
+        compose.onNodeWithText("Date format").assertIsNotDisplayed()
     }
 }

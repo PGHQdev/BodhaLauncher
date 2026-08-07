@@ -74,6 +74,7 @@ class SearchSurfaceTest {
                     sheets = sheets,
                     openApp = {},
                     openSurface = {},
+                    openSettingsRow = {},
                 )
             }
         }
@@ -114,6 +115,7 @@ class SearchSurfaceTest {
                     sheets = sheets,
                     openApp = {},
                     openSurface = {},
+                    openSettingsRow = {},
                 )
             }
         }

@@ -8,11 +8,19 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.unit.dp
 import com.bodhalauncher.app.ui.BodhaSpacing
 import com.bodhalauncher.app.ui.BodhaType
@@ -40,7 +48,8 @@ import com.bodhalauncher.engine.ThemeChoice
  *
  * Back and Escape come from the navigation model's single binding (#132); this
  * surface binds neither, and takes focus on arrival only because that is what
- * gives Escape a chain to travel up (ADR 0022).
+ * gives Escape a chain to travel up (ADR 0022). Where that arrival lands is
+ * [target]: the row Search was asked for, or the first row.
  */
 @Composable
 fun SettingsSurface(
@@ -48,8 +57,15 @@ fun SettingsSurface(
     homeRoleHeld: Boolean,
     onRequestHomeRole: () -> Unit,
     appearance: AppearanceChoices,
+    /**
+     * The row this arrival is about, when Search found it by name (#191). Null is
+     * every other way in, and lands on the first row as it always did. An id this
+     * build does not render falls back to the same place rather than to nowhere.
+     */
+    target: SettingsRowId? = null,
 ) {
     val colors = LocalBodhaColors.current
+    val landing = SETTINGS_ROWS.firstOrNull { it.id == target }?.id ?: SETTINGS_ROWS.first().id
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -69,7 +85,7 @@ fun SettingsSurface(
                 if (row.section != SETTINGS_ROWS.getOrNull(index - 1)?.section) {
                     row.section?.let { SectionOverline(it.title) }
                 }
-                val arriving = if (index == 0) Modifier.focusOnOpen() else Modifier
+                val arriving = if (row.id == landing) Modifier.arriveHere() else Modifier
                 when (row.id) {
                     SettingsRowId.HomeRole -> CardRow(
                         title = row.label,
@@ -108,6 +124,33 @@ fun SettingsSurface(
             }
         }
     }
+}
+
+/**
+ * Where an arrival lands: the row takes focus, and the row is scrolled to.
+ *
+ * Two halves, because they serve two people. Focus is ADR 0022's arrival and what
+ * gives Escape a chain to travel up — but a row is focusable in non-touch mode
+ * only, so for the touch user who just tapped a search result it never lands. The
+ * scroll is that user's half, and once Settings runs past a screen it is the only
+ * thing that makes "opens at that row" true for them (#191).
+ *
+ * A choice row's card is inert (its answers are the controls), so on one of those
+ * focus reaches the first answer rather than the row. The row's own title sits
+ * directly above it, and the search result that brought you here said the same
+ * word — so the arrival is oriented without a second name on an inert node, which
+ * would only have a reader say the row twice.
+ */
+@Composable
+private fun Modifier.arriveHere(): Modifier {
+    val bringIntoView = remember { BringIntoViewRequester() }
+    // Asked once the row has been placed, not on composition: the request is
+    // about where the row is, and until the first placement there is no answer.
+    var placed by remember { mutableStateOf(false) }
+    LaunchedEffect(placed) { if (placed) bringIntoView.bringIntoView() }
+    return focusOnOpen()
+        .bringIntoViewRequester(bringIntoView)
+        .onGloballyPositioned { placed = true }
 }
 
 /**

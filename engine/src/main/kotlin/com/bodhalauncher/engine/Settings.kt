@@ -48,12 +48,14 @@ data class SettingsRow(
  * list are this one value, which is what makes "the rendered rows and the
  * catalogue are the same set" a fact rather than two lists agreeing.
  *
- * The remaining sections' rows arrive in later slices (#142–#153). Nothing reads
- * the catalogue as a search domain yet — that is #191's, once there are rows
- * worth finding.
+ * The remaining sections' rows arrive in later slices (#142–#153), including the
+ * privacy dashboard's — which sit here flat, beside the rows of the Settings
+ * root, because a row is a search target wherever it is drawn (#191, ADR 0019).
  *
  * Labels are what someone types (ADR 0019): "Theme", "Clock format", "Date
  * format", so a prefix at a word boundary finds each by the word it is about.
+ * This list is what [SearchInputs.settingsRows] is handed, so a row added here is
+ * findable without registering it a second time.
  */
 val SETTINGS_ROWS: List<SettingsRow> = listOf(
     SettingsRow(SettingsRowId.HomeRole, "Home app"),
