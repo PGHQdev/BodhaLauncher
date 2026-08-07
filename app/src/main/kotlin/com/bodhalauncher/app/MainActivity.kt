@@ -363,14 +363,21 @@ private fun BodhaHost(
     }
     // A session starting makes Focus root and ending reverts root to Home,
     // dismissing whatever sheet was open through the single slot (#167, #169).
+    // Only a user standing on Focus is moved: the end draws nothing and
+    // interrupts nothing (#169), so someone mid-Search at the boundary stays
+    // where they are — back now lands on Home, and the moment waits there.
     // The initial composition is not a boundary, so a cold start restores where
     // the stored state says root is without dismissing anything.
     var focusWasRunning by remember { mutableStateOf(focusRunning) }
     LaunchedEffect(focusRunning) {
         if (focusRunning == focusWasRunning) return@LaunchedEffect
         focusWasRunning = focusRunning
-        if (!focusRunning) sheets.dismissCurrent()
-        place = Place(resolveRoot(focusRunning))
+        if (!focusRunning) {
+            sheets.dismissCurrent()
+            if (place.surface == Surface.Focus) place = Place(resolveRoot(focusRunning))
+        } else {
+            place = Place(resolveRoot(focusRunning))
+        }
     }
     // The phone session's own boundary, read from the engine's transitions and
     // nowhere else (ADR 0011, #134). Transitions arrive on the main thread, from
@@ -419,13 +426,21 @@ private fun BodhaHost(
         }
     }
     // The end moment waits for root (#170): the next arrival at Home with a
-    // moment owed shows it once — consumed here, so it never returns, even
-    // replaced or dismissed unseen. Ending early passes through the same gate,
-    // because the root reversion has already landed the user on Home.
+    // moment owed shows it, and it is settled — consumed, never to return — by
+    // whatever answers it: done, extend, a dismissal, or the sheet that
+    // replaces it. Settling on an answer rather than at open is what survives
+    // a rotation or process death mid-moment: still owed, it simply reopens.
+    // Ending early passes through the same gate, because the root reversion
+    // has already landed the user on Home.
     val pendingFocusEnd = focusStore.pending.value
     LaunchedEffect(launcherVisible, place, pendingFocusEnd) {
-        if (launcherVisible && place.surface == Surface.Home && pendingFocusEnd != null) {
-            focusStore.consumePending()?.let { sheets.open(Sheet.FocusEnd(it)) }
+        if (launcherVisible && place.surface == Surface.Home && pendingFocusEnd != null &&
+            sheets.showing<Sheet.FocusEnd>() == null
+        ) {
+            sheets.open(
+                Sheet.FocusEnd(pendingFocusEnd),
+                onReplaced = { focusStore.consumePending() },
+            )
         }
     }
     // At most one pause per opening (#77): the prompt engine is told while a
@@ -436,6 +451,13 @@ private fun BodhaHost(
     }
     // The single opening path (#8): every surface's launch flows through here.
     val openApp: (HomeAction) -> Unit = { action ->
+        // An uninstalled app leaves the allowed list before the list decides
+        // anything — treated as not allowed from then on, reinstall or not (#168).
+        focusStore.active.value?.let { session ->
+            focusStore.retainAllowed(
+                catalog.resolve(session.allowedAppIds.toList()).mapTo(mutableSetOf()) { it.id }
+            )
+        }
         val rule = openCheckStore.ruleFor(action.id)
         val localNow = LocalDateTime.now()
         val launchContext = OpenCheckContext(
@@ -559,8 +581,9 @@ private fun BodhaHost(
         // Phrased at render time so a moment shown late owns the elapsed truth —
         // an early end just measures near-zero and reads calm.
         val overBy = (System.currentTimeMillis() - moment.record.endedAt.toEpochMilli()).coerceAtLeast(0)
-        // Dismissing is closing: the moment was consumed at open and never returns.
-        val dismiss = sheets.dismissedBy(sheet) { sheets.close(sheet) }
+        val settle = { focusStore.consumePending(); sheets.close(sheet) }
+        // Dismissing is an answer too: the moment settles and never returns.
+        val dismiss = sheets.dismissedBy(sheet) { settle() }
         FocusEndSheet(
             label = moment.record.label,
             durationLine = focusDurationLine(moment.record, overBy),
@@ -568,10 +591,10 @@ private fun BodhaHost(
             onExtend = {
                 // The same session, ten more minutes; root returns to Focus
                 // through the boundary effect above (#170).
+                settle()
                 focusStore.extend(moment, Instant.now())
-                sheets.close(sheet)
             },
-            onDone = { sheets.close(sheet) },
+            onDone = settle,
             onDismiss = dismiss,
         )
     }
@@ -585,6 +608,18 @@ private fun BodhaHost(
     // which would read as a flicker on the surface you are most often standing on.
     val back: () -> Unit = { resolveBack(place, focusRunning)?.let { place = it } }
     BackHandler(onBack = back)
+
+    // The four-swipe fan-out both roots carry (#167): one site, so ADR 0011's
+    // reassignment edits it once. Home adds its own empty-area taps below;
+    // Focus has none, so the unlabelled pair draws no node and announces nothing.
+    val surfaceFanOut = HomeGestures(
+        swipeDown = openSurface(Surface.Search) { place = Place(it) },
+        swipeUp = openSurface(Surface.Library) { place = Place(it) },
+        swipeLeft = openSurface(Surface.Awareness) { place = Place(it) },
+        swipeRight = openSurface(Surface.Today) { place = Place(it) },
+        doubleTapEmpty = GestureAction(label = null) {},
+        longPressEmpty = GestureAction(label = null) {},
+    )
 
     when (place.surface) {
         // Falls through to Home's own content below.
@@ -641,18 +676,10 @@ private fun BodhaHost(
                 focusStore = focusStore,
                 catalog = catalog,
                 sheets = sheets,
-                // Home's fan-out, carried whole (#167): every surface stays a
-                // swipe away and back from any of them returns here while the
-                // session runs, because Focus is root. Home's empty-area taps
-                // have no meaning here, so they draw no node and announce nothing.
-                gestures = HomeGestures(
-                    swipeDown = openSurface(Surface.Search) { place = Place(it) },
-                    swipeUp = openSurface(Surface.Library) { place = Place(it) },
-                    swipeLeft = openSurface(Surface.Awareness) { place = Place(it) },
-                    swipeRight = openSurface(Surface.Today) { place = Place(it) },
-                    doubleTapEmpty = GestureAction(label = null) {},
-                    longPressEmpty = GestureAction(label = null) {},
-                ),
+                // The shared fan-out, whole (#167): every surface stays a swipe
+                // away, and back from any of them returns here while the
+                // session runs, because Focus is root.
+                gestures = surfaceFanOut,
             )
             return
         }
@@ -709,11 +736,7 @@ private fun BodhaHost(
             iconKey = catalog.version.intValue,
             // Labels name the destination, so they stay true when ADR 0011's
             // reassignment lands and a swipe points somewhere else.
-            gestures = HomeGestures(
-                swipeDown = openSurface(Surface.Search) { place = Place(it) },
-                swipeUp = openSurface(Surface.Library) { place = Place(it) },
-                swipeLeft = openSurface(Surface.Awareness) { place = Place(it) },
-                swipeRight = openSurface(Surface.Today) { place = Place(it) },
+            gestures = surfaceFanOut.copy(
                 // Lock mechanism is settled in the permissions spec (#18); stub until
                 // then, so it stays unannounced rather than offering an action that
                 // only reports its own absence.

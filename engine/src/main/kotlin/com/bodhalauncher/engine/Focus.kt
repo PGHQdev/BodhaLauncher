@@ -79,7 +79,8 @@ data class FocusRecord(
 
 /** Every ending path lands here: early takes [now], full duration keeps the boundary. */
 fun endFocusSession(session: FocusSession, now: Instant): FocusRecord {
-    val early = focusLateBy(session.endsAt, now) == null
+    // The duration has not elapsed, so this ending is the user's choice.
+    val early = now.isBefore(session.endsAt)
     return FocusRecord(
         label = session.label,
         startedAt = session.startedAt,
@@ -93,7 +94,11 @@ fun endFocusSession(session: FocusSession, now: Instant): FocusRecord {
 /**
  * Extend is the one-tap answer to "not done yet" (#170): the same session —
  * label, start and counts intact — running ten more minutes from the choice,
- * so a moment shown hours late still buys usable time.
+ * so a moment shown hours late still buys usable time. The start instant stays
+ * the true one — #169's record carries instants, not a score — so a moment
+ * extended long after its boundary folds the dormant gap into the span.
+ * Accepted: the record answers "when", and the duration line's honesty about
+ * lateness already covered the gap once, at the moment it was shown.
  */
 fun extendFocusSession(record: FocusRecord, allowedAppIds: Set<String>, now: Instant): FocusSession =
     FocusSession(

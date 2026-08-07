@@ -3,7 +3,8 @@ package com.bodhalauncher.app.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
@@ -57,6 +58,7 @@ fun FocusScreen(
 }
 
 /** The surface's face, separate so the screenshot gate can photograph it (#26). */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun FocusScreenContent(
     label: String,
@@ -78,8 +80,11 @@ internal fun FocusScreenContent(
             Text(text = "ALLOWED APPS", color = colors.inkMuted, style = BodhaType.overline)
             Spacer(Modifier.height(BodhaSpacing.s))
             // As the reference draws it, unpromoted to a rule (ADR 0025): the
-            // installed apps' names in the sans; an uninstalled one just isn't here.
-            Row(horizontalArrangement = Arrangement.spacedBy(BodhaSpacing.m)) {
+            // installed apps' names in the sans; an uninstalled one just isn't
+            // here. A flow, because a long list or 200% type must wrap, not clip.
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(BodhaSpacing.m, Alignment.CenterHorizontally),
+            ) {
                 allowedAppLabels.forEach { app ->
                     Text(text = app, color = colors.ink, style = BodhaType.caption)
                 }

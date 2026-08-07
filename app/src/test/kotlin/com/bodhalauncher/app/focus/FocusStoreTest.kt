@@ -115,6 +115,18 @@ class FocusStoreTest {
     }
 
     @Test
+    fun `an uninstalled app leaves the allowed list for good - a reinstall does not resurrect it`() {
+        val s = store()
+        s.startDefault(allowed = setOf("com.a", "com.b"))
+        s.retainAllowed(installedIds = setOf("com.a"))
+
+        assertEquals(setOf("com.a"), s.active.value?.allowedAppIds)
+        // Persisted, so the drop holds across a restart — and membership, not
+        // the catalog, is what the gate reads, so reinstalling changes nothing.
+        assertEquals(setOf("com.a"), store().active.value?.allowedAppIds)
+    }
+
+    @Test
     fun `counts survive process death`() {
         val s = store()
         s.startDefault()

@@ -139,6 +139,10 @@ class FocusStore(context: Context, private val dao: FocusRecordDao, private val 
         // FocusPaused exists in the enum and is never logged, by design (#169).
         events.log(if (record.endedEarly) EventType.FocusAbandoned else EventType.FocusCompleted)
         scope.launch {
+            // Cleared first, on the lane: a failed insert must leave nothing —
+            // a stale id here is a *previous* session's row, and a later extend
+            // would delete the wrong record.
+            lastEndedRowId = NONE
             runCatching { lastEndedRowId = dao.insert(record.toEntity()) }
         }
     }
@@ -158,6 +162,18 @@ class FocusStore(context: Context, private val dao: FocusRecordDao, private val 
                     lastEndedRowId = NONE
                 }
             }
+        }
+    }
+
+    /**
+     * An app uninstalled mid-session is treated as not allowed from then on
+     * (#168): membership is dropped when the catalog stops answering for it,
+     * and persisted, so a reinstall does not resurrect the allowance.
+     */
+    fun retainAllowed(installedIds: Set<String>) {
+        val session = active.value ?: return
+        if (session.allowedAppIds.any { it !in installedIds }) {
+            setActive(session.copy(allowedAppIds = session.allowedAppIds intersect installedIds))
         }
     }
 
