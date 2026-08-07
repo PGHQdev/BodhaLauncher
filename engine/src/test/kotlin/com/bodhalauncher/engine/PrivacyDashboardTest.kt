@@ -52,6 +52,29 @@ class PrivacyDashboardTest {
         assertEquals(null, reflections.retentionDays)
     }
 
+    /**
+     * Session records and the launch log both age out under RawUsageEvents
+     * (ADR 0028, #173), so the category arrives as two summaries and must leave
+     * as one row: two rows carrying the same name and window would read as two
+     * retention answers to one question.
+     */
+    @Test
+    fun `two stores in one category make one row, counted together`() {
+        val dashboard = resolvePrivacyDashboard(
+            DashboardInputs(
+                dataCategories = listOf(
+                    DataCategorySummary(RetentionCategory.RawUsageEvents, count = 120, retentionDays = 30),
+                    DataCategorySummary(RetentionCategory.RawUsageEvents, count = 400, retentionDays = 30),
+                )
+            )
+        )
+
+        assertEquals(1, dashboard.localData.size)
+        val usage = assertIs<DashboardRow.Data>(dashboard.localData[0])
+        assertEquals(520, usage.count)
+        assertEquals(30, usage.retentionDays)
+    }
+
     @Test
     fun `export and delete-local are always available`() {
         val dashboard = resolvePrivacyDashboard(DashboardInputs())

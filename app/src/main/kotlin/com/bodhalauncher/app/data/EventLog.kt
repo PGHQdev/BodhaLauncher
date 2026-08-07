@@ -11,6 +11,8 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.bodhalauncher.app.awareness.LaunchRecordDao
+import com.bodhalauncher.app.awareness.LaunchRecordEntity
 import com.bodhalauncher.app.focus.FocusRecordDao
 import com.bodhalauncher.app.focus.FocusRecordEntity
 import com.bodhalauncher.app.inbox.NotificationLogDao
@@ -60,8 +62,9 @@ interface EventLogDao {
     entities = [
         EventLogEntity::class, NotificationRecordEntity::class,
         SessionRecordEntity::class, FocusRecordEntity::class,
+        LaunchRecordEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 abstract class BodhaDatabase : RoomDatabase() {
@@ -73,6 +76,8 @@ abstract class BodhaDatabase : RoomDatabase() {
     abstract fun sessionRecords(): SessionRecordDao
 
     abstract fun focusRecords(): FocusRecordDao
+
+    abstract fun launchRecords(): LaunchRecordDao
 
     companion object {
         @Volatile
@@ -113,10 +118,22 @@ abstract class BodhaDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `launch_record` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`appId` TEXT NOT NULL, `atMillis` INTEGER NOT NULL, " +
+                        "`sessionId` INTEGER)"
+                )
+            }
+        }
+
         fun get(context: Context): BodhaDatabase = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(
                 context.applicationContext, BodhaDatabase::class.java, "bodha.db"
-            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build().also { instance = it }
+            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                .build().also { instance = it }
         }
     }
 }

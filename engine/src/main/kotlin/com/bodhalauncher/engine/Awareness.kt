@@ -45,17 +45,32 @@ val INTENT_SIGNAL_EVENTS: Set<EventType> = setOf(
  * intention and a Focus record carry none, so the span they fell inside is what
  * attributes them, which is the whole of "attributed to the session they
  * happened in".
+ *
+ * [text] is the user's own words where the signal carried any — a typed Open
+ * Check intention, a Focus session's label, a prompt answer someone wrote into.
+ * Null is a signal stated without words, which is a real answer and not a
+ * missing one: a category picked from the prompt states an intent and spells
+ * out nothing.
  */
-data class IntentSignal(val at: LocalDateTime, val session: Long? = null)
+data class IntentSignal(
+    val at: LocalDateTime,
+    val session: Long? = null,
+    val text: String? = null,
+)
 
 /** A session with its classification — intent as an attribute, never a fifth view (ADR 0013). */
 data class AwarenessSession(val record: SessionRecord, val intentional: Boolean)
 
+/**
+ * Whether a timestamp fell inside this session. An open record has no upper
+ * bound: the session still running is the one anything after its start happened
+ * in.
+ */
+private fun SessionRecord.holds(at: LocalDateTime): Boolean =
+    !at.isBefore(start) && (end == null || at.isBefore(end))
+
 private fun IntentSignal.belongsTo(record: SessionRecord): Boolean =
-    if (session != null) session == record.id
-    // An open record has no upper bound: the session still running is the one
-    // anything stated after its start was stated in.
-    else !at.isBefore(record.start) && (record.end == null || at.isBefore(record.end))
+    if (session != null) session == record.id else record.holds(at)
 
 /**
  * The day's sessions in time order, each classified (#172). One rule, applied to
@@ -129,4 +144,83 @@ fun awarenessIntentWord(intentional: Boolean): String =
 
 private fun sessionsCount(finished: Int): String =
     if (finished == 1) "1 session" else "$finished sessions"
+
+/**
+ * One launch Bodha mediated (#173, ADR 0013): what was opened, when, and the
+ * session it happened in. App identity and a timestamp, and nothing else — the
+ * event log could carry neither, which is why this store exists at all.
+ */
+data class LaunchRecord(
+    val appId: String,
+    val at: LocalDateTime,
+    /** Null for a launch with no session open: recorded, and attributed to none. */
+    val session: Long? = null,
+)
+
+/**
+ * Awareness's Session view (#173): one session opened up — what was launched in
+ * it and in what order, the Open Checks it raised, whether a repeated open was
+ * noticed, and the words the user stated if there were any.
+ */
+data class SessionDetail(
+    val session: AwarenessSession,
+    val launches: List<LaunchRecord>,
+    val checks: Int,
+    val repeatedOpen: Boolean,
+    val statement: String?,
+)
+
+/**
+ * Resolves one session's view from the three stores that know about it (#173).
+ *
+ * A launch belongs to the session **it named** and to no other: the id was read
+ * at the moment of the launch, which is a stronger attribution than any span,
+ * and it is what keeps a launch made outside a session out of every session.
+ * Events carry no session — the event log is a type and a timestamp (ADR 0009) —
+ * so the span they fell inside is what attributes them, the same rule [IntentSignal]
+ * already takes when it names none.
+ */
+fun resolveSessionDetail(
+    session: AwarenessSession,
+    launches: List<LaunchRecord>,
+    events: List<LoggedEvent>,
+    signals: List<IntentSignal>,
+): SessionDetail {
+    val record = session.record
+    val inSession = events.filter { record.holds(it.at) }
+    return SessionDetail(
+        session = session,
+        launches = launches.filter { it.session == record.id }.sortedBy { it.at },
+        checks = inSession.count { it.type == EventType.OpenCheckDisplayed },
+        repeatedOpen = inSession.any { it.type == EventType.RepeatedOpenDetected },
+        // The first signal that carried words: a session may hold several, and
+        // the one that spoke is the one worth reading back.
+        statement = signals.filter { it.belongsTo(record) }.firstNotNullOfOrNull { it.text },
+    )
+}
+
+/**
+ * A launch's own line: the time it happened, spelled the way the clock is (#141).
+ * The app's name is the row's title and comes from the catalog, never from here —
+ * the record holds an id, and an id is not a name.
+ */
+fun launchTimeLine(
+    launch: LaunchRecord,
+    clock: ClockFormat = ClockFormat.TwentyFourHour,
+): String = formatClock(launch.at.toLocalTime(), clock)
+
+/**
+ * What the Session view says beneath its rows (#173): bare statements of what
+ * happened, in the order they are worth reading — never a count of nothing, and
+ * never a word carrying a verdict (ADR 0013).
+ *
+ * The absence of launches is a line here rather than an invented row, which is
+ * what keeps "the view never invents a row" true for a session that raised a
+ * check and opened nothing.
+ */
+fun sessionDetailNotes(detail: SessionDetail): List<String> = buildList {
+    if (detail.launches.isEmpty()) add("Nothing was opened in this session")
+    if (detail.checks > 0) add("${plural(detail.checks.toLong(), "Open Check")} fired")
+    if (detail.repeatedOpen) add("A repeated open was noticed")
+}
 
