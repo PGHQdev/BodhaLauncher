@@ -41,7 +41,6 @@ internal fun openCheckModeLabel(mode: OpenCheckMode): String = when (mode) {
     OpenCheckMode.RepeatedOpening -> "Repeated opening"
     OpenCheckMode.DailyThreshold -> "After daily use"
     OpenCheckMode.Schedule -> "On a schedule"
-    OpenCheckMode.DuringFocus -> "During Focus"
     OpenCheckMode.Never -> "Never"
 }
 

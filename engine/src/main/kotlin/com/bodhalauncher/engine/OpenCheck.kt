@@ -7,10 +7,9 @@ import java.time.Instant
  * When a rule's check fires (#8). [RepeatedOpening] catches autopilot: the
  * first launches are frictionless, the third within a rolling window is
  * checked (#72). [DailyThreshold] frees the first visits of the day (#73);
- * [Schedule] confines checks to a daily window (#74); [DuringFocus] is wired
- * but inert until Focus (#9) lands (#77).
+ * [Schedule] confines checks to a daily window (#74).
  */
-enum class OpenCheckMode { Always, RepeatedOpening, DailyThreshold, Schedule, DuringFocus, Never }
+enum class OpenCheckMode { Always, RepeatedOpening, DailyThreshold, Schedule, Never }
 
 /** One daily window in minutes of day, start inclusive, end exclusive; start after end crosses midnight (#74). */
 data class ScheduleWindow(val startMinute: Int, val endMinute: Int) {
@@ -41,7 +40,11 @@ data class OpenCheckContext(
     val usedTodayMillis: Long? = null,
     /** Local minute of day, for schedule windows (#74). */
     val minuteOfDay: Int = 0,
-    /** Focus active; false until Focus (#9) exists (#77). */
+    /**
+     * Focus active; kept for Focus (#9), which fires checks from a session's
+     * allowed list rather than a per-app mode (ADR 0012). No trigger reads it
+     * yet — the During-Focus mode it once fed is retired (#165).
+     */
     val focusActive: Boolean = false,
     /** Adapter-classified emergency/utility app — always proceeds (#77). */
     val bypass: Boolean = false,
@@ -200,9 +203,6 @@ class OpenCheckEngine(initial: OpenCheckState = OpenCheckState.Initial) {
                 if (window.contains(context.minuteOfDay)) OpenCheckDecision.ShowCheck(appId, now)
                 else OpenCheckDecision.Proceed
             }
-            OpenCheckMode.DuringFocus ->
-                if (context.focusActive) OpenCheckDecision.ShowCheck(appId, now)
-                else OpenCheckDecision.Proceed
         }
     }
 

@@ -12,7 +12,9 @@ import java.time.Duration
  * The user's per-app Open Check rules (#8), persisted locally (ADR 0009).
  * Ids are app ids as the catalog issues them; no rule means the app just opens.
  * One line per rule: mode, threshold minutes, schedule window, id — absent
- * config as "-"; the two-field lines of the mode-only era still parse.
+ * config as "-"; the two-field lines of the mode-only era still parse. A line
+ * naming a mode the enum no longer carries is dropped, never rewritten — the
+ * app then opens as it did while that trigger was inert (#165).
  */
 class OpenCheckRuleStore(context: Context) {
 
