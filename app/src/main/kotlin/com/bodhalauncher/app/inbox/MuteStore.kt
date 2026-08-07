@@ -36,6 +36,15 @@ class MuteStore(context: Context) {
         /** The muted packages, readable without an instance — the listener's edge check. */
         val muted = mutableStateOf<Set<String>>(emptySet())
 
+        /**
+         * Loads the persisted set into [muted] without keeping a store: what
+         * the listener calls at bind, where constructing an instance to throw
+         * away would hide the load in a side effect.
+         */
+        fun load(context: Context) {
+            MuteStore(context)
+        }
+
         private const val KEY_PACKAGES = "packages"
     }
 }

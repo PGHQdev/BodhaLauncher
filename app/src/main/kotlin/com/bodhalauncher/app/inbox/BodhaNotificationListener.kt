@@ -36,7 +36,7 @@ class BodhaNotificationListener : NotificationListenerService() {
         // Loads the persisted mutes into the shared set (#164): after a reboot
         // the listener binds before any UI exists, and a muted source must not
         // count in that window.
-        MuteStore(this)
+        MuteStore.load(this)
         connected.value = true
         // The shade as it stands counts too — notifications that arrived before
         // the bind, or survived a reboot, still describe the day. The live rows

@@ -55,8 +55,15 @@ fun InboxSurface(
     // catalog: a notification's source need not be a launchable activity.
     val icons = remember { mutableMapOf<String, ImageBitmap?>() }
     val labels = remember { mutableMapOf<String, String>() }
-    fun iconFor(appPackage: String): ImageBitmap? = icons.getOrPut(appPackage) {
-        runCatching { pm.getApplicationIcon(appPackage).toBitmap().asImageBitmap() }.getOrNull()
+    // Not getOrPut: a package with no readable icon caches its null, or every
+    // recomposition would retry the package-manager lookup.
+    fun iconFor(appPackage: String): ImageBitmap? {
+        if (appPackage !in icons) {
+            icons[appPackage] =
+                runCatching { pm.getApplicationIcon(appPackage).toBitmap().asImageBitmap() }
+                    .getOrNull()
+        }
+        return icons[appPackage]
     }
     fun labelFor(appPackage: String): String = labels.getOrPut(appPackage) {
         runCatching {
@@ -132,6 +139,11 @@ fun InboxSurface(
         )
     }
     sheets.showing<Sheet.SnoozeDurations>()?.let { sheet ->
+        // The same gone-row rule as the actions sheet: nothing left to snooze.
+        if (liveMap[sheet.key] == null) {
+            sheets.close(sheet)
+            return
+        }
         val dismiss = sheets.dismissedBy(sheet) { sheets.close(sheet) }
         SnoozeDurationSheet(
             onChoice = { durationMillis ->
