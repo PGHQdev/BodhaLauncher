@@ -7,6 +7,9 @@
         android:name="android.permission.PACKAGE_USAGE_STATS"
         tools:ignore="ProtectedPermissions" />
 
+    <!-- Runtime permission, asked only through the education flow (#159); Today reads live, stores nothing. -->
+    <uses-permission android:name="android.permission.READ_CALENDAR" />
+
     <!-- ADR 0002: app discovery via a scoped queries filter, never QUERY_ALL_PACKAGES -->
     <queries>
         <intent>

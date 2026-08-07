@@ -4,12 +4,19 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
+import com.bodhalauncher.app.capability.CapabilityEducation
 import com.bodhalauncher.app.home.IntentionStore
+import com.bodhalauncher.app.today.CalendarReader
 import com.bodhalauncher.app.ui.IntentionSheet
 import com.bodhalauncher.app.ui.Sheet
 import com.bodhalauncher.app.ui.SheetSlot
 import com.bodhalauncher.app.ui.TodayScreen
+import com.bodhalauncher.engine.Capability
+import com.bodhalauncher.engine.EducationEntry
 import com.bodhalauncher.engine.dayKey
+import com.bodhalauncher.engine.resolveDaySlot
 import kotlinx.coroutines.delay
 import java.time.LocalDateTime
 
@@ -23,6 +30,7 @@ import java.time.LocalDateTime
 fun TodaySurface(
     intentionStore: IntentionStore,
     sheets: SheetSlot,
+    education: CapabilityEducation,
 ) {
     val intention by intentionStore.intention
     val now by produceState(LocalDateTime.now()) {
@@ -38,10 +46,29 @@ fun TodaySurface(
     DisposableEffect(Unit) {
         onDispose { sheets.showing<Sheet.IntentionEditor>()?.let(sheets::close) }
     }
+    val context = LocalContext.current
+    val calendar = remember { CalendarReader(context) }
+    // Read live on every tick and every return to the foreground; nothing is
+    // cached, so a revoked grant is a plain ungranted read (ADR 0017, ADR 0009).
+    val calendarGranted = education.granted(Capability.Calendar)
+    val daySlot = remember(now, calendarGranted, education.resumeTick) {
+        resolveDaySlot(
+            granted = calendarGranted,
+            educationShown = education.educationShown(Capability.Calendar),
+            hasCalendars = !calendarGranted || calendar.hasCalendars(),
+            instances = if (calendarGranted) calendar.todayWindow(now) else emptyList(),
+            now = now,
+        )
+    }
     TodayScreen(
         day = day,
         intention = text,
         onEditIntention = { sheets.open(Sheet.IntentionEditor()) },
+        daySlot = daySlot,
+        onEventTap = calendar::open,
+        // A feature touch: arriving on Today never fires a system dialog; the
+        // education sheet comes first, the runtime request only after (#157).
+        onDayTurnOn = { education.ask(Capability.Calendar, EducationEntry.FeatureTouch) },
     )
     sheets.showing<Sheet.IntentionEditor>()?.let { sheet ->
         val dismiss = sheets.dismissedBy(sheet) { sheets.close(sheet) }

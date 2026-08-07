@@ -548,7 +548,7 @@ private fun BodhaHost(
             return
         }
         Surface.Today -> {
-            TodaySurface(intentionStore = intentionStore, sheets = sheets)
+            TodaySurface(intentionStore = intentionStore, sheets = sheets, education = education)
             return
         }
         else -> {
