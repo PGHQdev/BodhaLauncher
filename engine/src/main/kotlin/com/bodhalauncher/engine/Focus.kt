@@ -21,6 +21,18 @@ data class FocusSession(
     val proceeds: Int = 0,
 )
 
+/**
+ * A setup a session was once started with (#190): what Search offers to start
+ * again — the label with its duration and allowed apps. Distinct from
+ * [FocusRecord], which deliberately carries no app identity (ADR 0029); this is
+ * a convenience the user re-enacts, not a record of what happened.
+ */
+data class FocusSetup(
+    val label: String,
+    val minutes: Long,
+    val allowedAppIds: Set<String>,
+)
+
 /** The setup sheet's fixed durations (#166) — a fixed set, per ADR 0004's precedent. */
 val FOCUS_DURATION_MINUTES = listOf(15L, 30L, 60L)
 

@@ -22,8 +22,14 @@ import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.bodhalauncher.engine.AppResult
+import com.bodhalauncher.engine.ContactResult
+import com.bodhalauncher.engine.FocusActionResult
+import com.bodhalauncher.engine.FocusSetup
 import com.bodhalauncher.engine.HomeAction
 import com.bodhalauncher.engine.REASON_PINNED
+import com.bodhalauncher.engine.SEARCH_CONTACTS_OFF
+import com.bodhalauncher.engine.SearchContact
+import com.bodhalauncher.engine.UngrantedResult
 import com.bodhalauncher.engine.SearchInputs
 import com.bodhalauncher.engine.SearchResult
 import com.bodhalauncher.engine.SearchSection
@@ -73,8 +79,12 @@ class SearchScreenTest {
     @Composable
     private fun Search(
         pinned: Set<String> = emptySet(),
+        contacts: List<SearchContact> = emptyList(),
+        contactsGranted: Boolean = true,
+        focusSetups: List<FocusSetup> = emptyList(),
         onOpen: (SearchResult) -> Unit = {},
         onAppActions: (HomeAction) -> Unit = {},
+        onContactActions: (SearchContact) -> Unit = {},
     ) {
         var query by remember { mutableStateOf("") }
         SearchScreen(
@@ -85,6 +95,9 @@ class SearchScreenTest {
                     surfaces = listOf(Surface.Home, Surface.Library, Surface.Today),
                     query = query,
                     pinned = pinned,
+                    contacts = contacts,
+                    contactsGranted = contactsGranted,
+                    focusSetups = focusSetups,
                 )
             ),
             query = query,
@@ -93,6 +106,7 @@ class SearchScreenTest {
             iconKey = Unit,
             onOpen = onOpen,
             onAppActions = onAppActions,
+            onContactActions = onContactActions,
         )
     }
 
@@ -280,5 +294,65 @@ class SearchScreenTest {
 
         press(Key.Enter)
         assertEquals("camera", (opened as? AppResult)?.app?.id)
+    }
+
+    // --- Contacts (#186) ---
+
+    private val john = SearchContact(contactId = 7, lookupKey = "john", name = "John Okafor")
+
+    @Test
+    fun `a matching contact opens on tap — the non-destructive route`() {
+        var opened: SearchResult? = null
+        compose.setContent { BodhaTheme { Search(contacts = listOf(john), onOpen = { opened = it }) } }
+
+        type("jo")
+        compose.onNodeWithText("John Okafor").performClick()
+
+        assertEquals(john, (opened as? ContactResult)?.contact)
+    }
+
+    @Test
+    fun `long-pressing a contact reaches its actions node`() {
+        var actionsFor: SearchContact? = null
+        compose.setContent {
+            BodhaTheme { Search(contacts = listOf(john), onContactActions = { actionsFor = it }) }
+        }
+
+        type("jo")
+        compose.onNodeWithText("John Okafor").performTouchInput { longClick() }
+
+        assertEquals(john, actionsFor)
+    }
+
+    @Test
+    fun `without the grant a named state stands and activates on focus plus enter`() {
+        var opened: SearchResult? = null
+        compose.setContent {
+            BodhaTheme { Search(contactsGranted = false, onOpen = { opened = it }) }
+        }
+
+        type("jo")
+        assertTrue(SEARCH_CONTACTS_OFF in drawnText())
+
+        press(Key.DirectionDown)
+        assertEquals(SEARCH_CONTACTS_OFF, focusedName())
+        press(Key.Enter)
+        assertEquals(SearchSection.Contacts, (opened as? UngrantedResult)?.section)
+    }
+
+    // --- Focus setups (#190) ---
+
+    @Test
+    fun `a previous Focus label starts from the keyboard route`() {
+        val setup = FocusSetup(label = "Deep work", minutes = 60, allowedAppIds = setOf("com.a"))
+        var opened: SearchResult? = null
+        compose.setContent { BodhaTheme { Search(focusSetups = listOf(setup), onOpen = { opened = it }) } }
+
+        type("deep")
+        press(Key.DirectionDown)
+        assertEquals("Deep work", focusedName())
+        press(Key.Enter)
+
+        assertEquals(setup, (opened as? FocusActionResult)?.setup)
     }
 }

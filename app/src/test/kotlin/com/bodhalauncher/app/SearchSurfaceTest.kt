@@ -11,17 +11,27 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.bodhalauncher.app.capability.CapabilityEdge
+import com.bodhalauncher.app.capability.CapabilityEducation
+import com.bodhalauncher.app.capability.EducationStateStore
+import com.bodhalauncher.app.contacts.ContactsReader
+import com.bodhalauncher.app.data.BodhaDatabase
+import com.bodhalauncher.app.data.EventLogger
+import com.bodhalauncher.app.focus.FocusStore
 import com.bodhalauncher.app.home.AppCatalog
 import com.bodhalauncher.app.home.LibraryStore
 import com.bodhalauncher.app.home.PinStore
 import com.bodhalauncher.app.home.SearchDefaultStore
+import com.bodhalauncher.app.today.CalendarReader
 import com.bodhalauncher.app.ui.BodhaTheme
 import com.bodhalauncher.app.ui.SEARCH_FIELD_LABEL
 import com.bodhalauncher.app.ui.SheetSlot
+import com.bodhalauncher.engine.SEARCH_CONTACTS_OFF
 import com.bodhalauncher.engine.SessionId
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.Shadows
 import org.robolectric.annotation.Config
 
 /**
@@ -44,6 +54,8 @@ class SearchSurfaceTest {
         val libraryStore = LibraryStore(context)
         val catalog = AppCatalog(context)
         var session by mutableStateOf(SessionId(1))
+        val sheets = SheetSlot()
+        val events = EventLogger(BodhaDatabase.get(context).eventLog())
         compose.setContent {
             BodhaTheme {
                 SearchSurface(
@@ -51,9 +63,15 @@ class SearchSurfaceTest {
                     libraryStore = libraryStore,
                     defaultStore = SearchDefaultStore(context),
                     catalog = catalog,
+                    education = CapabilityEducation(
+                        CapabilityEdge(context), EducationStateStore(context), events, sheets,
+                    ),
+                    calendar = CalendarReader(context),
+                    contacts = ContactsReader(context),
+                    focusStore = FocusStore(context, BodhaDatabase.get(context).focusRecords(), events),
                     session = session,
                     surfaces = emptyList(),
-                    sheets = SheetSlot(),
+                    sheets = sheets,
                     openApp = {},
                     openSurface = {},
                 )
@@ -66,5 +84,50 @@ class SearchSurfaceTest {
         session = SessionId(2)
 
         compose.onNodeWithText("insta").assertDoesNotExist()
+    }
+
+    /**
+     * The grant is observed at the query, not at the grant (#186): granting
+     * while Search is open changes nothing already drawn, and the next
+     * keystroke is what brings the section back.
+     */
+    @Test
+    fun `granting contacts mid-session lands on the next query, not retroactively`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val sheets = SheetSlot()
+        val events = EventLogger(BodhaDatabase.get(context).eventLog())
+        compose.setContent {
+            BodhaTheme {
+                SearchSurface(
+                    pinStore = PinStore(context),
+                    libraryStore = LibraryStore(context),
+                    defaultStore = SearchDefaultStore(context),
+                    catalog = AppCatalog(context),
+                    education = CapabilityEducation(
+                        CapabilityEdge(context), EducationStateStore(context), events, sheets,
+                    ),
+                    calendar = CalendarReader(context),
+                    contacts = ContactsReader(context),
+                    focusStore = FocusStore(context, BodhaDatabase.get(context).focusRecords(), events),
+                    session = SessionId(1),
+                    surfaces = emptyList(),
+                    sheets = sheets,
+                    openApp = {},
+                    openSurface = {},
+                )
+            }
+        }
+
+        compose.onNodeWithContentDescription(SEARCH_FIELD_LABEL).performTextInput("jo")
+        compose.onNodeWithText(SEARCH_CONTACTS_OFF).assertIsDisplayed()
+
+        Shadows.shadowOf(ApplicationProvider.getApplicationContext<android.app.Application>())
+            .grantPermissions(android.Manifest.permission.READ_CONTACTS)
+        compose.waitForIdle()
+        // Nothing already drawn re-renders on the grant alone.
+        compose.onNodeWithText(SEARCH_CONTACTS_OFF).assertIsDisplayed()
+
+        compose.onNodeWithContentDescription(SEARCH_FIELD_LABEL).performTextInput("h")
+        compose.onNodeWithText(SEARCH_CONTACTS_OFF).assertDoesNotExist()
     }
 }

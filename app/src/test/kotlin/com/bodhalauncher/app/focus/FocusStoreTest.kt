@@ -5,9 +5,15 @@ import androidx.room.Room
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.bodhalauncher.app.data.BodhaDatabase
 import com.bodhalauncher.app.data.EventLogger
+import com.bodhalauncher.engine.FocusSetup
 import java.time.Duration
 import java.time.Instant
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.job
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -44,13 +50,25 @@ class FocusStoreTest {
     @After
     fun tearDown() = db.close()
 
-    private fun store() = FocusStore(context, db.focusRecords(), EventLogger(db.eventLog()))
+    /**
+     * The stores under test share one lane whose jobs [drain] can join —
+     * deterministic where the old fixed sleep flaked on slow CI runners. A
+     * lane-queue marker would not do: the store's writes suspend into Room's
+     * executor and release the lane while still incomplete, so what is joined
+     * is every launched job, not the queue's tail.
+     */
+    @Suppress("OPT_IN_USAGE")
+    private val lane = CoroutineScope(SupervisorJob() + Dispatchers.IO.limitedParallelism(1))
+
+    private fun store() = FocusStore(context, db.focusRecords(), EventLogger(db.eventLog()), lane)
 
     private fun FocusStore.startDefault(minutes: Long = 30, allowed: Set<String> = setOf("com.a")) =
         start("Deep work", minutes, allowed, t0)
 
     /** The single-lane writes are async; a fresh read after settling sees them. */
-    private fun drain() = Thread.sleep(150)
+    private fun drain() = runBlocking {
+        withTimeout(5_000) { lane.coroutineContext.job.children.forEach { it.join() } }
+    }
 
     @Test
     fun `the session survives a restart with remaining time derived from the stored end instant`() {
@@ -200,5 +218,68 @@ class FocusStoreTest {
         drain()
 
         assertEquals(1, db.focusRecords().count())
+    }
+
+    // --- Setups Search offers to start again (#190) ---
+
+    @Test
+    fun `starting records the setup - label, duration and allowed apps`() {
+        val s = store()
+        s.start("Deep work", 60, setOf("com.a", "com.b"), t0)
+
+        assertEquals(
+            listOf(FocusSetup("Deep work", 60, setOf("com.a", "com.b"))),
+            s.setups.value,
+        )
+    }
+
+    @Test
+    fun `restarting a label moves it up carrying its latest duration and apps`() {
+        val s = store()
+        s.start("Deep work", 60, setOf("com.a"), t0)
+        s.endEarly(t0.plusSeconds(60))
+        s.start("Reading", 15, emptySet(), t0.plusSeconds(120))
+        s.endEarly(t0.plusSeconds(180))
+        s.start("Deep work", 30, setOf("com.b"), t0.plusSeconds(240))
+
+        assertEquals(
+            listOf(
+                FocusSetup("Deep work", 30, setOf("com.b")),
+                FocusSetup("Reading", 15, emptySet()),
+            ),
+            s.setups.value,
+        )
+    }
+
+    @Test
+    fun `setups survive process death`() {
+        store().start("Deep work", 60, setOf("com.a"), t0)
+
+        assertEquals(
+            listOf(FocusSetup("Deep work", 60, setOf("com.a"))),
+            store().setups.value,
+        )
+    }
+
+    @Test
+    fun `the setup list is capped at the most recent twelve`() {
+        val s = store()
+        repeat(14) { i ->
+            s.start("Task $i", 15, emptySet(), t0.plusSeconds(i * 1200L))
+            s.endEarly(t0.plusSeconds(i * 1200L + 600))
+        }
+
+        assertEquals(12, s.setups.value.size)
+        assertEquals("Task 13", s.setups.value.first().label)
+        assertFalse(s.setups.value.any { it.label == "Task 0" })
+    }
+
+    @Test
+    fun `a start refused while a session runs records no setup`() {
+        val s = store()
+        s.startDefault()
+        s.start("Second", 15, emptySet(), t0.plusSeconds(60))
+
+        assertEquals(listOf("Deep work"), s.setups.value.map { it.label })
     }
 }

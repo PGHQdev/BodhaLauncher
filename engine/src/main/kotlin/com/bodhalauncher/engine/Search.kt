@@ -1,5 +1,7 @@
 package com.bodhalauncher.engine
 
+import java.time.LocalDateTime
+
 /** A launcher shortcut as Search sees it: an app's own entry point, matched on its label. */
 data class SearchShortcut(val id: String, val appId: String, val label: String)
 
@@ -54,6 +56,61 @@ data class ActionResult(val action: SearchAction) : SearchResult {
     override val key get() = "action:${action.id}"
     override val label get() = action.label
 }
+
+/** A contact as Search sees it (#186): a name to match, and the keys that open it. */
+data class SearchContact(val contactId: Long, val lookupKey: String, val name: String)
+
+data class ContactResult(val contact: SearchContact) : SearchResult {
+    override val key get() = "contact:${contact.lookupKey}"
+    override val label get() = contact.name
+}
+
+/**
+ * One matched calendar instance (#187), carried as the day slot's own
+ * [DayEvent] so selecting it opens through the same edge Today uses. A
+ * recurring event repeats within the searched window, so the key takes the
+ * instance's begin as well as the event id.
+ */
+data class EventResult(val event: DayEvent) : SearchResult {
+    override val key get() = "event:${event.eventId}@${event.begin}"
+    override val label get() = event.title
+}
+
+/**
+ * A previous Focus setup offered as something Search can start (#190). The row
+ * says the label — the user's own words — and selecting it starts a session
+ * with that setup's duration and allowed apps.
+ */
+data class FocusActionResult(val setup: FocusSetup) : SearchResult {
+    override val key get() = "focus:${setup.label}"
+    override val label get() = setup.label
+}
+
+/**
+ * An optional-permission section without its grant (#186, #187): the named
+ * state that stands where the results would, never an empty section and never
+ * a silent omission. It is a result so it renders as a vocabulary row, keys
+ * into the lazy list, and sits on the keyboard route like everything else;
+ * activating it enters the capability-education flow — a tap on "turn it on"
+ * is an explicit user request, so the education always shows (#157).
+ *
+ * [capability] rides along so the section-to-capability mapping exists once,
+ * here, rather than as a second cascade at the surface.
+ */
+data class UngrantedResult(val section: SearchSection, val capability: Capability) : SearchResult {
+    override val key get() = "ungranted:$section"
+    override val label
+        get() = when (capability) {
+            Capability.Contacts -> SEARCH_CONTACTS_OFF
+            else -> SEARCH_CALENDAR_OFF
+        }
+}
+
+/** The contacts section's named state without the grant (#186). */
+const val SEARCH_CONTACTS_OFF = "Contact search is off"
+
+/** The calendar section's named state without the grant (#187). */
+const val SEARCH_CALENDAR_OFF = "Calendar search is off"
 
 /**
  * A surface offered by its name (#189): the universal route to everything past
@@ -120,6 +177,26 @@ data class SearchInputs(
     val defaults: Map<String, String> = emptyMap(),
     /** Whether hidden apps may match; off, a query never surfaces them. */
     val hiddenSearchable: Boolean = false,
+    /**
+     * Whether the contacts grant stood when this query began (#186). Defaults
+     * true — like every input here, the default means the domain contributes
+     * nothing; false is the explicit fact that puts the named state up.
+     */
+    val contactsGranted: Boolean = true,
+    /** Every contact, unranked; matching and the lexical order happen here. */
+    val contacts: List<SearchContact> = emptyList(),
+    /** Whether the calendar grant stood when this query began (#187); defaults as [contactsGranted] does. */
+    val calendarGranted: Boolean = true,
+    /**
+     * The provider's expanded instances over [searchCalendarWindow], or null
+     * while the read is still in flight — the calendar section fills in beneath
+     * the local sections when the rows arrive, and until then it is absent
+     * rather than empty (#187). Declined and hidden-calendar instances are
+     * dropped here, so the edge stays the same reader Today uses.
+     */
+    val calendarInstances: List<ProviderInstance>? = null,
+    /** Previous Focus setups, most recent first; their labels match like any other (#190). */
+    val focusSetups: List<FocusSetup> = emptyList(),
 )
 
 /**
@@ -155,6 +232,23 @@ data class SearchState(val sections: List<SearchSectionState>, val nothingFound:
  * between these as their stores arrive. Sections never interleave: ranking runs
  * inside each one.
  */
+/** How far behind the current day boundary calendar search reads (#187). */
+const val SEARCH_CALENDAR_DAYS_BACK = 7L
+
+/** How far past the current day boundary calendar search reads (#187). */
+const val SEARCH_CALENDAR_DAYS_FORWARD = 30L
+
+/**
+ * The range calendar search reads (#187): the 7 days before the current day
+ * boundary through the 30 after it — wide enough for "when is that dentist
+ * appointment" and last week's meeting, narrow enough that a two-letter prefix
+ * does not return a year of standups. One constant pair, cheap to change.
+ */
+fun searchCalendarWindow(now: LocalDateTime): Pair<LocalDateTime, LocalDateTime> {
+    val boundary = dayStart(now)
+    return boundary.minusDays(SEARCH_CALENDAR_DAYS_BACK) to boundary.plusDays(SEARCH_CALENDAR_DAYS_FORWARD)
+}
+
 fun resolveSearch(inputs: SearchInputs): SearchState {
     if (isBlankQuery(inputs.query)) return SearchState(sections = emptyList(), nothingFound = false)
     fun visible(appId: String) = inputs.hiddenSearchable || appId !in inputs.hidden
@@ -171,6 +265,35 @@ fun resolveSearch(inputs: SearchInputs): SearchState {
         }
         .map(::ShortcutResult)
 
+    // ADR 0014: contacts order lexically and nothing else — no affinity signal
+    // exists on the minimum supported Android, so none is faked. No reason
+    // lines either: no tier ever lifts a contact row (#186).
+    val contacts: List<SearchRow> = when {
+        !inputs.contactsGranted ->
+            listOf(SearchRow(UngrantedResult(SearchSection.Contacts, Capability.Contacts)))
+        else -> inputs.contacts
+            .filter { matchesQuery(it.name, inputs.query) }
+            .sortedWith(
+                compareBy(String.CASE_INSENSITIVE_ORDER, SearchContact::name)
+                    .thenBy(SearchContact::lookupKey)
+            )
+            .map { SearchRow(ContactResult(it)) }
+    }
+
+    // Chronological, not tiered (#187): when a title matches, "which one" is a
+    // question about time, and begin order is the one explainable rank an
+    // event has. Declined and hidden-calendar instances drop, as on Today.
+    val calendar: List<SearchRow> = when {
+        !inputs.calendarGranted ->
+            listOf(SearchRow(UngrantedResult(SearchSection.Calendar, Capability.Calendar)))
+        inputs.calendarInstances == null -> emptyList()
+        else -> inputs.calendarInstances
+            .filter { it.calendarVisible && !it.selfDeclined && matchesQuery(it.title, inputs.query) }
+            .map { DayEvent(it.eventId, it.title, it.allDay, it.begin, it.end) }
+            .sortedWith(compareBy(DayEvent::begin, DayEvent::end, DayEvent::title))
+            .map { SearchRow(EventResult(it)) }
+    }
+
     val actions = inputs.actions
         .filter { action ->
             matchesQuery(action.label, inputs.query) ||
@@ -182,13 +305,24 @@ fun resolveSearch(inputs: SearchInputs): SearchState {
     val surfaces = inputs.surfaces
         .filter { matchesQuery(it.title, inputs.query) }
         .map(::SurfaceResult)
+    // A Focus setup is something Search can do, so it shares the actions
+    // section (#190). With no previous sessions the list is empty and the
+    // domain contributes nothing — no placeholder and no invitation.
+    val focusActions = inputs.focusSetups
+        .filter { matchesQuery(it.label, inputs.query) }
+        .map(::FocusActionResult)
 
     val sections = listOf(
         SearchSectionState(SearchSection.Apps, rank(apps, inputs)),
         SearchSectionState(SearchSection.Shortcuts, rank(shortcuts, inputs)),
-        SearchSectionState(SearchSection.Actions, rank(actions + surfaces, inputs)),
+        SearchSectionState(SearchSection.Contacts, contacts),
+        SearchSectionState(SearchSection.Calendar, calendar),
+        SearchSectionState(SearchSection.Actions, rank(actions + surfaces + focusActions, inputs)),
     ).filter { it.rows.isNotEmpty() }
-    return SearchState(sections = sections, nothingFound = sections.isEmpty())
+    // A named state is not a find: with only ungranted rows standing, the query
+    // itself still matched nothing, and the one empty state says so above them.
+    val nothingFound = sections.all { section -> section.rows.all { it.result is UngrantedResult } }
+    return SearchState(sections = sections, nothingFound = nothingFound)
 }
 
 private fun rank(results: List<SearchResult>, inputs: SearchInputs): List<SearchRow> {
