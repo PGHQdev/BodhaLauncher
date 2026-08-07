@@ -8,13 +8,12 @@ import com.bodhalauncher.app.data.BodhaDatabase
 import com.bodhalauncher.app.session.SessionRuntime
 import com.bodhalauncher.app.session.toRecord
 import com.bodhalauncher.app.ui.AwarenessScreen
+import com.bodhalauncher.app.ui.minuteNow
 import com.bodhalauncher.engine.AwarenessToday
 import com.bodhalauncher.engine.dayKey
 import com.bodhalauncher.engine.resolveAwarenessToday
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
-import java.time.LocalDateTime
 
 /**
  * Awareness, opening on Today (#171): today's session records as one count.
@@ -24,23 +23,21 @@ import java.time.LocalDateTime
  */
 @Composable
 fun AwarenessSurface(sessions: SessionRuntime, onBack: () -> Unit) {
-    val now by produceState(LocalDateTime.now()) {
-        while (true) {
-            delay((60 - LocalDateTime.now().second) * 1000L)
-            value = LocalDateTime.now()
-        }
-    }
+    val now = minuteNow()
     val phase by sessions.phase
     val context = LocalContext.current
-    // Null while the store is still being read: the screen shows nothing rather
-    // than a 0 standing in for an unknown (#171).
+    // Null while the store is still being read — and stays null if the read
+    // fails: the screen shows nothing rather than a 0 standing in for an
+    // unknown (#171). Only an actual empty read resolves to the named absence.
     val today by produceState<AwarenessToday?>(null, now, phase) {
         value = withContext(Dispatchers.IO) {
-            val records = BodhaDatabase.get(context).sessionRecords()
-                .forDay(dayKey(now).toEpochDay())
-                .map { it.toRecord() }
-            resolveAwarenessToday(records, now)
-        }
+            runCatching {
+                val records = BodhaDatabase.get(context).sessionRecords()
+                    .forDay(dayKey(now).toEpochDay())
+                    .map { it.toRecord() }
+                resolveAwarenessToday(records, now)
+            }.getOrNull()
+        } ?: value
     }
     AwarenessScreen(today = today, onBack = onBack)
 }

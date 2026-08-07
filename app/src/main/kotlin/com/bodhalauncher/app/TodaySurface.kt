@@ -17,6 +17,7 @@ import com.bodhalauncher.app.ui.IntentionSheet
 import com.bodhalauncher.app.ui.Sheet
 import com.bodhalauncher.app.ui.SheetSlot
 import com.bodhalauncher.app.ui.TodayScreen
+import com.bodhalauncher.app.ui.minuteNow
 import com.bodhalauncher.engine.Capability
 import com.bodhalauncher.engine.DaySlot
 import com.bodhalauncher.engine.DigestSection
@@ -27,7 +28,6 @@ import com.bodhalauncher.engine.dayStart
 import com.bodhalauncher.engine.resolveDaySlot
 import com.bodhalauncher.engine.resolveDigestSlot
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.time.LocalDateTime
 import java.time.ZoneId
@@ -46,12 +46,7 @@ fun TodaySurface(
     openInbox: () -> Unit,
 ) {
     val intention by intentionStore.intention
-    val now by produceState(LocalDateTime.now()) {
-        while (true) {
-            delay((60 - LocalDateTime.now().second) * 1000L)
-            value = LocalDateTime.now()
-        }
-    }
+    val now = minuteNow()
     val day = dayKey(now)
     val text = intention?.textOn(now)
     // The editor is about this surface, so it leaves with it — the system Home

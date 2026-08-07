@@ -56,6 +56,7 @@ import com.bodhalauncher.app.ui.AppPickerDialog
 import com.bodhalauncher.app.ui.BodhaTheme
 import com.bodhalauncher.app.ui.EditHomeDialog
 import com.bodhalauncher.app.ui.ModeManageDialog
+import com.bodhalauncher.app.ui.minuteNow
 import com.bodhalauncher.app.ui.ModeSelectorDialog
 import com.bodhalauncher.app.ui.GestureAction
 import com.bodhalauncher.app.ui.HomeGestures
@@ -585,12 +586,7 @@ private fun BodhaHost(
 
     // Ticks each minute so the intention drops at the 4am boundary (ADR 0003)
     // even when Home sits on screen with nothing else changing.
-    val now by produceState(LocalDateTime.now()) {
-        while (true) {
-            delay((60 - LocalDateTime.now().second) * 1000L)
-            value = LocalDateTime.now()
-        }
-    }
+    val now = minuteNow()
 
     // Remaining inputs fill in as their features ship (suggestions #6, digest #10, …).
     val state = resolveHome(

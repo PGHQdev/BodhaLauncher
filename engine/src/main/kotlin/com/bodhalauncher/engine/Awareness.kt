@@ -12,10 +12,13 @@ data class SessionRecord(
     val id: Long,
     val start: LocalDateTime,
     val end: LocalDateTime?,
-) {
-    /** The day a session belongs to is the day it started (ADR 0003). */
-    val day: LocalDate get() = dayKey(start)
-}
+    /**
+     * The day a session belongs to is the day it started (ADR 0003). Defaulted
+     * from the start, but a store that stamped the key at write passes its own —
+     * one source of truth per record, never two readings of the boundary.
+     */
+    val day: LocalDate = dayKey(start),
+)
 
 /**
  * Awareness's Today view (#171): a count, or the absence said in words.

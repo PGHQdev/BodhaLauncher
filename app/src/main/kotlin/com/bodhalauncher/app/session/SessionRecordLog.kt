@@ -13,6 +13,7 @@ import com.bodhalauncher.engine.SessionRecord
 import com.bodhalauncher.engine.Transition
 import com.bodhalauncher.engine.dayKey
 import java.time.Instant
+import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
 import kotlinx.coroutines.CoroutineScope
@@ -74,10 +75,10 @@ class SessionRecordLog(private val dao: SessionRecordDao) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO.limitedParallelism(1))
 
     fun record(transition: Transition) {
-        scope.launch { runCatching { apply(transition) } }
+        scope.launch { runCatching { write(transition) } }
     }
 
-    internal suspend fun apply(transition: Transition) {
+    internal suspend fun write(transition: Transition) {
         when (transition) {
             is Transition.SessionStarted -> dao.insert(
                 SessionRecordEntity(
@@ -98,6 +99,8 @@ fun SessionRecordEntity.toRecord(): SessionRecord = SessionRecord(
     id = sessionId,
     start = Instant.ofEpochMilli(startMillis).toLocal(),
     end = endMillis?.let { Instant.ofEpochMilli(it).toLocal() },
+    // The key stamped at write decides — a zone change since must not re-file the day.
+    day = LocalDate.ofEpochDay(dayEpochDay),
 )
 
 private fun Instant.toLocal(): LocalDateTime = LocalDateTime.ofInstant(this, ZoneId.systemDefault())
