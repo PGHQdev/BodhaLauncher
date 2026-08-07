@@ -11,7 +11,6 @@ enum class Capability {
     Contacts,
     Calendar,
     CoarseLocation,
-    Documents,
 }
 
 /** How the education flow was reached; there are no other ways in (#18: no timed or launch-based re-asks). */
@@ -87,13 +86,6 @@ private val screens = mapOf(
         processing = ON_DEVICE,
         withoutIt = "Weather uses a city you choose by hand instead.",
         feature = "Weather",
-    ),
-    Capability.Documents to EducationScreen(
-        capability = Capability.Documents,
-        dataAccessed = "Documents you explicitly pick, and nothing else.",
-        processing = ON_DEVICE,
-        withoutIt = "Document resume stays off.",
-        feature = "Resume",
     ),
 )
 

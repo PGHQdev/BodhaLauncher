@@ -25,8 +25,6 @@ class CapabilityEdge(private val context: Context) {
         Capability.Contacts -> hasPermission(android.Manifest.permission.READ_CONTACTS)
         Capability.Calendar -> hasPermission(android.Manifest.permission.READ_CALENDAR)
         Capability.CoarseLocation -> hasPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION)
-        // SAF grants are per-document; there is no standing capability to hold.
-        Capability.Documents -> false
     }
 
     /**
