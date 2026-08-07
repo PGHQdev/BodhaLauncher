@@ -519,6 +519,7 @@ private fun BodhaHost(
                 catalog = catalog,
                 session = sessions.currentSession,
                 surfaces = BUILT_SURFACES,
+                sheets = sheets,
                 openApp = openApp,
                 openSurface = { place = Place(it) },
             )

@@ -9,7 +9,11 @@ import androidx.compose.ui.platform.LocalContext
 import com.bodhalauncher.app.home.AppCatalog
 import com.bodhalauncher.app.home.LibraryStore
 import com.bodhalauncher.app.home.PinStore
+import androidx.compose.runtime.DisposableEffect
+import com.bodhalauncher.app.ui.ResultActionsSheet
 import com.bodhalauncher.app.ui.SearchScreen
+import com.bodhalauncher.app.ui.Sheet
+import com.bodhalauncher.app.ui.SheetSlot
 import com.bodhalauncher.engine.ActionResult
 import com.bodhalauncher.engine.AppResult
 import com.bodhalauncher.engine.HomeAction
@@ -41,6 +45,7 @@ fun SearchSurface(
     session: SessionId?,
     /** The surfaces the host renders; an unbuilt one never appears as a result (#189). */
     surfaces: List<Surface>,
+    sheets: SheetSlot,
     openApp: (HomeAction) -> Unit,
     /** The navigation model's entry point, not a route of Search's own (#189). */
     openSurface: (Surface) -> Unit,
@@ -62,6 +67,11 @@ fun SearchSurface(
     // model's question (#132), not Search's — this only makes sure the field is
     // empty when you get here.
     var query by remember(session) { mutableStateOf("") }
+    // The sheet is about a result on this surface, so it leaves with the surface
+    // — the reason the Library's does (#132).
+    DisposableEffect(Unit) {
+        onDispose { sheets.showing<Sheet.ResultActions>()?.let(sheets::close) }
+    }
     SearchScreen(
         state = resolveSearch(
             SearchInputs(
@@ -97,5 +107,25 @@ fun SearchSurface(
                 }
             }
         },
+        // Replaces whatever sheet is open rather than stacking on it — the
+        // slot's own rule (#133).
+        onAppActions = { sheets.open(Sheet.ResultActions(it)) },
     )
+    sheets.showing<Sheet.ResultActions>()?.let { sheet ->
+        val app = sheet.app
+        // Told to the slot as well as used here, so a session ending over this
+        // sheet dismisses it the way its own footer does (ADR 0011, #134).
+        val dismiss = sheets.dismissedBy(sheet) { sheets.close(sheet) }
+        ResultActionsSheet(
+            app = app,
+            isPinned = app.id in pinned,
+            isHidden = app.id in hidden,
+            onOpen = { dismiss(); openApp(app) },
+            onPin = { dismiss(); pinStore.pin(app.id) },
+            onUnpin = { dismiss(); pinStore.unpin(app.id) },
+            onHide = { dismiss(); pinStore.hide(app.id) },
+            onUnhide = { dismiss(); pinStore.unhide(app.id) },
+            onDismiss = dismiss,
+        )
+    }
 }

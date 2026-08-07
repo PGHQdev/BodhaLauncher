@@ -17,6 +17,8 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.bodhalauncher.engine.AppResult
@@ -69,7 +71,11 @@ class SearchScreenTest {
 
     /** The surface's own state loop, so what is driven is a real query round trip. */
     @Composable
-    private fun Search(pinned: Set<String> = emptySet(), onOpen: (SearchResult) -> Unit = {}) {
+    private fun Search(
+        pinned: Set<String> = emptySet(),
+        onOpen: (SearchResult) -> Unit = {},
+        onAppActions: (HomeAction) -> Unit = {},
+    ) {
         var query by remember { mutableStateOf("") }
         SearchScreen(
             state = resolveSearch(
@@ -86,6 +92,7 @@ class SearchScreenTest {
             iconFor = { null },
             iconKey = Unit,
             onOpen = onOpen,
+            onAppActions = onAppActions,
         )
     }
 
@@ -238,6 +245,28 @@ class SearchScreenTest {
         compose.onNodeWithText("App Library").performClick()
 
         assertEquals(Surface.Library, (opened as? SurfaceResult)?.surface)
+    }
+
+    @Test
+    fun `long-pressing an app result reaches its actions`() {
+        var actionsFor: HomeAction? = null
+        compose.setContent { BodhaTheme { Search(onAppActions = { actionsFor = it }) } }
+
+        type("insta")
+        compose.onNodeWithText("Instagram").performTouchInput { longClick() }
+
+        assertEquals("instagram", actionsFor?.id)
+    }
+
+    @Test
+    fun `a shortcut result offers no long-press actions`() {
+        var actionsFor: HomeAction? = null
+        compose.setContent { BodhaTheme { Search(onAppActions = { actionsFor = it }) } }
+
+        type("chat")
+        compose.onNodeWithText("New chat").performTouchInput { longClick() }
+
+        assertEquals(null, actionsFor)
     }
 
     @Test

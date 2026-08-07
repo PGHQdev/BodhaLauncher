@@ -37,6 +37,9 @@ sealed class Sheet {
     /** The Library's per-app actions (#7). */
     class AppActions(val app: HomeAction) : Sheet()
 
+    /** A search result's actions — the Library's hide and pin, met in Search (#184). */
+    class ResultActions(val app: HomeAction) : Sheet()
+
     /**
      * The reflexive-use prompt on Home (#4). It carries the decision it was
      * opened for, so its outcome can be recorded against that decision even

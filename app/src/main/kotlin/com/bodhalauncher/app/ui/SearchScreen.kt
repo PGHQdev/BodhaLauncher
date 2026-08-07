@@ -20,6 +20,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.bodhalauncher.engine.ActionResult
 import com.bodhalauncher.engine.AppResult
+import com.bodhalauncher.engine.HomeAction
 import com.bodhalauncher.engine.SearchResult
 import com.bodhalauncher.engine.SearchState
 import com.bodhalauncher.engine.ShortcutResult
@@ -51,6 +52,12 @@ fun SearchScreen(
     /** Changes when any package changes, so cached icons refresh with their apps. */
     iconKey: Any,
     onOpen: (SearchResult) -> Unit,
+    /**
+     * Long-press (or Right, through the rows' shared Actions node) on an app
+     * result — hide and pin live behind it (#184). Only app rows carry it:
+     * shortcuts, actions and surfaces have nothing to hide or pin.
+     */
+    onAppActions: (HomeAction) -> Unit = {},
 ) {
     val colors = LocalBodhaColors.current
     Column(
@@ -86,13 +93,13 @@ fun SearchScreen(
                         is ActionResult, is SurfaceResult -> null
                     }
                     val icon = remember(ownerId, iconKey) { ownerId?.let(iconFor) }
-                    // No long-press yet: result actions are #184's slice. The
-                    // reason line rides as the subtitle — plain text, no tab
-                    // stop of its own (#182).
+                    // The reason line rides as the subtitle — plain text, no
+                    // tab stop of its own (#182).
                     ListRow(
                         title = result.label,
                         subtitle = row.reason,
                         onClick = { onOpen(result) },
+                        onLongClick = (result as? AppResult)?.let { { onAppActions(it.app) } },
                         // The app's own mark, so bare rather than chipped (rule 5).
                         leading = if (icon != null) ({ AppMark(icon) }) else null,
                         // Rule 3: only the surface row navigates within Bodha.
