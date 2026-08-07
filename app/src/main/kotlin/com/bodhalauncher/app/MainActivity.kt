@@ -212,9 +212,11 @@ class MainActivity : ComponentActivity() {
         val app = application as BodhaApp
         val pinStore = PinStore(this)
         val modeStore = ModeStore(this, pinStore)
-        // The choice survives process death: resolved before anything composes.
+        // The switch and the schedules both survive process death: resolved
+        // before anything composes, against the clock as it is now.
         pinStore.setActive(
-            resolveArrangement(modeStore.modes.value, modeStore.choice.value) ?: PinStore.DEFAULT_ARRANGEMENT
+            resolveArrangement(modeStore.modes.value, modeStore.switch.value, LocalDateTime.now())
+                ?: PinStore.DEFAULT_ARRANGEMENT
         )
         val intentionStore = IntentionStore(this)
         val libraryStore = LibraryStore(this)
@@ -349,12 +351,16 @@ private fun BodhaHost(
     var editingHome by remember { mutableStateOf(false) }
     var modeSelectorOpen by remember { mutableStateOf(false) }
     var modeManageOpen by remember { mutableStateOf(false) }
-    // The active arrangement is a pure resolution over the mode list and the
-    // manual choice (#155); the UI holds none of it. A deleted active mode
-    // resolves to the default here, with no intermediate empty state.
-    val modeNames by modeStore.modes
-    val modeChoice by modeStore.choice
-    val activeMode = resolveArrangement(modeNames, modeChoice)
+    // Ticks each minute, so the intention drops at the 4am boundary (ADR 0003)
+    // and a mode's window opens (#156) without a relaunch — one producer, above
+    // the surfaces, because a schedule turns over wherever the user is standing.
+    val now = minuteNow()
+    // The active arrangement is a pure resolution over the mode list, the manual
+    // switch and the clock (#155, #156); the UI holds none of it. A deleted
+    // active mode resolves to the default here, with no intermediate empty state.
+    val modes by modeStore.modes
+    val modeSwitch by modeStore.switch
+    val activeMode = resolveArrangement(modes, modeSwitch, now)
     LaunchedEffect(activeMode) { pinStore.setActive(activeMode ?: PinStore.DEFAULT_ARRANGEMENT) }
     val context = LocalContext.current
     // The Focus session's home (#166); a duration that elapsed while the process
@@ -734,10 +740,6 @@ private fun BodhaHost(
     // Once per arrival on Home, not per recomposition (#25).
     LaunchedEffect(Unit) { events.log(EventType.HomeRendered) }
 
-    // Ticks each minute so the intention drops at the 4am boundary (ADR 0003)
-    // even when Home sits on screen with nothing else changing.
-    val now = minuteNow()
-
     // Remaining inputs fill in as their features ship (suggestions #6, digest #10, …).
     val state = resolveHome(
         HomeInputs(
@@ -828,19 +830,23 @@ private fun BodhaHost(
     }
     if (modeSelectorOpen) {
         ModeSelectorDialog(
-            modes = modeNames,
+            modes = modes,
             current = activeMode,
-            onPick = modeStore::select,
+            // Stamped at the moment of the choice, which is what the expiry at
+            // the next window boundary is measured from (#156).
+            onPick = { modeStore.select(it, LocalDateTime.now()) },
             onManage = { modeManageOpen = true; modeSelectorOpen = false },
             onDismiss = { modeSelectorOpen = false },
         )
     }
     if (modeManageOpen) {
         ModeManageDialog(
-            modes = modeNames,
+            modes = modes,
             onCreate = modeStore::create,
             onRename = modeStore::rename,
             onDelete = modeStore::delete,
+            onSetWindow = modeStore::setWindow,
+            onMove = modeStore::move,
             onDismiss = { modeManageOpen = false },
         )
     }

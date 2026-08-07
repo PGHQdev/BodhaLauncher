@@ -21,6 +21,7 @@ import com.bodhalauncher.engine.DayEvent
 import com.bodhalauncher.engine.HomeAction
 import com.bodhalauncher.engine.LibraryIndexEntry
 import com.bodhalauncher.engine.LibraryLayout
+import com.bodhalauncher.engine.ScheduleWindow
 import com.bodhalauncher.engine.SessionRecord
 
 /**
@@ -148,6 +149,13 @@ fun DesignGallery() {
             subtitle = "Turn on notification access",
             onClick = {},
         )
+        Spacer(Modifier.height(BodhaSpacing.xl))
+
+        // The daily-window editor (#74, #156): shared the moment context modes
+        // became its second caller, so both guards see it rather than only the
+        // Open Check rule dialog that used to own it privately.
+        SectionOverline("Time window")
+        WindowEditor(current = GALLERY_WINDOW, prompt = "Switch to Evening between these times") {}
         Spacer(Modifier.height(BodhaSpacing.xl))
 
         // Awareness's session rows (#172): the two classifications and the
@@ -314,6 +322,9 @@ private val GALLERY_TIMED_EVENT = DayEvent(
     begin = java.time.LocalDateTime.of(2026, 8, 5, 9, 30),
     end = java.time.LocalDateTime.of(2026, 8, 5, 10, 0),
 )
+
+/** Fixed times, so the fields photograph the same span every run. */
+private val GALLERY_WINDOW = ScheduleWindow(startMinute = 21 * 60, endMinute = 23 * 60 + 30)
 
 private fun gallerySession(id: Long, from: Int, to: Int?, intentional: Boolean) = AwarenessSession(
     record = SessionRecord(
