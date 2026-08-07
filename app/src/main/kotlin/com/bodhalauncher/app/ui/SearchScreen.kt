@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.bodhalauncher.engine.ActionResult
 import com.bodhalauncher.engine.AppResult
 import com.bodhalauncher.engine.SearchResult
 import com.bodhalauncher.engine.SearchState
@@ -80,8 +81,10 @@ fun SearchScreen(
                     val ownerId = when (result) {
                         is AppResult -> result.app.id
                         is ShortcutResult -> result.shortcut.appId
+                        // No app owns an action, so no mark leads its row.
+                        is ActionResult -> null
                     }
-                    val icon = remember(ownerId, iconKey) { iconFor(ownerId) }
+                    val icon = remember(ownerId, iconKey) { ownerId?.let(iconFor) }
                     // No long-press yet: result actions are #184's slice. The
                     // reason line rides as the subtitle — plain text, no tab
                     // stop of its own (#182).

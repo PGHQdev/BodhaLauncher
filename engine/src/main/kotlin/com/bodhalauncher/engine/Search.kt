@@ -36,6 +36,26 @@ data class ShortcutResult(val shortcut: SearchShortcut) : SearchResult {
 }
 
 /**
+ * Something Search can do rather than something it found — an Android settings
+ * screen today (#188). The provider hands over only actions this device can
+ * honour; the engine matches labels and knows nothing of intents.
+ *
+ * [keywords] are the spellings people type that the label's own words cannot
+ * answer for — "wifi" against "Wi-Fi", whose words are "wi" and "fi". Matching
+ * stays the one word-boundary rule, run over each keyword as over the label.
+ */
+data class SearchAction(
+    val id: String,
+    val label: String,
+    val keywords: List<String> = emptyList(),
+)
+
+data class ActionResult(val action: SearchAction) : SearchResult {
+    override val key get() = "action:${action.id}"
+    override val label get() = action.label
+}
+
+/**
  * A ranked result: what matched, and the one-line reason it sits where it does.
  * [reason] cites only a tier that actually lifted the row — an exact match or the
  * user's own pin. Match quality is every row's baseline, so it explains nothing
@@ -65,6 +85,8 @@ data class SearchInputs(
      * not in [apps], so a stale provider read cannot draw a dead row.
      */
     val shortcuts: List<SearchShortcut> = emptyList(),
+    /** Actions this device can honour; the actions section draws exactly these, matched. */
+    val actions: List<SearchAction> = emptyList(),
     /** What has been typed; [isBlankQuery] text lists nothing at all. */
     val query: String = "",
     /** App ids the user has hidden in the App Library (#62). */
@@ -124,9 +146,17 @@ fun resolveSearch(inputs: SearchInputs): SearchState {
         }
         .map(::ShortcutResult)
 
+    val actions = inputs.actions
+        .filter { action ->
+            matchesQuery(action.label, inputs.query) ||
+                action.keywords.any { matchesQuery(it, inputs.query) }
+        }
+        .map(::ActionResult)
+
     val sections = listOf(
         SearchSectionState(SearchSection.Apps, rank(apps, inputs)),
         SearchSectionState(SearchSection.Shortcuts, rank(shortcuts, inputs)),
+        SearchSectionState(SearchSection.Actions, rank(actions, inputs)),
     ).filter { it.rows.isNotEmpty() }
     return SearchState(sections = sections, nothingFound = sections.isEmpty())
 }

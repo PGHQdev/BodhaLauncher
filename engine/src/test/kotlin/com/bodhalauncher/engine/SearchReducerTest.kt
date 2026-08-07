@@ -217,6 +217,39 @@ class SearchReducerTest {
     }
 
     @Test
+    fun `actions match in their own section, last in the fixed order`() {
+        val search = resolveSearch(
+            SearchInputs(
+                apps = listOf(app("Wickr")),
+                actions = listOf(
+                    SearchAction(id = "settings:wifi", label = "Wi-Fi"),
+                    SearchAction(id = "settings:bluetooth", label = "Bluetooth"),
+                ),
+                query = "wi",
+            )
+        )
+
+        assertEquals(
+            listOf(SearchSection.Apps, SearchSection.Actions),
+            search.sections.map { it.section },
+        )
+        assertEquals(listOf("Wi-Fi"), labels(search, SearchSection.Actions))
+    }
+
+    @Test
+    fun `an action absent from the inputs never appears`() {
+        val search = resolveSearch(
+            SearchInputs(
+                actions = listOf(SearchAction(id = "settings:wifi", label = "Wi-Fi")),
+                query = "blue",
+            )
+        )
+
+        assertTrue(search.sections.isEmpty())
+        assertTrue(search.nothingFound)
+    }
+
+    @Test
     fun `shortcuts sort alphabetically within their section`() {
         val search = resolveSearch(
             SearchInputs(

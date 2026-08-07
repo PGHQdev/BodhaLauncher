@@ -5,10 +5,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import com.bodhalauncher.app.home.AppCatalog
 import com.bodhalauncher.app.home.LibraryStore
 import com.bodhalauncher.app.home.PinStore
 import com.bodhalauncher.app.ui.SearchScreen
+import com.bodhalauncher.engine.ActionResult
 import com.bodhalauncher.engine.AppResult
 import com.bodhalauncher.engine.HomeAction
 import com.bodhalauncher.engine.SearchInputs
@@ -43,6 +45,10 @@ fun SearchSurface(
     val hiddenSearchable by libraryStore.hiddenSearchable
     // Re-read when any package changes: a shortcut's lifetime is its app's.
     val shortcuts = remember(catalog.version.intValue) { catalog.allShortcuts() }
+    val context = LocalContext.current
+    // Resolved once per composition of the surface: which screens a device
+    // honours changes with system updates, not keystrokes.
+    val settingsScreens = remember { resolvedSettingsScreens(context) }
     // Search opens empty (ADR 0014), and a session is what "opens" is measured
     // against: leaving the surface drops this composition, and a screen-off that
     // outlasts the merge window changes the key, so an unlock never lands on the
@@ -56,6 +62,7 @@ fun SearchSurface(
                 apps = allApps,
                 shortcuts = shortcuts.map { SearchShortcut(id = it.shortcutId, appId = it.appId, label = it.label) },
                 query = query,
+                actions = settingsScreens.map { it.searchAction() },
                 hidden = hidden,
                 pinned = pinned.toSet(),
                 hiddenSearchable = hiddenSearchable,
@@ -75,6 +82,10 @@ fun SearchSurface(
                         it.appId == result.shortcut.appId && it.shortcutId == result.shortcut.id
                     }
                     if (match != null) catalog.launchShortcut(match)
+                }
+                is ActionResult -> {
+                    val screen = settingsScreens.firstOrNull { it.searchAction().id == result.action.id }
+                    if (screen != null) openSettingsScreen(context, screen)
                 }
             }
         },
