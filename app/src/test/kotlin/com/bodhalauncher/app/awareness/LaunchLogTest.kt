@@ -6,10 +6,15 @@ import com.bodhalauncher.app.data.BodhaDatabase
 import com.bodhalauncher.engine.DashboardInputs
 import com.bodhalauncher.engine.DashboardRow
 import com.bodhalauncher.engine.EntitlementSnapshot
+import com.bodhalauncher.engine.HomeAction
+import com.bodhalauncher.engine.LaunchTally
 import com.bodhalauncher.engine.RetentionCategory
+import com.bodhalauncher.engine.SearchInputs
 import com.bodhalauncher.engine.SessionId
 import com.bodhalauncher.engine.resolveAwarenessWindow
+import com.bodhalauncher.engine.resolveLaunchTallies
 import com.bodhalauncher.engine.resolvePrivacyDashboard
+import com.bodhalauncher.engine.resolveSearch
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
@@ -209,6 +214,74 @@ class LaunchLogTest {
         assertEquals(
             listOf(DashboardRow.Data(RetentionCategory.RawUsageEvents, count = 2, retentionDays = 30)),
             dashboard.localData,
+        )
+    }
+
+    /**
+     * Search's last ranking tier (#183) reads the whole table and folds it: one
+     * entry per app, the count of its records and the last of them. The read takes
+     * no bound because retention is the bound (ADR 0028), which is what makes a
+     * bare count mean "how often lately".
+     */
+    @Test
+    fun `every retained launch reaches the tally, folded one entry per app`() = runBlocking {
+        log.write("atlas", at("2026-07-20T09:00:00"), SessionId(1))
+        log.write("atlas", at("2026-08-07T09:42:00"), SessionId(1))
+        log.write("atlas", at("2026-08-07T21:30:00"), SessionId(2))
+        log.write("ledger", at("2026-08-06T11:00:00"), SessionId(1))
+
+        val tallies = resolveLaunchTallies(db.launchRecords().all().map { it.toRecord() })
+
+        assertEquals(setOf("atlas", "ledger"), tallies.keys)
+        assertEquals(LaunchTally(3, LocalDateTime.parse("2026-08-07T21:30:00")), tallies["atlas"])
+        assertEquals(LaunchTally(1, LocalDateTime.parse("2026-08-06T11:00:00")), tallies["ledger"])
+    }
+
+    /**
+     * A launch made with no session open is still a launch of that app. The
+     * Session view has nothing to do with it and never sees it; the tally counts
+     * it, because "how often you open this" is not a question about sessions.
+     */
+    @Test
+    fun `the tier's read sees launches no session claims`() = runBlocking {
+        log.write("atlas", at("2026-08-07T09:42:00"), session = null)
+        log.write("atlas", at("2026-08-07T10:00:00"), SessionId(1))
+
+        assertEquals(
+            LaunchTally(2, LocalDateTime.parse("2026-08-07T10:00:00")),
+            resolveLaunchTallies(db.launchRecords().all().map { it.toRecord() })["atlas"],
+        )
+    }
+
+    /**
+     * Excluding an app from Awareness must not quietly make it harder to find
+     * (#178, CONTEXT.md **Excluded**) — the control for keeping an app out of
+     * Search is the App Library's hide, and it is a different control on purpose.
+     * The two stores never meet: the tier reads `all()` and the fold consults
+     * nothing, so the exclusion moves no row and changes no order.
+     */
+    @Test
+    fun `an app excluded from Awareness ranks exactly as before`() = runBlocking {
+        log.write("instagram", at("2026-08-07T09:42:00"), SessionId(1))
+        val apps = listOf(
+            HomeAction(id = "instagram", label = "Instagram"),
+            HomeAction(id = "inaturalist", label = "iNaturalist"),
+        )
+        fun ranked(records: List<LaunchRecordEntity>) = resolveSearch(
+            SearchInputs(
+                apps = apps,
+                query = "in",
+                launches = resolveLaunchTallies(records.map { it.toRecord() }),
+            )
+        )
+
+        val before = ranked(db.launchRecords().all())
+        ExclusionStore(RuntimeEnvironment.getApplication()).excludeApp("instagram")
+
+        assertEquals(before, ranked(db.launchRecords().all()))
+        assertEquals(
+            listOf("Instagram", "iNaturalist"),
+            before.sections.single().rows.map { it.result.label },
         )
     }
 }

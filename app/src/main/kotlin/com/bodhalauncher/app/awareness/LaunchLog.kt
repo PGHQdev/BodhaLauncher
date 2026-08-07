@@ -66,6 +66,28 @@ interface LaunchRecordDao {
     suspend fun forApp(appId: String): List<LaunchRecordEntity>
 
     /**
+     * Every launch still held, for Search's last ranking tier (#183): among
+     * results that tie on the earlier three, the ones actually opened lately come
+     * first, and this is the whole of what that reads.
+     *
+     * Three absences are deliberate. **No time predicate**, for [forApp]'s reason
+     * — retention already says how far back this table reaches (ADR 0028), and a
+     * `WHERE` here would be a second, quieter window that nothing tests and that
+     * would silently double-count the decay the tier is built on. **No `GROUP
+     * BY`**: what "how often" and "how recently" mean is the product decision
+     * #183 is about, and it lives in `resolveLaunchTallies`, in the module a unit
+     * test can drive from a known log to an emitted order. **No `ORDER BY`**: a
+     * tally is a fold, and a fold does not care what order it reads.
+     *
+     * This is a whole-table scan — some thousands of rows against a 30-day cut,
+     * run once per surface composition rather than per keystroke. No index, for
+     * [forApp]'s reason: an index is a schema change, and a schema change is a
+     * version bump, a hand-written migration and a committed schema JSON.
+     */
+    @Query("SELECT * FROM launch_record")
+    suspend fun all(): List<LaunchRecordEntity>
+
+    /**
      * The retention worker's cut, under raw usage (#19, ADR 0013). The same
      * window the session records take, because a view reading both against each
      * other would otherwise lie about one of them (ADR 0028).

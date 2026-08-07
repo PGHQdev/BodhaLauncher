@@ -389,8 +389,11 @@ private fun BodhaHost(
             .also { it.resolveEnd(Instant.now()) }
     }
     // Bodha's launch log (#173), written from the single opening path below and
-    // read by Awareness's Session view.
-    val launchLog = remember { LaunchLog(BodhaDatabase.get(context).launchRecords()) }
+    // read by Awareness's Session view — and, since #183, by Search's last
+    // ranking tier. One handle, hoisted, so the writer and the reader cannot
+    // drift onto two.
+    val launchRecords = remember { BodhaDatabase.get(context).launchRecords() }
+    val launchLog = remember { LaunchLog(launchRecords) }
     val focusRunning = focusStore.active.value != null
     // The one sheet in the app (ADR 0011, #133). Every surface that opens one
     // reaches this, so the rule holds across surfaces rather than within each.
@@ -697,12 +700,14 @@ private fun BodhaHost(
                 pinStore = pinStore,
                 libraryStore = libraryStore,
                 defaultStore = defaultStore,
+                launchRecords = launchRecords,
                 catalog = catalog,
                 education = education,
                 calendar = remember { CalendarReader(context) },
                 contacts = remember { ContactsReader(context) },
                 focusStore = focusStore,
                 session = sessions.currentSession,
+                launcherVisible = launcherVisible,
                 surfaces = BUILT_SURFACES,
                 sheets = sheets,
                 openApp = openApp,

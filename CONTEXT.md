@@ -64,6 +64,10 @@ _Avoid_: preferred app, favourite, shortcut
 Bodha's own record of launches it mediates — app identity and timestamp, nothing else. The spine of Awareness's per-app views; needs no permission and keeps full history, unlike the system's few-day usage events.
 _Avoid_: usage stats (that's the system's), history, analytics (nothing is transmitted)
 
+**Opens tally**:
+How often Bodha opened an app and when it last did, folded from the launch log. Search's fourth and last ranking tier, which only ever breaks a tie the earlier three left.
+_Avoid_: score, popularity, affinity, prediction, usage stats (that's the system's)
+
 **Unmediated launch**:
 An opening Android saw and Bodha did not — from a notification, from recents, from another app. Filled in from the system's usage events where usage access is granted, and carrying no session, because no session id was read at the moment it happened.
 _Avoid_: external launch, background launch, missed launch (nothing was missed; Bodha was not in the path)

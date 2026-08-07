@@ -62,6 +62,7 @@ class SearchSurfaceTest {
                     pinStore = pinStore,
                     libraryStore = libraryStore,
                     defaultStore = SearchDefaultStore(context),
+                    launchRecords = BodhaDatabase.get(context).launchRecords(),
                     catalog = catalog,
                     education = CapabilityEducation(
                         CapabilityEdge(context), EducationStateStore(context), events, sheets,
@@ -70,6 +71,7 @@ class SearchSurfaceTest {
                     contacts = ContactsReader(context),
                     focusStore = FocusStore(context, BodhaDatabase.get(context).focusRecords(), events),
                     session = session,
+                    launcherVisible = true,
                     surfaces = emptyList(),
                     sheets = sheets,
                     openApp = {},
@@ -103,6 +105,7 @@ class SearchSurfaceTest {
                     pinStore = PinStore(context),
                     libraryStore = LibraryStore(context),
                     defaultStore = SearchDefaultStore(context),
+                    launchRecords = BodhaDatabase.get(context).launchRecords(),
                     catalog = AppCatalog(context),
                     education = CapabilityEducation(
                         CapabilityEdge(context), EducationStateStore(context), events, sheets,
@@ -111,6 +114,7 @@ class SearchSurfaceTest {
                     contacts = ContactsReader(context),
                     focusStore = FocusStore(context, BodhaDatabase.get(context).focusRecords(), events),
                     session = SessionId(1),
+                    launcherVisible = true,
                     surfaces = emptyList(),
                     sheets = sheets,
                     openApp = {},
