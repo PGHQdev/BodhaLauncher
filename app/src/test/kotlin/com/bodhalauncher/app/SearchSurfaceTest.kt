@@ -14,6 +14,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.bodhalauncher.app.home.AppCatalog
 import com.bodhalauncher.app.home.LibraryStore
 import com.bodhalauncher.app.home.PinStore
+import com.bodhalauncher.app.home.SearchDefaultStore
 import com.bodhalauncher.app.ui.BodhaTheme
 import com.bodhalauncher.app.ui.SEARCH_FIELD_LABEL
 import com.bodhalauncher.app.ui.SheetSlot
@@ -48,6 +49,7 @@ class SearchSurfaceTest {
                 SearchSurface(
                     pinStore = pinStore,
                     libraryStore = libraryStore,
+                    defaultStore = SearchDefaultStore(context),
                     catalog = catalog,
                     session = session,
                     surfaces = emptyList(),

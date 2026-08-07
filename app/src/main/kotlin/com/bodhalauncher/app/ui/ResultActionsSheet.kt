@@ -26,11 +26,16 @@ fun ResultActionsSheet(
     app: HomeAction,
     isPinned: Boolean,
     isHidden: Boolean,
+    /** The query as typed, for the default rows' own wording (#185). */
+    query: String,
+    isDefault: Boolean,
     onOpen: () -> Unit,
     onPin: () -> Unit,
     onUnpin: () -> Unit,
     onHide: () -> Unit,
     onUnhide: () -> Unit,
+    onSetDefault: () -> Unit,
+    onClearDefault: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     val colors = LocalBodhaColors.current
@@ -52,6 +57,12 @@ fun ResultActionsSheet(
             SheetRow("Open", onOpen)
             if (isPinned) SheetRow("Unpin", onUnpin) else SheetRow("Pin", onPin)
             if (isHidden) SheetRow("Unhide", onUnhide) else SheetRow("Hide", onHide)
+            // "When I type this, this one first" — and its taking back (#185).
+            if (isDefault) {
+                SheetRow("Clear default for “$query”", onClearDefault)
+            } else {
+                SheetRow("Put first for “$query”", onSetDefault)
+            }
             Box(Modifier.fillMaxWidth().height(1.dp).background(colors.hairline))
             Spacer(Modifier.height(24.dp))
         }

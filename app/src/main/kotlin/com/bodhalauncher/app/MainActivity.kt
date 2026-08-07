@@ -29,6 +29,7 @@ import com.bodhalauncher.app.home.IntentionStore
 import com.bodhalauncher.app.home.LibraryStore
 import com.bodhalauncher.app.home.ModeStore
 import com.bodhalauncher.app.home.PinStore
+import com.bodhalauncher.app.home.SearchDefaultStore
 import com.bodhalauncher.app.home.UsageReader
 import com.bodhalauncher.app.capability.CapabilityEducationHost
 import com.bodhalauncher.app.capability.rememberCapabilityEducation
@@ -194,6 +195,7 @@ class MainActivity : ComponentActivity() {
         )
         val intentionStore = IntentionStore(this)
         val libraryStore = LibraryStore(this)
+        val defaultStore = SearchDefaultStore(this)
         val groupStore = GroupStore(this)
         val openCheckStore = OpenCheckRuleStore(this)
         val entitlementStore = EntitlementStore(this)
@@ -260,7 +262,7 @@ class MainActivity : ComponentActivity() {
                     )
                 ) {
                     Box(modifier = Modifier.fillMaxSize().escapeIsBack()) {
-                        BodhaHost(pinStore, modeStore, intentionStore, libraryStore, groupStore, openCheckStore, entitlementStore, catalog, app.sessions, app.intentPrompt, app.events, homeIntents.intValue, visible.value, homeRoleHeld.value)
+                        BodhaHost(pinStore, modeStore, intentionStore, libraryStore, defaultStore, groupStore, openCheckStore, entitlementStore, catalog, app.sessions, app.intentPrompt, app.events, homeIntents.intValue, visible.value, homeRoleHeld.value)
                     }
                 }
             }
@@ -298,6 +300,7 @@ private fun BodhaHost(
     modeStore: ModeStore,
     intentionStore: IntentionStore,
     libraryStore: LibraryStore,
+    defaultStore: SearchDefaultStore,
     groupStore: GroupStore,
     openCheckStore: OpenCheckRuleStore,
     entitlementStore: EntitlementStore,
@@ -516,6 +519,7 @@ private fun BodhaHost(
             SearchSurface(
                 pinStore = pinStore,
                 libraryStore = libraryStore,
+                defaultStore = defaultStore,
                 catalog = catalog,
                 session = sessions.currentSession,
                 surfaces = BUILT_SURFACES,

@@ -52,6 +52,14 @@ fun matchDepth(label: String, query: String): Int {
 }
 
 /**
+ * The form a query is remembered by (#185): its words, folded as matching folds
+ * them, joined by single spaces. "Mail ", "mail" and "MAIL" are one query, so a
+ * default set against one answers to them all — anything looser and "the next
+ * time that exact query is typed" would hang on invisible whitespace.
+ */
+fun canonicalQuery(query: String): String = foldedWords(query).joinToString(" ")
+
+/**
  * Whether [query] holds no words at all — empty, whitespace, punctuation — and so narrows
  * nothing. Callers that suppress or reshape content while a search is running ask this
  * rather than testing the raw text, so their idea of blank is [matchesQuery]'s idea of it.

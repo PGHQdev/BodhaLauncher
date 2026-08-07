@@ -287,6 +287,85 @@ class SearchReducerTest {
     }
 
     @Test
+    fun `a default for the query puts its result first, and names the choice`() {
+        val search = resolveSearch(
+            SearchInputs(
+                apps = listOf(app("Instagram"), app("iNaturalist")),
+                query = "in",
+                defaults = mapOf("in" to "instagram"),
+            )
+        )
+
+        assertEquals(listOf("Instagram", "iNaturalist"), labels(search, SearchSection.Apps))
+        assertEquals(listOf(REASON_DEFAULT, null), reasons(search, SearchSection.Apps))
+    }
+
+    @Test
+    fun `a default answers to the query however it is typed, but only to that query`() {
+        val inputs = SearchInputs(
+            apps = listOf(app("Instagram"), app("iNaturalist")),
+            defaults = mapOf("in" to "instagram"),
+        )
+
+        val retyped = resolveSearch(inputs.copy(query = "  IN "))
+        assertEquals(listOf(REASON_DEFAULT, null), reasons(retyped, SearchSection.Apps))
+
+        val other = resolveSearch(inputs.copy(query = "i"))
+        assertEquals(listOf(null, null), reasons(other, SearchSection.Apps))
+        assertEquals(listOf("iNaturalist", "Instagram"), labels(other, SearchSection.Apps))
+    }
+
+    @Test
+    fun `a default outranks a pin and loses to an exact match`() {
+        val search = resolveSearch(
+            SearchInputs(
+                apps = listOf(app("Inbox"), app("Instagram"), app("iNaturalist")),
+                query = "in",
+                pinned = setOf("inaturalist"),
+                defaults = mapOf("in" to "instagram"),
+            )
+        )
+
+        // "Inbox" only prefix-matches; nothing is exact here, so the default leads.
+        assertEquals(listOf("Instagram", "iNaturalist", "Inbox"), labels(search, SearchSection.Apps))
+
+        val exact = resolveSearch(
+            SearchInputs(
+                apps = listOf(app("In"), app("Instagram")),
+                query = "in",
+                defaults = mapOf("in" to "instagram"),
+            )
+        )
+        assertEquals(listOf("In", "Instagram"), labels(exact, SearchSection.Apps))
+    }
+
+    @Test
+    fun `a default whose app is gone is dropped silently`() {
+        val search = resolveSearch(
+            SearchInputs(
+                apps = listOf(app("iNaturalist"), app("Instagram")),
+                query = "in",
+                defaults = mapOf("in" to "uninstalled.app"),
+            )
+        )
+
+        assertEquals(listOf("iNaturalist", "Instagram"), labels(search, SearchSection.Apps))
+        assertEquals(listOf(null, null), reasons(search, SearchSection.Apps))
+    }
+
+    @Test
+    fun `clearing the default restores the ranking the query had before`() {
+        val base = SearchInputs(
+            apps = listOf(app("Instagram"), app("iNaturalist")),
+            query = "in",
+        )
+
+        val before = resolveSearch(base)
+        val cleared = resolveSearch(base.copy(defaults = emptyMap()))
+        assertEquals(before, cleared)
+    }
+
+    @Test
     fun `shortcuts sort alphabetically within their section`() {
         val search = resolveSearch(
             SearchInputs(

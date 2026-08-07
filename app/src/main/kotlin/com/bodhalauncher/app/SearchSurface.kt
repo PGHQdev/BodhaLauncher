@@ -9,6 +9,8 @@ import androidx.compose.ui.platform.LocalContext
 import com.bodhalauncher.app.home.AppCatalog
 import com.bodhalauncher.app.home.LibraryStore
 import com.bodhalauncher.app.home.PinStore
+import com.bodhalauncher.app.home.SearchDefaultStore
+import com.bodhalauncher.engine.canonicalQuery
 import androidx.compose.runtime.DisposableEffect
 import com.bodhalauncher.app.ui.ResultActionsSheet
 import com.bodhalauncher.app.ui.SearchScreen
@@ -40,6 +42,7 @@ import com.bodhalauncher.engine.resolveSearch
 fun SearchSurface(
     pinStore: PinStore,
     libraryStore: LibraryStore,
+    defaultStore: SearchDefaultStore,
     catalog: AppCatalog,
     /** The running session, or null once none is; see [query]'s scope below. */
     session: SessionId?,
@@ -82,6 +85,7 @@ fun SearchSurface(
                 surfaces = surfaces,
                 hidden = hidden,
                 pinned = pinned.toSet(),
+                defaults = defaultStore.defaults.value,
                 hiddenSearchable = hiddenSearchable,
             )
         ),
@@ -116,15 +120,22 @@ fun SearchSurface(
         // Told to the slot as well as used here, so a session ending over this
         // sheet dismisses it the way its own footer does (ADR 0011, #134).
         val dismiss = sheets.dismissedBy(sheet) { sheets.close(sheet) }
+        // The default is recorded against the canonical query, so retyping it
+        // in any case or spacing finds it (#185).
+        val canonical = canonicalQuery(query)
         ResultActionsSheet(
             app = app,
             isPinned = app.id in pinned,
             isHidden = app.id in hidden,
+            query = query.trim(),
+            isDefault = defaultStore.defaults.value[canonical] == app.id,
             onOpen = { dismiss(); openApp(app) },
             onPin = { dismiss(); pinStore.pin(app.id) },
             onUnpin = { dismiss(); pinStore.unpin(app.id) },
             onHide = { dismiss(); pinStore.hide(app.id) },
             onUnhide = { dismiss(); pinStore.unhide(app.id) },
+            onSetDefault = { dismiss(); defaultStore.set(canonical, app.id) },
+            onClearDefault = { dismiss(); defaultStore.clear(canonical) },
             onDismiss = dismiss,
         )
     }

@@ -83,6 +83,9 @@ const val REASON_EXACT_MATCH = "Exact match"
 /** The reason line under a result the user pinned to Home. */
 const val REASON_PINNED = "Pinned to Home"
 
+/** The reason line under the result the user chose for this query (#185). */
+const val REASON_DEFAULT = "Your choice for this search"
+
 /**
  * What Search may draw from. Apps and launcher shortcuts are the two live domains
  * (#180, #181); the rest of ADR 0014's seven arrive as their providers do, as
@@ -109,6 +112,12 @@ data class SearchInputs(
     val hidden: Set<String> = emptySet(),
     /** App ids pinned to Home — the explicit user choice ADR 0014 ranks second. */
     val pinned: Set<String> = emptySet(),
+    /**
+     * "When I type this, this one first" (#185): [canonicalQuery] to the chosen
+     * app id. An id no longer in [apps] is ignored — the default disappears
+     * silently and the query ranks as it otherwise would.
+     */
+    val defaults: Map<String, String> = emptyMap(),
     /** Whether hidden apps may match; off, a query never surfaces them. */
     val hiddenSearchable: Boolean = false,
 )
@@ -184,8 +193,14 @@ fun resolveSearch(inputs: SearchInputs): SearchState {
 
 private fun rank(results: List<SearchResult>, inputs: SearchInputs): List<SearchRow> {
     fun pinned(result: SearchResult) = result is AppResult && result.app.id in inputs.pinned
+    val defaultId = inputs.defaults[canonicalQuery(inputs.query)]
+        ?.takeIf { id -> inputs.apps.any { it.id == id } }
+    fun chosen(result: SearchResult) = result is AppResult && result.app.id == defaultId
     val ordered = results.sortedWith(
         compareByDescending<SearchResult> { matchesExactly(it.label, inputs.query) }
+            // The per-query default sits above the pin: both are tier two's
+            // explicit choice, but one was made about this very query (#185).
+            .thenByDescending(::chosen)
             .thenByDescending(::pinned)
             .thenBy { matchDepth(it.label, inputs.query) }
             // Locale-independent, for the reason the library's ordering is; the
@@ -199,6 +214,7 @@ private fun rank(results: List<SearchResult>, inputs: SearchInputs): List<Search
             result = result,
             reason = when {
                 matchesExactly(result.label, inputs.query) -> REASON_EXACT_MATCH
+                chosen(result) -> REASON_DEFAULT
                 pinned(result) -> REASON_PINNED
                 else -> null
             },
