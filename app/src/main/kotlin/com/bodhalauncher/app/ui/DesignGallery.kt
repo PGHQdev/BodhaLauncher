@@ -130,6 +130,10 @@ fun DesignGallery() {
         )
         Spacer(Modifier.height(BodhaSpacing.s))
         SlotNote("Nothing left on the calendar today.")
+        // The Tomorrow peek (#160): one row under its label, only when the day is spent.
+        Spacer(Modifier.height(BodhaSpacing.l))
+        SectionOverline("Tomorrow")
+        DayEventRow(event = GALLERY_TIMED_EVENT, onClick = {})
         Spacer(Modifier.height(BodhaSpacing.xl))
 
         // Focus (ADR 0026), forced rather than requested: only one node can hold

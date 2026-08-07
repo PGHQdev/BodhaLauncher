@@ -41,8 +41,12 @@ sealed interface DaySlot {
     /** The provider reports no calendar rows at all — Bodha has nothing to read. */
     data object NoCalendars : DaySlot
 
-    /** Granted, calendars exist, and nothing of the day is left. */
-    data object Empty : DaySlot
+    /**
+     * Granted, calendars exist, and nothing of the day is left. When tomorrow
+     * holds anything, its first event peeks here (#160) — one bounded row, not
+     * a horizon — so Today still says something useful at 9pm.
+     */
+    data class Empty(val tomorrowFirst: DayEvent? = null) : DaySlot
 
     /** What is left of the day, earliest first, all-day rows above timed ones. */
     data class Events(val events: List<DayEvent>) : DaySlot
@@ -66,6 +70,7 @@ fun resolveDaySlot(
     hasCalendars: Boolean,
     instances: List<ProviderInstance>,
     now: LocalDateTime,
+    tomorrowInstances: List<ProviderInstance> = emptyList(),
 ): DaySlot {
     if (!granted) return DaySlot.Ungranted(offersTurnOn = !educationShown)
     if (!hasCalendars) return DaySlot.NoCalendars
@@ -80,5 +85,16 @@ fun resolveDaySlot(
         .sortedWith(dayOrder)
         .toList()
 
-    return if (remaining.isEmpty()) DaySlot.Empty else DaySlot.Events(remaining)
+    if (remaining.isNotEmpty()) return DaySlot.Events(remaining)
+
+    // The peek only exists in the granted-and-empty state (#160): with the day
+    // spent, tomorrow's first event under the day slot's own ordering — so an
+    // all-day event tomorrow wins over a 9am meeting.
+    val tomorrowFirst = tomorrowInstances.asSequence()
+        .filter { it.calendarVisible && !it.selfDeclined }
+        .map { DayEvent(it.eventId, it.title, it.allDay, it.begin, it.end) }
+        .sortedWith(dayOrder)
+        .firstOrNull()
+
+    return DaySlot.Empty(tomorrowFirst)
 }

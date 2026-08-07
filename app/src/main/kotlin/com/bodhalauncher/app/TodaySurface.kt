@@ -58,6 +58,7 @@ fun TodaySurface(
             hasCalendars = !calendarGranted || calendar.hasCalendars(),
             instances = if (calendarGranted) calendar.todayWindow(now) else emptyList(),
             now = now,
+            tomorrowInstances = if (calendarGranted) calendar.tomorrowWindow(now) else emptyList(),
         )
     }
     TodayScreen(

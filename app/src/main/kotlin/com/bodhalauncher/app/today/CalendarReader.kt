@@ -77,6 +77,10 @@ class CalendarReader(private val context: Context) {
     fun todayWindow(now: LocalDateTime): List<ProviderInstance> =
         instances(dayStart(now), dayStart(now).plusDays(1))
 
+    /** The next day key's window, for the Tomorrow peek (#160). */
+    fun tomorrowWindow(now: LocalDateTime): List<ProviderInstance> =
+        instances(dayStart(now).plusDays(1), dayStart(now).plusDays(2))
+
     /** Tapping a row opens the event in the calendar app; Bodha ships no event view. */
     fun open(event: DayEvent) {
         val zone = if (event.allDay) ZoneOffset.UTC else ZoneId.systemDefault()

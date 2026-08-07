@@ -92,7 +92,16 @@ private fun DaySlotContent(
                 SlotNote("Calendar access is off.")
             }
         DaySlot.NoCalendars -> SlotNote("No calendars are set up on this phone.")
-        DaySlot.Empty -> SlotNote("Nothing left on the calendar today.")
+        is DaySlot.Empty -> {
+            SlotNote("Nothing left on the calendar today.")
+            // The bounded peek (#160): with the day spent, tomorrow's first
+            // event under its own label; with tomorrow empty too, nothing.
+            slot.tomorrowFirst?.let { peek ->
+                Spacer(Modifier.height(BodhaSpacing.l))
+                SectionOverline("Tomorrow")
+                DayEventRow(event = peek, onClick = { onEventTap(peek) })
+            }
+        }
         is DaySlot.Events -> Column(Modifier.fillMaxWidth()) {
             for (event in slot.events) {
                 DayEventRow(event = event, onClick = { onEventTap(event) })
