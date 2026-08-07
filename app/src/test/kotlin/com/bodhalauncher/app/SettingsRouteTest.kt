@@ -162,6 +162,7 @@ class SettingsRouteTest {
                         pinStore = PinStore(context),
                         libraryStore = LibraryStore(context),
                         defaultStore = SearchDefaultStore(context),
+                        launchRecords = BodhaDatabase.get(context).launchRecords(),
                         catalog = AppCatalog(context),
                         education = CapabilityEducation(
                             CapabilityEdge(context), EducationStateStore(context), events, sheets,
@@ -170,6 +171,7 @@ class SettingsRouteTest {
                         contacts = ContactsReader(context),
                         focusStore = FocusStore(context, BodhaDatabase.get(context).focusRecords(), events),
                         session = SessionId(1),
+                        launcherVisible = true,
                         surfaces = emptyList(),
                         sheets = sheets,
                         openApp = {},

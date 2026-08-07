@@ -3,16 +3,19 @@ package com.bodhalauncher.app.session
 import androidx.room.Room
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.bodhalauncher.app.data.BodhaDatabase
+import com.bodhalauncher.engine.EntitlementSnapshot
 import com.bodhalauncher.engine.RetentionCategory
 import com.bodhalauncher.engine.SessionId
 import com.bodhalauncher.engine.Transition
 import com.bodhalauncher.engine.dayKey
+import com.bodhalauncher.engine.resolveAwarenessWindow
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
@@ -28,6 +31,10 @@ import org.robolectric.annotation.Config
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [35], application = android.app.Application::class)
 class SessionRecordLogTest {
+
+    private companion object {
+        val NOW: LocalDateTime = LocalDateTime.parse("2026-08-07T14:00:00")
+    }
 
     private lateinit var db: BodhaDatabase
     private lateinit var log: SessionRecordLog
@@ -115,6 +122,84 @@ class SessionRecordLogTest {
         val records = db.sessionRecords().forDay(seventh)
         assertEquals(1, records.size)
         assertNull(records[0].endMillis)
+    }
+
+    /** The Week's read (#176): the seven days it names, plus anything still open. */
+    @Test
+    fun `a range read returns the days in it, plus any session still open`() = runBlocking {
+        log.write(Transition.SessionStarted(SessionId(10), at("2026-08-01T10:00:00")))
+        log.write(Transition.SessionEnded(SessionId(10), at("2026-08-01T10:10:00")))
+        log.write(Transition.SessionStarted(SessionId(11), at("2026-08-07T10:00:00")))
+        log.write(Transition.SessionEnded(SessionId(11), at("2026-08-07T10:10:00")))
+        // Started before the range and never closed: the resolvers place it on
+        // its own day, and this query is only what makes it reachable at all.
+        log.write(Transition.SessionStarted(SessionId(12), at("2026-07-20T10:00:00")))
+
+        val from = dayKey(LocalDateTime.parse("2026-08-01T10:00:00")).toEpochDay()
+        val to = dayKey(LocalDateTime.parse("2026-08-07T10:00:00")).toEpochDay()
+        assertEquals(
+            listOf(12L, 10L, 11L),
+            db.sessionRecords().forDays(from, to).map { it.sessionId },
+        )
+    }
+
+    @Test
+    fun `a day outside the range is not returned`() = runBlocking {
+        log.write(Transition.SessionStarted(SessionId(13), at("2026-07-31T10:00:00")))
+        log.write(Transition.SessionEnded(SessionId(13), at("2026-07-31T10:10:00")))
+
+        val from = dayKey(LocalDateTime.parse("2026-08-01T10:00:00")).toEpochDay()
+        val to = dayKey(LocalDateTime.parse("2026-08-07T10:00:00")).toEpochDay()
+        assertEquals(emptyList<Long>(), db.sessionRecords().forDays(from, to).map { it.sessionId })
+    }
+
+    /**
+     * Retention governs what exists and entitlement only what renders (#177,
+     * ADR 0013). A free user's records accumulate normally, so upgrading reveals
+     * history already on the phone rather than starting an empty clock — pruning
+     * to the free window would have made Pro's first week empty at exactly the
+     * wrong moment.
+     */
+    @Test
+    fun `a record older than the free window survives the read and the dashboard count`() = runBlocking {
+        log.write(Transition.SessionStarted(SessionId(20), at("2026-07-08T10:00:00")))
+        log.write(Transition.SessionEnded(SessionId(20), at("2026-07-08T10:10:00")))
+
+        val day = dayKey(LocalDateTime.parse("2026-07-08T10:00:00")).toEpochDay()
+        assertEquals(1, db.sessionRecords().forDay(day).size)
+        assertEquals(1, db.sessionRecords().dashboardSummary().count)
+
+        // Present in the store, absent from a free render, and back the moment
+        // the snapshot flips — over the same rows, with no backfill step.
+        val rows = db.sessionRecords().forDay(day).map { it.toRecord() }
+        assertEquals(
+            emptyList<Long>(),
+            resolveAwarenessWindow(EntitlementSnapshot(proActive = false), NOW)
+                .sessions(rows).records.map { it.id },
+        )
+        assertEquals(
+            listOf(20L),
+            resolveAwarenessWindow(EntitlementSnapshot(proActive = true), NOW)
+                .sessions(rows).records.map { it.id },
+        )
+    }
+
+    /** The window's twin of the launch log's: no query here learns about a tier. */
+    @Test
+    fun `the session record query takes no entitlement bound, so both tiers read the same rows`() = runBlocking {
+        log.write(Transition.SessionStarted(SessionId(21), at("2026-07-08T10:00:00")))
+        log.write(Transition.SessionEnded(SessionId(21), at("2026-07-08T10:10:00")))
+        log.write(Transition.SessionStarted(SessionId(22), at("2026-08-07T10:00:00")))
+        log.write(Transition.SessionEnded(SessionId(22), at("2026-08-07T10:10:00")))
+
+        val from = dayKey(LocalDateTime.parse("2026-07-08T10:00:00")).toEpochDay()
+        val to = dayKey(LocalDateTime.parse("2026-08-07T10:00:00")).toEpochDay()
+        val rows = db.sessionRecords().forDays(from, to).map { it.toRecord() }
+
+        assertEquals(listOf(21L, 22L), rows.map { it.id })
+        val free = resolveAwarenessWindow(EntitlementSnapshot(proActive = false), NOW).sessions(rows)
+        assertEquals(listOf(22L), free.records.map { it.id })
+        assertNotNull(free.boundary)
     }
 
     @Test

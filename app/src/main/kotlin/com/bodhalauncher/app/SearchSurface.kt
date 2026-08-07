@@ -7,6 +7,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.platform.LocalContext
+import com.bodhalauncher.app.awareness.LaunchRecordDao
+import com.bodhalauncher.app.awareness.toRecord
 import com.bodhalauncher.app.capability.CapabilityEducation
 import com.bodhalauncher.app.contacts.ContactsReader
 import com.bodhalauncher.app.focus.FocusStore
@@ -30,6 +32,7 @@ import com.bodhalauncher.engine.EducationEntry
 import com.bodhalauncher.engine.EventResult
 import com.bodhalauncher.engine.FocusActionResult
 import com.bodhalauncher.engine.HomeAction
+import com.bodhalauncher.engine.LaunchTally
 import com.bodhalauncher.engine.ProviderInstance
 import com.bodhalauncher.engine.SETTINGS_ROWS
 import com.bodhalauncher.engine.SearchContact
@@ -43,6 +46,7 @@ import com.bodhalauncher.engine.Surface
 import com.bodhalauncher.engine.SurfaceResult
 import com.bodhalauncher.engine.UngrantedResult
 import com.bodhalauncher.engine.isBlankQuery
+import com.bodhalauncher.engine.resolveLaunchTallies
 import com.bodhalauncher.engine.resolveSearch
 import com.bodhalauncher.engine.searchCalendarWindow
 import java.time.Instant
@@ -69,6 +73,8 @@ fun SearchSurface(
     pinStore: PinStore,
     libraryStore: LibraryStore,
     defaultStore: SearchDefaultStore,
+    /** Bodha's own launch log (#173), read here as the last ranking tier's input (#183). */
+    launchRecords: LaunchRecordDao,
     catalog: AppCatalog,
     /** The single capability entry point (#157): grants are read and asked through it. */
     education: CapabilityEducation,
@@ -79,6 +85,8 @@ fun SearchSurface(
     focusStore: FocusStore,
     /** The running session, or null once none is; see [query]'s scope below. */
     session: SessionId?,
+    /** Whether Bodha is on screen; the launch tally is re-read on the way back (#183). */
+    launcherVisible: Boolean,
     /** The surfaces the host renders; an unbuilt one never appears as a result (#189). */
     surfaces: List<Surface>,
     sheets: SheetSlot,
@@ -127,6 +135,29 @@ fun SearchSurface(
             }
         }
     }
+    // The launch log folded per app, for the last ranking tier (#183). Read once
+    // per key rather than per keystroke: the whole table is scanned, and a tally
+    // does not change while you type. The key takes [launcherVisible] as well as
+    // the session because the launch that ought to move a row is precisely the one
+    // that happened while Bodha was off screen — coming back from an app is when
+    // this is stale, and a session outlives that round trip.
+    //
+    // A failed read retains the previous tally rather than resolving to empty, so
+    // a transient database error holds the last good ranking instead of dropping
+    // the tier out from under a query mid-typing.
+    val launches by produceState(emptyMap<String, LaunchTally>(), session, launcherVisible) {
+        value = withContext(Dispatchers.IO) {
+            runCatching { resolveLaunchTallies(launchRecords.all().map { it.toRecord() }) }.getOrNull()
+        } ?: value
+    }
+    // Observed at the query, exactly as the two grants above are, and for the
+    // reason ADR 0014 gives: nothing reorders under the finger. Backing out of an
+    // app launched from Search leaves this surface composed with the query still
+    // in the field, and the re-read keyed on [launcherVisible] lands a frame or
+    // two later carrying the launch just written — so without this snapshot the
+    // Apps section visibly re-sorts with no input from the reader. The freshly
+    // read tally takes effect on the next query instead.
+    val ranking = remember(query) { launches }
     // The sheet is about a result on this surface, so it leaves with the surface
     // — the reason the Library's does (#132).
     DisposableEffect(Unit) {
@@ -152,6 +183,7 @@ fun SearchSurface(
                 hidden = hidden,
                 pinned = pinned.toSet(),
                 defaults = defaultStore.defaults.value,
+                launches = ranking,
                 hiddenSearchable = hiddenSearchable,
                 contactsGranted = contactsGranted,
                 contacts = allContacts,

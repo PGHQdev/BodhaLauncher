@@ -612,4 +612,174 @@ class SearchReducerTest {
 
         assertEquals(listOf("Date and time", "Date format"), labels(search, SearchSection.Actions))
     }
+
+    // --- The launch log (#183) ---
+
+    /**
+     * A known log to an emitted order, which is what AC 5 asks for: one pair per
+     * launch — the app id, and the moment it was opened — folded exactly as the
+     * surface folds the table it read.
+     */
+    private fun opened(vararg launches: Pair<String, String>): Map<String, LaunchTally> =
+        resolveLaunchTallies(
+            launches.map { (appId, at) ->
+                LaunchRecord(appId = appId, at = java.time.LocalDateTime.parse(at))
+            }
+        )
+
+    @Test
+    fun `an app already opened outranks an equally-matching one never opened`() {
+        val base = SearchInputs(apps = listOf(app("Instagram"), app("iNaturalist")), query = "in")
+
+        // Untiered, "in" leaves these two to the alphabet.
+        assertEquals(listOf("iNaturalist", "Instagram"), labels(resolveSearch(base), SearchSection.Apps))
+
+        val opened = resolveSearch(base.copy(launches = opened("instagram" to "2026-08-07T09:42:00")))
+        assertEquals(listOf("Instagram", "iNaturalist"), labels(opened, SearchSection.Apps))
+    }
+
+    @Test
+    fun `more opens lead, and the last open breaks a tie on count`() {
+        val search = resolveSearch(
+            SearchInputs(
+                apps = listOf(app("Notes"), app("Notion"), app("Notebook")),
+                query = "no",
+                launches = opened(
+                    "notebook" to "2026-08-01T08:00:00",
+                    "notebook" to "2026-08-02T08:00:00",
+                    "notebook" to "2026-08-03T08:00:00",
+                    "notes" to "2026-08-05T09:00:00",
+                    "notes" to "2026-08-06T09:00:00",
+                    "notion" to "2026-08-04T09:00:00",
+                    "notion" to "2026-08-07T18:00:00",
+                ),
+            )
+        )
+
+        // Three opens lead two. Notes and Notion tie on count, and the later of
+        // their last opens takes it — which is also a flip of the alphabetical
+        // order these three sit in untallied.
+        assertEquals(listOf("Notebook", "Notion", "Notes"), labels(search, SearchSection.Apps))
+    }
+
+    @Test
+    fun `opens lose to an exact match, to the user's own choice and to a pin`() {
+        val base = SearchInputs(
+            apps = listOf(app("Instagram"), app("iNaturalist"), app("Inbox")),
+            query = "in",
+            launches = opened(
+                "inbox" to "2026-08-07T09:00:00",
+                "inbox" to "2026-08-07T10:00:00",
+                "inbox" to "2026-08-07T11:00:00",
+            ),
+        )
+
+        // Alone, the tally lifts Inbox over two rows the alphabet had above it.
+        assertEquals(listOf("Inbox", "iNaturalist", "Instagram"), labels(resolveSearch(base), SearchSection.Apps))
+
+        val exact = resolveSearch(base.copy(apps = base.apps + app("In")))
+        assertEquals("In", labels(exact, SearchSection.Apps).first())
+
+        val chosen = resolveSearch(base.copy(defaults = mapOf("in" to "instagram")))
+        assertEquals("Instagram", labels(chosen, SearchSection.Apps).first())
+
+        val pin = resolveSearch(base.copy(pinned = setOf("inaturalist")))
+        assertEquals("iNaturalist", labels(pin, SearchSection.Apps).first())
+    }
+
+    @Test
+    fun `opens lose to match quality`() {
+        val search = resolveSearch(
+            SearchInputs(
+                apps = listOf(app("Google Photos"), app("Photos")),
+                query = "pho",
+                launches = opened(
+                    "google photos" to "2026-08-05T09:00:00",
+                    "google photos" to "2026-08-06T09:00:00",
+                    "google photos" to "2026-08-07T09:00:00",
+                ),
+            )
+        )
+
+        assertEquals(listOf("Photos", "Google Photos"), labels(search, SearchSection.Apps))
+    }
+
+    /**
+     * A shortcut opens through `catalog.launchShortcut` and writes no record, so
+     * it never inherits its app's tally; a device action and a Bodha surface have
+     * no launch record to their name at all.
+     */
+    @Test
+    fun `the launch log moves no shortcut and no action`() {
+        val inputs = SearchInputs(
+            apps = installed,
+            shortcuts = listOf(
+                shortcut("New selfie", appId = "camera"),
+                shortcut("New chat", appId = "telegram"),
+            ),
+            actions = listOf(SearchAction(id = "settings:network", label = "Network")),
+            surfaces = listOf(Surface.Library),
+            query = "ne",
+        )
+        // Camera rather than Telegram, and that is the whole test: "New selfie"
+        // sits below "New chat" alphabetically, so a shortcut inheriting its
+        // app's tally would lift it and this equality would break. Tallying
+        // Telegram could not fail — its shortcut already leads.
+        val heavilyOpened = inputs.copy(
+            launches = opened(
+                "camera" to "2026-08-05T09:00:00",
+                "camera" to "2026-08-06T09:00:00",
+                "camera" to "2026-08-07T09:00:00",
+            )
+        )
+
+        assertEquals(listOf("New chat", "New selfie"), labels(resolveSearch(inputs), SearchSection.Shortcuts))
+        assertEquals(resolveSearch(inputs), resolveSearch(heavilyOpened))
+    }
+
+    @Test
+    fun `an empty launch log leaves the ranking and the reason lines exactly as they were`() {
+        val inputs = SearchInputs(
+            apps = listOf(app("Instagram"), app("iNaturalist"), app("Inbox")),
+            query = "in",
+            pinned = setOf("inbox"),
+        )
+
+        val search = resolveSearch(inputs.copy(launches = emptyMap()))
+        assertEquals(listOf("Inbox", "iNaturalist", "Instagram"), labels(search, SearchSection.Apps))
+        assertEquals(listOf(REASON_PINNED, null, null), reasons(search, SearchSection.Apps))
+    }
+
+    @Test
+    fun `a launch of an app this query does not match moves nothing`() {
+        // Two matching rows, so there is an order a leak could disturb, and the
+        // tally is on a third app that matches neither.
+        val inputs = SearchInputs(
+            apps = listOf(app("Instagram"), app("iNaturalist"), app("Camera")),
+            query = "in",
+        )
+        val elsewhere = inputs.copy(launches = opened("camera" to "2026-08-07T09:00:00"))
+
+        assertEquals(listOf("iNaturalist", "Instagram"), labels(resolveSearch(inputs), SearchSection.Apps))
+        assertEquals(resolveSearch(inputs), resolveSearch(elsewhere))
+    }
+
+    /**
+     * The tier that lifts without explaining (#182, ADR 0014): "you open this a
+     * lot" is a sentence about the user rather than about the result, so a row the
+     * launch log moved falls through to no line at all.
+     */
+    @Test
+    fun `a row lifted only by the launch log carries no reason line`() {
+        val search = resolveSearch(
+            SearchInputs(
+                apps = listOf(app("Instagram"), app("iNaturalist")),
+                query = "in",
+                launches = opened("instagram" to "2026-08-07T09:42:00"),
+            )
+        )
+
+        assertEquals(listOf("Instagram", "iNaturalist"), labels(search, SearchSection.Apps))
+        assertEquals(listOf(null, null), reasons(search, SearchSection.Apps))
+    }
 }

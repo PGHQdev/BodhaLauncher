@@ -64,6 +64,26 @@ _Avoid_: preferred app, favourite, shortcut
 Bodha's own record of launches it mediates — app identity and timestamp, nothing else. The spine of Awareness's per-app views; needs no permission and keeps full history, unlike the system's few-day usage events.
 _Avoid_: usage stats (that's the system's), history, analytics (nothing is transmitted)
 
+**Opens tally**:
+How often Bodha opened an app and when it last did, folded from the launch log. Search's fourth and last ranking tier, which only ever breaks a tie the earlier three left.
+_Avoid_: score, popularity, affinity, prediction, usage stats (that's the system's)
+
+**Unmediated launch**:
+An opening Android saw and Bodha did not — from a notification, from recents, from another app. Filled in from the system's usage events where usage access is granted, and carrying no session, because no session id was read at the moment it happened.
+_Avoid_: external launch, background launch, missed launch (nothing was missed; Bodha was not in the path)
+
+**Foreground duration**:
+An app's time in front over a rendered window, from Android's usage statistics. Needs usage access, covers the main profile only, and where it is absent the field states the absence in words and never resolves to 0.
+_Avoid_: screen time, usage time (both read as a verdict)
+
+**Entitlement window**:
+How much of Awareness renders: seven days free, everything retention kept on Pro. Applied in the render path only, so the records exist either way and export and the privacy dashboard reach all of them. It governs Bodha's own records, not a reading taken from Android — which is why a period rate renders at every tier.
+_Avoid_: retention window (that's what exists, not what renders), history cap, paywall
+
+**Excluded**:
+An app or session unrendered in Awareness's views and figures, reversibly, with the record left in place. Scoped to Awareness, so Search ranking and the Library are unaffected — the control for keeping an app out of Search is the Library's hide.
+_Avoid_: hidden (that's the Library's, and it reaches Search), muted (that's a notification source), deleted, blocked
+
 **Intentional session**:
 A session in which the user stated an intent — answered the Intent Prompt, wrote an Open Check intention, or ran a Focus session. Every other session is unclassified.
 _Avoid_: unintentional session (the phone doesn't know), mindful session
@@ -77,7 +97,7 @@ A place you dwell in and look around: Home, Search, App Library, Awareness, Toda
 _Avoid_: screen (that's the display), page, tab
 
 **Today**:
-The day surface, one swipe right from Home: three fixed slots — daily intention, day slot, inbox digest — under the day key's date. Never ranked, never a task manager.
+The day surface, one swipe right from Home: three fixed slots — daily intention, day slot, inbox digest — under the day key's date. Never ranked, never a task manager. Awareness's day view is also called Today (ADR 0013) and is a view *within* the Awareness surface — one of two positions on its switch, beside Week — not this surface.
 _Avoid_: agenda, dashboard, feed, at-a-glance
 
 **Sheet**:

@@ -140,8 +140,10 @@ data class SettingsRowResult(val row: SettingsRow) : SearchResult {
 /**
  * A ranked result: what matched, and the one-line reason it sits where it does.
  * [reason] cites only a tier that actually lifted the row — an exact match or the
- * user's own pin. Match quality is every row's baseline, so it explains nothing
- * and a row ranked on it alone carries no line (#182).
+ * user's own choice. Match quality is every row's baseline, so it explains nothing
+ * and a row ranked on it alone carries no line (#182). The launch log is silent
+ * too, and for a different reason: it did lift the row, but it says something
+ * about the user rather than about the result (#183).
  */
 data class SearchRow(val result: SearchResult, val reason: String? = null)
 
@@ -156,6 +158,41 @@ const val REASON_PINNED = "Pinned to Home"
 
 /** The reason line under the result the user chose for this query (#185). */
 const val REASON_DEFAULT = "Your choice for this search"
+
+/**
+ * What Bodha's launch log (ADR 0013) says about one app: how many launches of it
+ * the log still holds, and the most recent of them. Search's last ranking tier
+ * (#183, ADR 0014) is these two numbers and nothing else.
+ *
+ * [opens] is deliberately a bare count over the whole retained log rather than a
+ * decayed score. Retention already cuts the log at 30 days under
+ * [RetentionCategory.RawUsageEvents], so the count *is* "how often lately" and
+ * the decay is the retention window doing its job — a second, invented decay
+ * curve would be the unexplainable ranking ADR 0014 rules out, and there would be
+ * nothing to show a user who asked why this row is here.
+ */
+data class LaunchTally(val opens: Int, val lastOpened: LocalDateTime)
+
+/**
+ * Folds the launch log into one tally per app (#183).
+ *
+ * It is a fold in `:engine` rather than a `GROUP BY` at the DAO because what
+ * counts as "how often" and "how recently" is the product decision this tier is
+ * about, and a decision that lives in SQL is a decision no unit test drives. The
+ * caller hands over an already-read list — every retained record, unwindowed —
+ * and gets back a map keyed by the catalog's app id, which is what
+ * [SearchInputs.launches] is keyed by, so the join needs no bridge.
+ *
+ * The tally is **not** clamped by the Awareness entitlement window and does not
+ * consult the reader's Awareness exclusions. Search renders no history, so there
+ * is nothing for the cap to bound; and taking an app out of Awareness must not
+ * quietly make it harder to find — the control for keeping an app out of Search
+ * is the App Library's hide (CONTEXT.md, **Excluded**).
+ */
+fun resolveLaunchTallies(launches: List<LaunchRecord>): Map<String, LaunchTally> =
+    launches.groupBy(LaunchRecord::appId).mapValues { (_, records) ->
+        LaunchTally(opens = records.size, lastOpened = records.maxOf(LaunchRecord::at))
+    }
 
 /**
  * What Search may draw from. Apps and launcher shortcuts are the two live domains
@@ -201,6 +238,17 @@ data class SearchInputs(
      * silently and the query ranks as it otherwise would.
      */
     val defaults: Map<String, String> = emptyMap(),
+    /**
+     * The launch log folded per app by [resolveLaunchTallies] — the last ranking
+     * tier's whole input (#183).
+     *
+     * Non-nullable, unlike [calendarInstances]: a null there means a read still in
+     * flight, and a section that must stay absent until it lands. This log needs
+     * no permission and no provider, and the empty map is the entire degraded
+     * case — with nothing recorded every row tallies zero, the tier separates
+     * nothing, and the ranking is exactly what the earlier three tiers left.
+     */
+    val launches: Map<String, LaunchTally> = emptyMap(),
     /** Whether hidden apps may match; off, a query never surfaces them. */
     val hiddenSearchable: Boolean = false,
     /**
@@ -235,29 +283,6 @@ data class SearchInputs(
  */
 data class SearchState(val sections: List<SearchSectionState>, val nothingFound: Boolean)
 
-/**
- * Resolves what Search shows.
- *
- * **It opens empty** (ADR 0014): no recents, no suggestions, nothing until a query
- * narrows something — you swiped down because you had something in mind, and an
- * empty state cannot become a browsing surface. A query holding no words returns
- * to exactly that state, so a typed-then-cleared field is indistinguishable from
- * an untouched one.
- *
- * Sections come out in [SearchSection]'s fixed order, only those with matches.
- * Nothing appears twice: a shortcut whose app also matched this query is dropped,
- * because the app row already reaches everything the shortcut names (#181). A
- * hidden app takes its shortcuts with it — hiding an app and still meeting its
- * "New chat" would be a hole in the hiding.
- *
- * Matching is [matchesQuery], the one rule every domain shares. Ordering within a
- * section is ADR 0014's tiers, each a number the user could be shown (#182): an
- * exact label match first, then the user's own pin, then how early the match
- * landed, and alphabetical last so ties never swap between keystrokes. The two
- * remaining tiers — per-query defaults (#185) and the launch log (#183) — slot
- * between these as their stores arrive. Sections never interleave: ranking runs
- * inside each one.
- */
 /** How far behind the current day boundary calendar search reads (#187). */
 const val SEARCH_CALENDAR_DAYS_BACK = 7L
 
@@ -275,6 +300,38 @@ fun searchCalendarWindow(now: LocalDateTime): Pair<LocalDateTime, LocalDateTime>
     return boundary.minusDays(SEARCH_CALENDAR_DAYS_BACK) to boundary.plusDays(SEARCH_CALENDAR_DAYS_FORWARD)
 }
 
+/**
+ * Resolves what Search shows.
+ *
+ * **It opens empty** (ADR 0014): no recents, no suggestions, nothing until a query
+ * narrows something — you swiped down because you had something in mind, and an
+ * empty state cannot become a browsing surface. A query holding no words returns
+ * to exactly that state, so a typed-then-cleared field is indistinguishable from
+ * an untouched one.
+ *
+ * Sections come out in [SearchSection]'s fixed order, only those with matches.
+ * Nothing appears twice: a shortcut whose app also matched this query is dropped,
+ * because the app row already reaches everything the shortcut names (#181). A
+ * hidden app takes its shortcuts with it — hiding an app and still meeting its
+ * "New chat" would be a hole in the hiding.
+ *
+ * Matching is [matchesQuery], the one rule every domain shares. Ordering within a
+ * section is ADR 0014's four tiers, all of them now built, each a number the user
+ * could be shown (#182): an exact label match, then the user's own explicit
+ * choice — the per-query default above the Home pin (#185) — then how early the
+ * match landed, then how often and how recently Bodha opened it (#183).
+ * Alphabetical sits under all four, so ties never swap between keystrokes.
+ *
+ * The last tier reads [SearchInputs.launches] and therefore only ever reaches app
+ * rows. Nothing else in any section has a launch record to its name: a shortcut
+ * opens through its own path and writes none, a contact, an event, a surface and
+ * a settings row are not launches at all. It is also the one tier that lifts a row
+ * without saying so — a row it moved falls through to no reason line, because
+ * "you open this a lot" is a sentence about the user rather than about the result
+ * (ADR 0014 permits a line here and does not require one).
+ *
+ * Sections never interleave: ranking runs inside each one.
+ */
 fun resolveSearch(inputs: SearchInputs): SearchState {
     if (isBlankQuery(inputs.query)) return SearchState(sections = emptyList(), nothingFound = false)
     fun visible(appId: String) = inputs.hiddenSearchable || appId !in inputs.hidden
@@ -372,6 +429,15 @@ private fun rank(results: List<SearchResult>, inputs: SearchInputs): List<Search
         else listOf(result.label)
     fun exact(result: SearchResult) = names(result).any { matchesExactly(it, inputs.query) }
     fun depth(result: SearchResult) = names(result).minOf { matchDepth(it, inputs.query) }
+    // The launch log reaches app rows and no others (#183); everything else in a
+    // section tallies nothing because nothing else is ever launched through the
+    // opening path that writes the log.
+    fun tally(result: SearchResult) = if (result is AppResult) inputs.launches[result.app.id] else null
+    fun opens(result: SearchResult) = tally(result)?.opens ?: 0
+    // The floor is only ever compared against another floor: the clause above has
+    // already separated every row with opens from every row without, so a row that
+    // was never opened meets nothing but its equals here.
+    fun lastOpened(result: SearchResult) = tally(result)?.lastOpened ?: LocalDateTime.MIN
     val ordered = results.sortedWith(
         compareByDescending(::exact)
             // The per-query default sits above the pin: both are tier two's
@@ -379,6 +445,13 @@ private fun rank(results: List<SearchResult>, inputs: SearchInputs): List<Search
             .thenByDescending(::chosen)
             .thenByDescending(::pinned)
             .thenBy(::depth)
+            // How often before how recently (#183): the log is already cut at 30
+            // days, so a count is "how often lately" and sorting by the last open
+            // first would both double-count that decay and let one stray tap
+            // outrank an app opened every morning. Swapping these two lines is the
+            // whole of the opposite decision, if it ever proves wrong.
+            .thenByDescending(::opens)
+            .thenByDescending(::lastOpened)
             // Locale-independent, for the reason the library's ordering is; the
             // key falls through to [SearchResult.key] so equal labels still tie
             // identically on repeat runs.

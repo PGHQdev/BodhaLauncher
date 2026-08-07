@@ -13,6 +13,7 @@ import com.bodhalauncher.engine.HomeAction
 import com.bodhalauncher.engine.PromptDecision
 import com.bodhalauncher.engine.SearchContact
 import com.bodhalauncher.engine.SessionId
+import com.bodhalauncher.engine.SessionRecord
 import com.bodhalauncher.engine.TimedSessionEnd
 
 /**
@@ -73,6 +74,21 @@ sealed class Sheet {
 
     /** The snooze duration, one decision after [NotificationActions] replaces it (#163). */
     class SnoozeDurations(val key: String) : Sheet()
+
+    /**
+     * One session's actions in Awareness (#178). It carries the **record**
+     * rather than the id, because the sheet names what it is about and a
+     * session's name is when it ran — which only the record holds.
+     */
+    class AwarenessSessionActions(val record: SessionRecord) : Sheet()
+
+    /**
+     * One app's actions in Awareness (#178), carrying only the id. The name is
+     * resolved where every other Awareness view resolves it, so an app
+     * uninstalled since the launch is named as uninstalled in one place rather
+     * than in two that have to agree.
+     */
+    class AwarenessAppActions(val appId: String) : Sheet()
 
     /** Focus setup (#166) — one decision; dismissing starts nothing. */
     class FocusSetup : Sheet()

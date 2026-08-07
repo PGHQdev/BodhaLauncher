@@ -54,6 +54,46 @@ interface SessionRecordDao {
     @Query("SELECT * FROM session_record WHERE dayEpochDay = :epochDay OR endMillis IS NULL ORDER BY startMillis")
     suspend fun forDay(epochDay: Long): List<SessionRecordEntity>
 
+    /**
+     * The Week view's read (#176): every record stamped with a day in the range,
+     * plus any session still open.
+     *
+     * The open-record arm is here for the same reason [forDay] has one — a
+     * session that has not ended has no day to compare against a range — and it
+     * decides nothing about where that record is drawn. **The resolvers place a
+     * record on a day, and never this query's OR-arm**: the Week places by the
+     * stamped day alone, so an old open session comes back here and lands on the
+     * one row it belongs to.
+     *
+     * No index on `dayEpochDay`. An index costs a schema version, a hand-written
+     * migration and a committed schema file, against a table retention holds to
+     * 30 days and a query nothing has measured a problem with.
+     */
+    @Query(
+        "SELECT * FROM session_record " +
+            "WHERE (dayEpochDay BETWEEN :fromEpochDay AND :toEpochDay) OR endMillis IS NULL " +
+            "ORDER BY startMillis"
+    )
+    suspend fun forDays(fromEpochDay: Long, toEpochDay: Long): List<SessionRecordEntity>
+
+    /**
+     * The records behind a set of ids (#178), for the two readers that hold ids
+     * and need the sessions they name: the exclusions list, which draws a row per
+     * excluded session, and the App view, which needs each excluded session's
+     * span to place an unmediated open inside it.
+     *
+     * A query and nothing else. Which ids are asked for is the exclusion store's,
+     * and what happens to what comes back is the engine's — an id the store holds
+     * and this query cannot answer for is a record retention took, which the
+     * caller prunes rather than this query papering over.
+     *
+     * One bound variable per id, against SQLite's default limit of 999. Hand-picked
+     * exclusions do not reach it; no chunking is written, and if it is ever needed
+     * it belongs at the call site that knows how the list got that long.
+     */
+    @Query("SELECT * FROM session_record WHERE sessionId IN (:ids) ORDER BY startMillis")
+    suspend fun withIds(ids: List<Long>): List<SessionRecordEntity>
+
     /** The retention worker's cut, under raw usage (#19, ADR 0028). */
     @Query("DELETE FROM session_record WHERE startMillis < :cutoffMillis")
     suspend fun deleteBefore(cutoffMillis: Long)

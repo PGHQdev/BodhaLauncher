@@ -69,7 +69,11 @@ class SessionDetailScreenTest {
         checks: Int = 0,
         repeatedOpen: Boolean = false,
         statement: String? = null,
-    ) = SessionDetail(session, launches, checks, repeatedOpen, statement)
+        excludedApps: Int = 0,
+    ) = SessionDetail(session, launches, checks, repeatedOpen, statement, excludedApps)
+
+    private val opened = mutableListOf<String>()
+    private val actioned = mutableListOf<String>()
 
     private fun setScreen(detail: SessionDetail?) = compose.setContent {
         BodhaTheme {
@@ -77,6 +81,8 @@ class SessionDetailScreenTest {
                 detail = detail,
                 labelFor = { id -> if (id == "atlas") "Atlas" else id },
                 iconFor = { null },
+                onOpenApp = { opened += it },
+                onAppActions = { actioned += it },
             )
         }
     }
@@ -126,22 +132,37 @@ class SessionDetailScreenTest {
     }
 
     /**
-     * The launches are history, not a way to relaunch: the rows publish no click,
-     * so neither ADR 0020's floor nor ADR 0022's traversal has one to measure.
+     * The row opens the app's own view (#174), so it draws the navigate marker
+     * (ADR 0025 rule 3) and publishes one node the click merged — not two loose
+     * strings, and not a hand-written description restating them.
      */
     @Test
-    fun `the launch rows are read rather than activated`() {
-        setScreen(detail())
+    fun `a launch row navigates, so it publishes one named node and one chevron`() {
+        setScreen(detail(launches = listOf(launch("atlas", 42))))
 
-        assertEquals(
-            emptyList<String>(),
-            nodes().filter { SemanticsActions.OnClick in it.config }.mapNotNull { node ->
-                node.config.getOrNull(SemanticsProperties.ContentDescription)?.firstOrNull()
-            },
-        )
+        val rows = nodes()
+            .filter { SemanticsActions.OnClick in it.config }
+            .map { node -> node.config.getOrNull(SemanticsProperties.Text).orEmpty().map { it.text } }
+        assertEquals(listOf(listOf("Atlas", "9:42", "›")), rows)
+        assertEquals(1, drawnText().count { it == "›" })
     }
 
-    /** Which is why the surface takes focus itself — Escape travels up from it. */
+    /** By the id the record holds, never by the label a catalog happened to answer. */
+    @Test
+    fun `activating a launch row hands back the app's id, not its name`() {
+        setScreen(detail(launches = listOf(launch("atlas", 42))))
+
+        nodes().single { SemanticsActions.OnClick in it.config }
+            .config[SemanticsActions.OnClick].action?.invoke()
+
+        assertEquals(listOf("atlas"), opened)
+    }
+
+    /**
+     * A session that opened nothing has no rows at all, so the surface takes
+     * focus itself rather than the first row — and keeps doing so once the rows
+     * are focusable (#174), which is what this walks with them present.
+     */
     @Test
     fun `the surface takes focus on arrival, so back has a key`() {
         var backs = 0
@@ -153,6 +174,8 @@ class SessionDetailScreenTest {
                         detail = detail(),
                         labelFor = { it },
                         iconFor = { null },
+                        onOpenApp = {},
+                        onAppActions = {},
                     )
                 }
             }
@@ -160,6 +183,42 @@ class SessionDetailScreenTest {
 
         compose.onRoot().performKeyInput { pressKey(Key.Escape) }
         assertEquals(1, backs)
+    }
+
+    /**
+     * AC 5 as the reader meets it (#178): every app in the session excluded, and
+     * the view still says what the session was. Never "nothing was opened" — that
+     * is a claim about the session, and what happened here is a claim about the
+     * view.
+     */
+    @Test
+    fun `a session whose apps are all excluded draws no Opened section and says so instead`() {
+        setScreen(detail(launches = emptyList(), excludedApps = 2))
+
+        val drawn = drawnText()
+        assertTrue("2 apps excluded" in drawn)
+        assertTrue(drawn.none { it == "Nothing was opened in this session" })
+        assertTrue(drawn.none { it == "Opened" })
+        // The span and the classification are the session's own, and they stand.
+        assertTrue("9:41 · 12 minutes" in drawn)
+        assertTrue("Intentional" in drawn)
+        assertTrue(drawn.none { it == "0" })
+    }
+
+    /**
+     * The exclusion is offered on the row's own actions and nowhere else (#178,
+     * ADR 0022, ADR 0023) — the row keeps its click for opening the app's view.
+     */
+    @Test
+    fun `a launch row's actions carry the app's id, and its click still opens the view`() {
+        setScreen(detail(launches = listOf(launch("atlas", 42))))
+
+        val row = nodes().single { SemanticsActions.OnClick in it.config }
+        row.config[SemanticsActions.OnLongClick]?.action?.invoke()
+        assertEquals(listOf("atlas"), actioned)
+
+        row.config[SemanticsActions.OnClick].action?.invoke()
+        assertEquals(listOf("atlas"), opened)
     }
 
     @Test
