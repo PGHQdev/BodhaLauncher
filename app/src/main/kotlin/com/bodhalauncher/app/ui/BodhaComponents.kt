@@ -5,6 +5,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -350,6 +354,13 @@ fun MultiSelectRow(
  * Width is the label's, not the parent's: a discrete button sized to its text is
  * what lets several sit in a row (the Library's layout switcher). A pill that
  * spans a surface asks for `Modifier.fillMaxWidth()` at the call site.
+ *
+ * [selected] is for **one pill of a set**, where the tint says which one holds
+ * (rule 2). It is not decoration on the tint: fill is a colour, and a colour is
+ * the one channel a screen reader has no access to, so the state has to be in
+ * the semantics as well — which is what `selectable` puts there, without the
+ * check glyph [MultiSelectRow] needs and without a second visual claim. Null is
+ * a pill that is pressed rather than chosen, and stays a plain click.
  */
 @Composable
 fun BodhaPill(
@@ -359,6 +370,7 @@ fun BodhaPill(
     emphasis: Emphasis = Emphasis.Plain,
     enabled: Boolean = true,
     destructive: Boolean = false,
+    selected: Boolean? = null,
     leading: (@Composable () -> Unit)? = null,
 ) {
     val colors = LocalBodhaColors.current
@@ -378,7 +390,10 @@ fun BodhaPill(
             )
             .touchTargetFloor()
             .onFocusChanged { focused = it.isFocused }
-            .clickable(enabled = enabled, onClick = onClick)
+            .then(
+                if (selected == null) Modifier.clickable(enabled = enabled, onClick = onClick)
+                else Modifier.selectable(selected = selected, enabled = enabled, onClick = onClick)
+            )
             .padding(horizontal = BodhaSpacing.l, vertical = BodhaSpacing.m),
     ) {
         Row(
@@ -396,6 +411,63 @@ fun BodhaPill(
                     else -> inkFor(emphasis)
                 },
             )
+        }
+    }
+}
+
+/**
+ * A setting with a small fixed set of answers (#141): the card names it, the
+ * answers sit under it as pills, and the one that holds is tinted.
+ *
+ * It composes rule 1's card with rule 4's pills rather than inventing a look —
+ * the card is what makes it a Settings row, and the pills are what make each
+ * answer a discrete target at the floor. The **card itself is inert**: the
+ * answers are the controls, so the row publishes no click of its own and neither
+ * ADR 0020's walk nor ADR 0022's traversal finds a node that does nothing.
+ *
+ * Every answer is on screen rather than behind a dialog. Three or four short
+ * words fit, the current one is legible without opening anything, and changing
+ * your mind is one press — which is the whole shape of a format you are choosing
+ * by looking at the result.
+ *
+ * The set scrolls sideways instead of wrapping or squeezing, for
+ * [LayoutSwitcher]'s reason: at 2x text the floor wins and the row gives way.
+ */
+@Composable
+fun <T> ChoiceRow(
+    title: String,
+    options: List<Pair<T, String>>,
+    current: T,
+    onPick: (T) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = LocalBodhaColors.current
+    BodhaCard(modifier = modifier.fillMaxWidth()) {
+        Column(
+            verticalArrangement = Arrangement.spacedBy(BodhaSpacing.s),
+            modifier = Modifier.padding(horizontal = BodhaSpacing.m, vertical = BodhaSpacing.m),
+        ) {
+            Text(title, style = BodhaType.body, color = colors.ink)
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(BodhaSpacing.s),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    // Names the set as one choice, so a reader hears where the
+                    // selected pill's "selected" belongs.
+                    .selectableGroup(),
+            ) {
+                options.forEach { (value, label) ->
+                    BodhaPill(
+                        label = label,
+                        onClick = { onPick(value) },
+                        // Rule 2's tint means *the current item*, which is
+                        // exactly what the held answer is.
+                        emphasis = if (value == current) Emphasis.Tinted else Emphasis.Plain,
+                        selected = value == current,
+                    )
+                }
+            }
         }
     }
 }

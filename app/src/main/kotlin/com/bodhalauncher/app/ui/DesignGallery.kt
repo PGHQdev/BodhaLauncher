@@ -118,6 +118,17 @@ fun DesignGallery() {
         MultiSelectRow(title = "Multi-select row, picked", picked = true, onToggle = {})
         MultiSelectRow(title = "Multi-select row, unpicked", picked = false, onToggle = {})
         MultiSelectRow(title = "Multi-select row, unavailable — the cap reached", picked = false, onToggle = {}, enabled = false)
+        Spacer(Modifier.height(BodhaSpacing.s))
+        // The choice row (#141): a setting whose answers are all on screen, the
+        // held one tinted. Fixed options rather than a real setting's, so the
+        // specimen photographs the shape rather than whatever this build's
+        // Appearance section happens to offer.
+        ChoiceRow(
+            title = "Choice row — a setting with a small set of answers",
+            options = GALLERY_CHOICES,
+            current = GALLERY_CHOICES[1].first,
+            onPick = {},
+        )
         Spacer(Modifier.height(BodhaSpacing.xl))
 
         // Today's day slot (#159): the event rows, the turn-on and the named
@@ -325,6 +336,9 @@ private val GALLERY_TIMED_EVENT = DayEvent(
 
 /** Fixed times, so the fields photograph the same span every run. */
 private val GALLERY_WINDOW = ScheduleWindow(startMinute = 21 * 60, endMinute = 23 * 60 + 30)
+
+/** Three, which is what a choice row is sized for; the second one holds. */
+private val GALLERY_CHOICES = listOf(1 to "First", 2 to "Held", 3 to "Third")
 
 private fun gallerySession(id: Long, from: Int, to: Int?, intentional: Boolean) = AwarenessSession(
     record = SessionRecord(

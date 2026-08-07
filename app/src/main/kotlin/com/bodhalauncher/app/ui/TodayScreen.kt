@@ -20,6 +20,7 @@ import com.bodhalauncher.engine.DaySlot
 import com.bodhalauncher.engine.DigestSection
 import com.bodhalauncher.engine.DigestSlot
 import com.bodhalauncher.engine.digestLine
+import com.bodhalauncher.engine.formatDate
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
@@ -56,10 +57,11 @@ fun TodayScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Spacer(Modifier.height(48.dp))
-        // The device locale's medium date form; Settings' date-format control
-        // (#141) reads into this header when it lands.
+        // The day key in the chosen date form (#141) — the same form Home's
+        // clock writes its date in, so the two never disagree about how a date
+        // is spelled.
         Text(
-            text = day.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)),
+            text = formatDate(day, LocalBodhaFormats.current.date),
             color = colors.ink,
             style = BodhaType.title,
         )

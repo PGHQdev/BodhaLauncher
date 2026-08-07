@@ -128,7 +128,7 @@ private fun AwarenessList(line: String?, content: @Composable () -> Unit) {
  */
 @Composable
 fun SessionRow(session: AwarenessSession) {
-    val span = awarenessSessionLine(session)
+    val span = awarenessSessionLine(session, LocalBodhaFormats.current.clock)
     val word = awarenessIntentWord(session.intentional)
     ListRow(
         title = span,

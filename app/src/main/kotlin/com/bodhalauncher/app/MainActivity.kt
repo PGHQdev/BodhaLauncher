@@ -57,8 +57,10 @@ import androidx.compose.ui.platform.LocalContext
 import com.bodhalauncher.app.ui.ActionOptionsDialog
 import com.bodhalauncher.app.ui.ActionsKeyHint
 import com.bodhalauncher.app.ui.AppPickerDialog
+import com.bodhalauncher.app.ui.BodhaFormats
 import com.bodhalauncher.app.ui.BodhaTheme
 import com.bodhalauncher.app.ui.EditHomeDialog
+import com.bodhalauncher.app.ui.isDark
 import com.bodhalauncher.app.ui.ModeManageDialog
 import com.bodhalauncher.app.ui.minuteNow
 import com.bodhalauncher.app.ui.ModeSelectorDialog
@@ -224,6 +226,10 @@ class MainActivity : ComponentActivity() {
         val groupStore = GroupStore(this)
         val openCheckStore = OpenCheckRuleStore(this)
         val entitlementStore = EntitlementStore(this)
+        // Read before anything composes, so the first frame is already in the
+        // chosen theme — there is no previous palette for a return to Home to
+        // flash back to (#141).
+        val appearanceStore = AppearanceStore(this)
         catalog = AppCatalog(this)
         catalog.onAppsRemoved = { ids ->
             // Every arrangement's pins, not only the active one's (#155).
@@ -240,7 +246,13 @@ class MainActivity : ComponentActivity() {
         shownStep.value =
             resolveOnboardingStep(onboardingStore.complete.value, onboardingStore.furthestPassed.intValue)
         setContent {
-            BodhaTheme {
+            BodhaTheme(
+                darkTheme = appearanceStore.theme.value.isDark(),
+                formats = BodhaFormats(
+                    clock = appearanceStore.clock.value,
+                    date = appearanceStore.date.value,
+                ),
+            ) {
                 val onboardingStep = shownStep.value
                 if (onboardingStep != null) {
                     OnboardingFlow(
@@ -287,7 +299,7 @@ class MainActivity : ComponentActivity() {
                     )
                 ) {
                     Box(modifier = Modifier.fillMaxSize().escapeIsBack()) {
-                        BodhaHost(pinStore, modeStore, intentionStore, libraryStore, defaultStore, groupStore, openCheckStore, entitlementStore, catalog, app.sessions, app.intentPrompt, app.events, homeIntents.intValue, visible.value, homeRoleHeld.value, ::requestHomeRole)
+                        BodhaHost(pinStore, modeStore, intentionStore, libraryStore, defaultStore, groupStore, openCheckStore, entitlementStore, appearanceStore, catalog, app.sessions, app.intentPrompt, app.events, homeIntents.intValue, visible.value, homeRoleHeld.value, ::requestHomeRole)
                     }
                 }
             }
@@ -331,6 +343,7 @@ private fun BodhaHost(
     groupStore: GroupStore,
     openCheckStore: OpenCheckRuleStore,
     entitlementStore: EntitlementStore,
+    appearanceStore: AppearanceStore,
     catalog: AppCatalog,
     sessions: SessionRuntime,
     intentPrompt: IntentPromptRuntime,
@@ -735,7 +748,18 @@ private fun BodhaHost(
             return
         }
         Surface.Settings -> {
-            SettingsSurface(homeRoleHeld = homeRoleHeld, onRequestHomeRole = requestHomeRole)
+            SettingsSurface(
+                homeRoleHeld = homeRoleHeld,
+                onRequestHomeRole = requestHomeRole,
+                appearance = AppearanceChoices(
+                    theme = appearanceStore.theme.value,
+                    onTheme = appearanceStore::set,
+                    clock = appearanceStore.clock.value,
+                    onClock = appearanceStore::set,
+                    date = appearanceStore.date.value,
+                    onDate = appearanceStore::set,
+                ),
+            )
             return
         }
         else -> {
