@@ -83,20 +83,22 @@ sealed interface DigestSlot {
 
 /**
  * Resolves the digest slot (#161). [sectionCounts] is the day key's stored
- * tally; a revocation is told apart from never-granted by whether anything was
- * counted under this key while the grant held.
+ * tally; a revocation is told apart from never-granted by [grantSeen] — the
+ * grant was observed held this session — or by anything already counted under
+ * this key, whichever the caller can still see.
  */
 fun resolveDigestSlot(
     granted: Boolean,
     educationShown: Boolean,
     listenerConnected: Boolean,
     sectionCounts: Map<DigestSection, Int>,
+    grantSeen: Boolean = false,
 ): DigestSlot {
     val counts = DigestSection.entries
         .mapNotNull { section -> sectionCounts[section]?.takeIf { it > 0 }?.let { section to it } }
         .toMap()
     return when {
-        !granted && counts.isNotEmpty() -> DigestSlot.Revoked(counts)
+        !granted && (grantSeen || counts.isNotEmpty()) -> DigestSlot.Revoked(counts)
         !granted -> DigestSlot.Ungranted(offersTurnOn = !educationShown)
         !listenerConnected -> DigestSlot.Disconnected(counts)
         counts.isEmpty() -> DigestSlot.Empty

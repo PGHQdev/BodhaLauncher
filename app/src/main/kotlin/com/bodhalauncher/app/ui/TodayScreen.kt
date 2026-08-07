@@ -35,7 +35,8 @@ fun TodayScreen(
     day: LocalDate,
     intention: String?,
     onEditIntention: () -> Unit,
-    daySlot: DaySlot,
+    /** Null only while the provider is still being read. */
+    daySlot: DaySlot?,
     onEventTap: (DayEvent) -> Unit,
     onDayTurnOn: () -> Unit,
     /** Null only while the day key's counts are still being read. */
@@ -72,10 +73,12 @@ fun TodayScreen(
             // Focus on arrival gives the surface a back key (ADR 0022).
             modifier = Modifier.focusOnOpen(),
         )
-        Spacer(Modifier.height(16.dp))
-        DaySlotContent(daySlot, onEventTap, onDayTurnOn)
+        daySlot?.let {
+            Spacer(Modifier.height(BodhaSpacing.l))
+            DaySlotContent(it, onEventTap, onDayTurnOn)
+        }
         digestSlot?.let {
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(BodhaSpacing.l))
             DigestSlotContent(it, onDigestTap, onDigestTurnOn)
         }
     }

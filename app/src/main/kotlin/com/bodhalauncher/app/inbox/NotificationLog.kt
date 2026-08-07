@@ -35,10 +35,14 @@ interface NotificationLogDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(record: NotificationRecordEntity)
 
-    /** One count per section over the day key's window; dismissal elsewhere doesn't remove a row. */
+    /**
+     * One count per section over the day key's window, by post time — so the
+     * shade re-read after a reboot does not stamp yesterday's leftovers into
+     * today (#161). Dismissal elsewhere doesn't remove a row.
+     */
     @Query(
         "SELECT section, COUNT(*) AS count FROM notification_log " +
-            "WHERE updatedAtMillis >= :fromMillis AND updatedAtMillis < :toMillis GROUP BY section"
+            "WHERE postedAtMillis >= :fromMillis AND postedAtMillis < :toMillis GROUP BY section"
     )
     suspend fun countsBetween(fromMillis: Long, toMillis: Long): List<SectionCount>
 

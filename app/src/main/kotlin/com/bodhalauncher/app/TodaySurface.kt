@@ -3,8 +3,10 @@ package com.bodhalauncher.app
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import com.bodhalauncher.app.capability.CapabilityEducation
 import com.bodhalauncher.app.data.BodhaDatabase
@@ -16,6 +18,7 @@ import com.bodhalauncher.app.ui.Sheet
 import com.bodhalauncher.app.ui.SheetSlot
 import com.bodhalauncher.app.ui.TodayScreen
 import com.bodhalauncher.engine.Capability
+import com.bodhalauncher.engine.DaySlot
 import com.bodhalauncher.engine.DigestSection
 import com.bodhalauncher.engine.DigestSlot
 import com.bodhalauncher.engine.EducationEntry
@@ -23,7 +26,9 @@ import com.bodhalauncher.engine.dayKey
 import com.bodhalauncher.engine.dayStart
 import com.bodhalauncher.engine.resolveDaySlot
 import com.bodhalauncher.engine.resolveDigestSlot
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import java.time.LocalDateTime
 import java.time.ZoneId
 
@@ -59,20 +64,26 @@ fun TodaySurface(
     // Read live on every tick and every return to the foreground; nothing is
     // cached, so a revoked grant is a plain ungranted read (ADR 0017, ADR 0009).
     val calendarGranted = education.granted(Capability.Calendar)
-    val daySlot = remember(now, calendarGranted, education.resumeTick) {
-        resolveDaySlot(
-            granted = calendarGranted,
-            educationShown = education.educationShown(Capability.Calendar),
-            hasCalendars = !calendarGranted || calendar.hasCalendars(),
-            instances = if (calendarGranted) calendar.todayWindow(now) else emptyList(),
-            now = now,
-            tomorrowInstances = if (calendarGranted) calendar.tomorrowWindow(now) else emptyList(),
-        )
+    val daySlot by produceState<DaySlot?>(null, now, calendarGranted, education.resumeTick) {
+        value = withContext(Dispatchers.IO) {
+            resolveDaySlot(
+                granted = calendarGranted,
+                educationShown = education.educationShown(Capability.Calendar),
+                hasCalendars = !calendarGranted || calendar.hasCalendars(),
+                instances = if (calendarGranted) calendar.todayWindow(now) else emptyList(),
+                now = now,
+                tomorrowInstances = if (calendarGranted) calendar.tomorrowWindow(now) else emptyList(),
+            )
+        }
     }
     // The digest (#161): counts from the store under the day key, resolved
     // against the live grant and listener state so a drop or a revocation
     // renders as its named cause with the counts still standing.
     val digestGranted = education.granted(Capability.NotificationAccess)
+    // Seen-held marks a later absence as a revocation rather than never-granted,
+    // even before anything was counted (#161).
+    var digestGrantSeen by remember { mutableStateOf(false) }
+    if (digestGranted) digestGrantSeen = true
     val listenerConnected by BodhaNotificationListener.connected
     val zone = ZoneId.systemDefault()
     val digestSlot by produceState<DigestSlot?>(
@@ -88,6 +99,7 @@ fun TodaySurface(
             educationShown = education.educationShown(Capability.NotificationAccess),
             listenerConnected = listenerConnected,
             sectionCounts = counts,
+            grantSeen = digestGrantSeen,
         )
     }
     TodayScreen(

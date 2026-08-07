@@ -75,26 +75,23 @@ fun resolveDaySlot(
     if (!granted) return DaySlot.Ungranted(offersTurnOn = !educationShown)
     if (!hasCalendars) return DaySlot.NoCalendars
 
-    val remaining = instances.asSequence()
-        .filter { it.calendarVisible && !it.selfDeclined }
+    val remaining = shownSorted(instances)
         // An all-day event's exclusive end is a midnight; it belongs to the day
         // key until the key rolls at 4am, not until the clock strikes twelve.
         .filter { if (it.allDay) it.end.toLocalDate() > dayKey(now) else it.end > now }
         .filter { it.begin < dayStart(now).plusDays(1) }
-        .map { DayEvent(it.eventId, it.title, it.allDay, it.begin, it.end) }
-        .sortedWith(dayOrder)
-        .toList()
 
     if (remaining.isNotEmpty()) return DaySlot.Events(remaining)
 
     // The peek only exists in the granted-and-empty state (#160): with the day
     // spent, tomorrow's first event under the day slot's own ordering — so an
     // all-day event tomorrow wins over a 9am meeting.
-    val tomorrowFirst = tomorrowInstances.asSequence()
+    return DaySlot.Empty(shownSorted(tomorrowInstances).firstOrNull())
+}
+
+/** What survives the user's own choices — declined and hidden drop — in the slot's order. */
+private fun shownSorted(instances: List<ProviderInstance>): List<DayEvent> =
+    instances
         .filter { it.calendarVisible && !it.selfDeclined }
         .map { DayEvent(it.eventId, it.title, it.allDay, it.begin, it.end) }
         .sortedWith(dayOrder)
-        .firstOrNull()
-
-    return DaySlot.Empty(tomorrowFirst)
-}

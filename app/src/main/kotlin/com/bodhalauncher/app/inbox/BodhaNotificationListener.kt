@@ -8,8 +8,9 @@ import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import androidx.compose.runtime.mutableStateOf
 import com.bodhalauncher.app.data.BodhaDatabase
-import com.bodhalauncher.engine.classifyNotification
+import com.bodhalauncher.engine.IMPORTANCE_DEFAULT
 import com.bodhalauncher.engine.NotificationSignals
+import com.bodhalauncher.engine.classifyNotification
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -83,6 +84,9 @@ class BodhaNotificationListener : NotificationListenerService() {
         scope.launch { BodhaDatabase.get(applicationContext).notificationLog().upsert(entity) }
     }
 
+    // With no ranking to read, the neutral signals send the notification to the
+    // classifier's catch-all rather than misfiling it as Silent on a signal
+    // that was never actually read (#161).
     private fun signals(notification: Notification, ranking: Ranking?): NotificationSignals =
         NotificationSignals(
             rankingSaysConversation =
@@ -90,8 +94,8 @@ class BodhaNotificationListener : NotificationListenerService() {
             hasMessagingStyle = notification.extras.getString(Notification.EXTRA_TEMPLATE) ==
                 Notification.MessagingStyle::class.java.name,
             category = notification.category,
-            importance = ranking?.importance ?: IMPORTANCE_UNSPECIFIED,
-            everAudiblyAlerted = (ranking?.lastAudiblyAlertedMillis ?: 0) > 0,
+            importance = ranking?.importance ?: IMPORTANCE_DEFAULT,
+            everAudiblyAlerted = ranking == null || ranking.lastAudiblyAlertedMillis > 0,
         )
 
     private fun excludedPackages(): Set<String> = setOfNotNull(
@@ -102,8 +106,6 @@ class BodhaNotificationListener : NotificationListenerService() {
     companion object {
         /** Whether the system currently holds the listener bound; the slot names a drop (#161). */
         val connected = mutableStateOf(false)
-
-        private const val IMPORTANCE_UNSPECIFIED = -1000
 
         fun keyHash(key: String): String =
             MessageDigest.getInstance("SHA-256").digest(key.toByteArray())

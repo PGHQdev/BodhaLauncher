@@ -132,6 +132,15 @@ class DigestTest {
     }
 
     @Test
+    fun `revoked before anything was counted is still Revoked, not never-granted`() {
+        val slot = resolveDigestSlot(
+            false, educationShown = true, listenerConnected = false,
+            emptyMap(), grantSeen = true,
+        )
+        assertIs<DigestSlot.Revoked>(slot)
+    }
+
+    @Test
     fun `revoked mid-session keeps the day's counts and says why`() {
         val slot = resolveDigestSlot(
             false, educationShown = true, listenerConnected = false,
