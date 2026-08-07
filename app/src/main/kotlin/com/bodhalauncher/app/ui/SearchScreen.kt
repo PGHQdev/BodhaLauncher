@@ -18,8 +18,10 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import com.bodhalauncher.engine.HomeAction
+import com.bodhalauncher.engine.AppResult
+import com.bodhalauncher.engine.SearchResult
 import com.bodhalauncher.engine.SearchState
+import com.bodhalauncher.engine.ShortcutResult
 
 /**
  * Search: a field and whatever the query found, and nothing else.
@@ -28,6 +30,10 @@ import com.bodhalauncher.engine.SearchState
  * line beneath the field is [SEARCH_NOTHING_FOUND], and it appears only for a
  * query that matched nothing; an untyped field says nothing, because nothing has
  * failed yet.
+ *
+ * Sections draw in the engine's fixed order under their overlines, only those
+ * with matches (#181). A shortcut row wears its owning app's mark: the label
+ * says what it does, the mark says whose it is.
  *
  * Back and Escape are the navigation model's (#132) and appear nowhere here: back
  * is the host's `BackHandler` and Escape reaches the root binding along the focus
@@ -38,10 +44,11 @@ fun SearchScreen(
     state: SearchState,
     query: String,
     onQueryChange: (String) -> Unit,
-    iconFor: (HomeAction) -> ImageBitmap?,
+    /** The launcher icon for an app id — a result's own, or a shortcut's owner's. */
+    iconFor: (String) -> ImageBitmap?,
     /** Changes when any package changes, so cached icons refresh with their apps. */
     iconKey: Any,
-    onOpen: (HomeAction) -> Unit,
+    onOpen: (SearchResult) -> Unit,
 ) {
     val colors = LocalBodhaColors.current
     Column(
@@ -53,8 +60,8 @@ fun SearchScreen(
     ) {
         SearchField(query, onQueryChange)
         if (state.nothingFound) {
-            // Said once, over the whole search: with one domain shipped there is
-            // no section for a per-section empty state to belong to (ADR 0014).
+            // Said once, over the whole search: an absent section is not a
+            // failure, so no section owes its own empty state (ADR 0014).
             Text(
                 text = SEARCH_NOTHING_FOUND,
                 color = colors.inkMuted,
@@ -63,17 +70,25 @@ fun SearchScreen(
             )
         }
         LazyColumn(modifier = Modifier.fillMaxSize()) {
-            items(count = state.rows.size, key = { state.rows[it].id }) { i ->
-                val app = state.rows[i]
-                val icon = remember(app.id, iconKey) { iconFor(app) }
-                // No long-press: hide and pin belong to the Library, which is
-                // where an app's actions are (#61, #62).
-                ListRow(
-                    title = app.label,
-                    onClick = { onOpen(app) },
-                    // The app's own mark, so bare rather than chipped (rule 5).
-                    leading = if (icon != null) ({ AppMark(icon) }) else null,
-                )
+            state.sections.forEach { (section, rows) ->
+                // The overline is plain text, not an item boundary a key would
+                // protect: sections never reorder, the engine fixes that.
+                item(key = "overline:$section") { SectionOverline(section.heading) }
+                items(count = rows.size, key = { rows[it].key }) { i ->
+                    val row = rows[i]
+                    val ownerId = when (row) {
+                        is AppResult -> row.app.id
+                        is ShortcutResult -> row.shortcut.appId
+                    }
+                    val icon = remember(ownerId, iconKey) { iconFor(ownerId) }
+                    // No long-press yet: result actions are #184's slice.
+                    ListRow(
+                        title = row.label,
+                        onClick = { onOpen(row) },
+                        // The app's own mark, so bare rather than chipped (rule 5).
+                        leading = if (icon != null) ({ AppMark(icon) }) else null,
+                    )
+                }
             }
         }
     }
@@ -107,7 +122,7 @@ private fun SearchField(query: String, onQueryChange: (String) -> Unit) {
             decorationBox = { field ->
                 Box {
                     if (query.isEmpty()) {
-                        Text(text = "Search apps", color = colors.inkMuted, style = BodhaType.body)
+                        Text(text = "Search", color = colors.inkMuted, style = BodhaType.body)
                     }
                     field()
                 }

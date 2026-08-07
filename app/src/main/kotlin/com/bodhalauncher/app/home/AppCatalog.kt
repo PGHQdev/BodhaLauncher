@@ -25,6 +25,8 @@ data class AppShortcut(
     val label: String,
     /** The profile it came from; launching under any other user fails. */
     val user: UserHandle,
+    /** The owning app's catalog id (`pkg` or `pkg:serial`), the id [AppCatalog.apps] uses. */
+    val appId: String,
 )
 
 /**
@@ -99,11 +101,49 @@ class AppCatalog(private val context: Context) {
             )
         launcherApps.getShortcuts(query, user)
             .orEmpty()
-            .map { AppShortcut(it.id, it.`package`, (it.shortLabel ?: it.longLabel).toString(), user) }
+            .map {
+                AppShortcut(
+                    it.id, it.`package`, (it.shortLabel ?: it.longLabel).toString(), user,
+                    appId = idFor(it.`package`, user),
+                )
+            }
             .filter { it.label.isNotEmpty() }
     } catch (_: SecurityException) {
         emptyList()
     } catch (_: IllegalStateException) {
+        emptyList()
+    }
+
+    /**
+     * Every app's shortcuts across profiles, for Search's shortcuts section (#181);
+     * empty unless Bodha is the default launcher (Android's rule). One unfiltered
+     * query per profile rather than one per app — [LauncherApps] allows it and the
+     * per-app form would make a keystroke's refresh O(apps) binder calls.
+     */
+    fun allShortcuts(): List<AppShortcut> = try {
+        launcherApps.profiles.flatMap { user ->
+            val query = LauncherApps.ShortcutQuery()
+                .setQueryFlags(
+                    LauncherApps.ShortcutQuery.FLAG_MATCH_MANIFEST or
+                        LauncherApps.ShortcutQuery.FLAG_MATCH_DYNAMIC
+                )
+            launcherApps.getShortcuts(query, user)
+                .orEmpty()
+                .map {
+                    AppShortcut(
+                        it.id, it.`package`, (it.shortLabel ?: it.longLabel).toString(), user,
+                        appId = idFor(it.`package`, user),
+                    )
+                }
+                .filter { it.label.isNotEmpty() }
+        }
+    } catch (_: SecurityException) {
+        emptyList()
+    } catch (_: IllegalStateException) {
+        emptyList()
+    } catch (_: UnsupportedOperationException) {
+        // Robolectric's LauncherApps shadow rejects manifest-shortcut queries;
+        // on a device this never throws.
         emptyList()
     }
 
