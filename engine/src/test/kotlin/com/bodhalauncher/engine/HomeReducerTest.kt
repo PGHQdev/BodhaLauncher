@@ -34,7 +34,7 @@ class HomeReducerTest {
     }
 
     @Test
-    fun `action list caps at four with pins first`() {
+    fun `suggestions fill only to four with pins first`() {
         val home = resolveHome(
             HomeInputs(
                 pinned = listOf(action("p1"), action("p2"), action("p3")),
@@ -46,14 +46,28 @@ class HomeReducerTest {
     }
 
     @Test
-    fun `pins alone can fill all four slots`() {
+    fun `pins alone render to eight and no further`() {
+        // ADR 0027: every action past four is user-placed, so pins carry the
+        // list to eight; the ninth is dropped.
+        val home = resolveHome(
+            HomeInputs(pinned = (1..9).map { action("p$it") })
+        )
+
+        assertEquals((1..8).map { "p$it" }, home.actions.map { it.id })
+    }
+
+    @Test
+    fun `suggestions never push the list past four`() {
+        // With four or more pins there is no room left for inferred content:
+        // suggestions may fill to four, never build past it (ADR 0027).
         val home = resolveHome(
             HomeInputs(
-                pinned = listOf(action("p1"), action("p2"), action("p3"), action("p4"), action("p5")),
+                pinned = (1..5).map { action("p$it") },
+                suggested = listOf(action("s1")),
             )
         )
 
-        assertEquals(listOf("p1", "p2", "p3", "p4"), home.actions.map { it.id })
+        assertEquals((1..5).map { "p$it" }, home.actions.map { it.id })
     }
 
     @Test

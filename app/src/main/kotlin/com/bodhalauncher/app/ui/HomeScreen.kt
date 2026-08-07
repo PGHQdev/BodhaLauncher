@@ -25,7 +25,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.bodhalauncher.engine.HomeAction
 import com.bodhalauncher.engine.HomeState
-import com.bodhalauncher.engine.MAX_ACTIONS
+import com.bodhalauncher.engine.MAX_PINS
 import kotlinx.coroutines.delay
 import java.time.Duration
 import java.time.LocalDateTime
@@ -99,7 +99,9 @@ fun HomeScreen(
                     leading = if (icon != null) ({ AppMark(icon) }) else null,
                 )
             }
-            if (onAddAction != null && state.actions.size < MAX_ACTIONS) {
+            // The row shows to the pin ceiling, not the suggestion one (ADR 0027):
+            // adding a pin is the user building Home by hand.
+            if (onAddAction != null && state.actions.size < MAX_PINS) {
                 CardRow(
                     // Empty, the row is the empty state (#137): it invites the
                     // first pin and names where the rest are.

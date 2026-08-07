@@ -35,7 +35,7 @@ data class HomeInputs(
 data class HomeState(
     val dailyIntention: String?,
     val contextLabel: String?,
-    /** At most [MAX_ACTIONS], pins first. */
+    /** At most [MAX_PINS], pins first; suggestions never push past [MAX_ACTIONS]. */
     val actions: List<HomeAction>,
     val inboxDigest: String?,
     val focusActive: Boolean,
@@ -43,19 +43,25 @@ data class HomeState(
     val homeRoleHeld: Boolean = true,
 )
 
+/** The ceiling suggestions may fill to; inferred content never builds a longer list. */
 const val MAX_ACTIONS = 4
 
+/** The ceiling for pins alone (ADR 0027): every action past four is user-placed. */
+const val MAX_PINS = 8
+
 /**
- * Resolves what Home shows: user pins outrank inferred suggestions, the combined
- * list caps at [MAX_ACTIONS], hidden suggestions are excluded, and absent inputs
- * yield absent elements rather than placeholders.
+ * Resolves what Home shows (ADR 0027): user pins outrank inferred suggestions
+ * and render up to [MAX_PINS]; suggestions only fill the room left under
+ * [MAX_ACTIONS], so they never push the list past four and pins alone can.
+ * Hidden suggestions are excluded, and absent inputs yield absent elements
+ * rather than placeholders.
  */
 fun resolveHome(inputs: HomeInputs): HomeState {
-    val pins = inputs.pinned.take(MAX_ACTIONS)
+    val pins = inputs.pinned.take(MAX_PINS)
     val pinnedIds = pins.mapTo(mutableSetOf()) { it.id }
     val suggestions = inputs.suggested
         .filter { it.id !in inputs.hidden && it.id !in pinnedIds }
-        .take(MAX_ACTIONS - pins.size)
+        .take((MAX_ACTIONS - pins.size).coerceAtLeast(0))
     return HomeState(
         dailyIntention = inputs.dailyIntention,
         contextLabel = inputs.contextLabel,
