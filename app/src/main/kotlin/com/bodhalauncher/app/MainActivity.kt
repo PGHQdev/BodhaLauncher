@@ -561,6 +561,7 @@ private fun BodhaHost(
         Surface.Inbox -> {
             InboxSurface(
                 education = education,
+                sheets = sheets,
                 onBack = back,
             )
             return

@@ -41,6 +41,8 @@ fun InboxScreen(
     lineFor: (InboxRow) -> String?,
     iconFor: (InboxRow) -> ImageBitmap?,
     onOpen: (InboxRow) -> Unit,
+    /** Long-press and the row's Actions node both land here (#163, ADR 0022). */
+    onRowActions: (InboxRow) -> Unit,
     onBack: () -> Unit,
 ) {
     when (state) {
@@ -51,7 +53,8 @@ fun InboxScreen(
         InboxState.AccessOff -> InboxNote("Notification access is off.", onBack)
         InboxState.Disconnected -> InboxNote("Not connected to notifications right now.", onBack)
         InboxState.Empty -> InboxNote("Nothing waiting.", onBack)
-        is InboxState.Sections -> InboxSections(state, titleFor, lineFor, iconFor, onOpen)
+        is InboxState.Sections ->
+            InboxSections(state, titleFor, lineFor, iconFor, onOpen, onRowActions)
     }
 }
 
@@ -62,6 +65,7 @@ private fun InboxSections(
     lineFor: (InboxRow) -> String?,
     iconFor: (InboxRow) -> ImageBitmap?,
     onOpen: (InboxRow) -> Unit,
+    onRowActions: (InboxRow) -> Unit,
 ) {
     val colors = LocalBodhaColors.current
     Column(
@@ -84,6 +88,7 @@ private fun InboxSections(
                     line = lineFor(row),
                     icon = iconFor(row),
                     onOpen = { onOpen(row) },
+                    onActions = { onRowActions(row) },
                     // Focus on arrival gives the surface a back key (ADR 0022).
                     modifier = if (first) Modifier.focusOnOpen() else Modifier,
                 )
@@ -105,12 +110,15 @@ fun NotificationRow(
     line: String?,
     icon: ImageBitmap?,
     onOpen: () -> Unit,
+    /** Long-press to the actions sheet, and the shared Actions node with it (#163). */
+    onActions: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     ListRow(
         title = title,
         subtitle = line,
         onClick = onOpen,
+        onLongClick = onActions,
         leading = icon?.let { { AppMark(it) } },
         modifier = modifier,
     )

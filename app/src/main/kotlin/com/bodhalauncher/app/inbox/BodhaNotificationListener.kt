@@ -144,6 +144,20 @@ class BodhaNotificationListener : NotificationListenerService() {
 
         private var instance: BodhaNotificationListener? = null
 
+        /**
+         * Handled cancels the real notification (#163, ADR 0015): the shade
+         * and the inbox never disagree, because both watch the same removal.
+         * The day's count stands — the notification did arrive.
+         */
+        fun markHandled(key: String) {
+            runCatching { instance?.cancelNotification(key) }
+        }
+
+        /** The platform's own snooze (#163): the notification returns by itself. */
+        fun snooze(key: String, durationMillis: Long) {
+            runCatching { instance?.snoozeNotification(key, durationMillis) }
+        }
+
         fun keyHash(key: String): String =
             MessageDigest.getInstance("SHA-256").digest(key.toByteArray())
                 .joinToString("") { "%02x".format(it) }

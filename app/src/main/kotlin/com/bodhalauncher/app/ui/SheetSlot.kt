@@ -58,6 +58,12 @@ sealed class Sheet {
 
     /** Today's intention editor (#158) — the one place the intention is set. */
     class IntentionEditor : Sheet()
+
+    /** The inbox row's actions (#163) — the system key names the notification, never its content. */
+    class NotificationActions(val key: String) : Sheet()
+
+    /** The snooze duration, one decision after [NotificationActions] replaces it (#163). */
+    class SnoozeDurations(val key: String) : Sheet()
 }
 
 /**
