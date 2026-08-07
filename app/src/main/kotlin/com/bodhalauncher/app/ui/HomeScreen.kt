@@ -48,8 +48,10 @@ fun HomeScreen(
     onActionLongPress: (HomeAction) -> Unit = {},
     /** Shown while there is room for another pin; opens the app picker. */
     onAddAction: (() -> Unit)? = null,
-    /** Temporary editor entry point until Today (#5) is the intention's editor. */
-    onEditIntention: (() -> Unit)? = null,
+    /** The intention is read-only here; tapping it opens Today, its editor (#158). */
+    onOpenToday: (() -> Unit)? = null,
+    /** Opens the mode selector; the label shows only while a mode is active (#155). */
+    onContextLabelTap: () -> Unit = {},
     iconFor: (HomeAction) -> ImageBitmap? = { null },
     /** Changes when any package changes, so cached icons refresh with their apps. */
     iconKey: Any = Unit,
@@ -73,17 +75,14 @@ fun HomeScreen(
         Clock()
         state.contextLabel?.let {
             Spacer(Modifier.height(12.dp))
-            Text(text = it, color = colors.inkMuted, style = BodhaType.overline)
+            // The mode's name and nothing else — a manual switch and a scheduled
+            // one look the same. The pill sizes to its text (ADR 0025 rule 4).
+            BodhaPill(label = it, onClick = onContextLabelTap)
         }
-        val intention = state.dailyIntention
-        if (intention != null || onEditIntention != null) {
+        // Read-only in the voice face; the empty state lives on Today (#158).
+        state.dailyIntention?.let { intention ->
             Spacer(Modifier.height(36.dp))
-            IntentionCard(
-                // Temporary empty-state entry point; Today (#5) owns this moment once it exists.
-                text = intention ?: "Set today's intention",
-                muted = intention == null,
-                onEdit = onEditIntention,
-            )
+            IntentionCard(text = intention, muted = false, onEdit = onOpenToday)
         }
         Spacer(Modifier.height(48.dp))
         Column(

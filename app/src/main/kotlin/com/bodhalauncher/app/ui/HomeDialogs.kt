@@ -101,9 +101,9 @@ fun ActionOptionsDialog(
     }
 }
 
-/** Edit-mode entry point (#54); the editor itself is a later slice. */
+/** Edit-mode entry point (#54); Context modes joined it in #155. */
 @Composable
-fun EditHomeDialog(onAddPin: () -> Unit, onDismiss: () -> Unit) {
+fun EditHomeDialog(onAddPin: () -> Unit, onContextModes: () -> Unit, onDismiss: () -> Unit) {
     val colors = LocalBodhaColors.current
     Dialog(onDismissRequest = onDismiss) {
         Column(
@@ -122,6 +122,7 @@ fun EditHomeDialog(onAddPin: () -> Unit, onDismiss: () -> Unit) {
                 modifier = Modifier.padding(vertical = 12.dp),
             )
             OptionRow("Add pin") { onAddPin(); onDismiss() }
+            OptionRow("Context modes") { onContextModes(); onDismiss() }
             Text(
                 text = "More editing — coming",
                 color = colors.inkMuted,

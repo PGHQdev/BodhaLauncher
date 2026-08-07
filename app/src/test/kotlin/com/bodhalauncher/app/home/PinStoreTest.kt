@@ -70,5 +70,60 @@ class PinStoreTest {
         assertEquals(setOf("com.b"), PinStore(context).hidden.value)
     }
 
+    @Test
+    fun `switching arrangements switches which pins edits write to and no other's`() {
+        val store = PinStore(context)
+        store.pin("com.default")
+        store.setActive("Work")
+        assertEquals(emptyList<String>(), store.pinned.value)
+
+        store.pin("com.work")
+        store.unpin("com.default")
+
+        assertEquals(listOf("com.work"), store.pinsOf("Work"))
+        assertEquals(listOf("com.default"), store.pinsOf(PinStore.DEFAULT_ARRANGEMENT))
+    }
+
+    @Test
+    fun `renaming an arrangement carries its pins`() {
+        val store = PinStore(context)
+        store.setActive("Work")
+        store.pin("com.work")
+
+        store.renameArrangement("Work", "Office")
+
+        assertEquals(listOf("com.work"), store.pinsOf("Office"))
+        assertEquals(emptyList<String>(), store.pinsOf("Work"))
+        store.pin("com.more")
+        assertEquals(listOf("com.work", "com.more"), store.pinsOf("Office"))
+    }
+
+    @Test
+    fun `removing the active arrangement drops back to the default's pins`() {
+        val store = PinStore(context)
+        store.pin("com.default")
+        store.setActive("Work")
+        store.pin("com.work")
+
+        store.removeArrangement("Work")
+
+        assertEquals(listOf("com.default"), store.pinned.value)
+        assertEquals(emptyList<String>(), PinStore(context).pinsOf("Work"))
+    }
+
+    @Test
+    fun `an uninstalled app drops out of every arrangement's pins`() {
+        val store = PinStore(context)
+        store.pin("com.gone")
+        store.pin("com.kept")
+        store.setActive("Work")
+        store.pin("com.gone")
+
+        store.removeApps(listOf("com.gone"))
+
+        assertEquals(emptyList<String>(), store.pinned.value)
+        assertEquals(listOf("com.kept"), store.pinsOf(PinStore.DEFAULT_ARRANGEMENT))
+    }
+
     private fun prefs() = context.getSharedPreferences("home_pins", Context.MODE_PRIVATE)
 }
