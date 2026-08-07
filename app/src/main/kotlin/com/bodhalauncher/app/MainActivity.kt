@@ -548,7 +548,15 @@ private fun BodhaHost(
             return
         }
         Surface.Today -> {
-            TodaySurface(intentionStore = intentionStore, sheets = sheets)
+            TodaySurface(
+                intentionStore = intentionStore,
+                sheets = sheets,
+                education = education,
+                // The inbox lives inside Today and opens as its own surface;
+                // back from there returns Home (ADR 0011). A placeholder until
+                // inbox-02.
+                openInbox = { place = Place(Surface.Inbox) },
+            )
             return
         }
         else -> {

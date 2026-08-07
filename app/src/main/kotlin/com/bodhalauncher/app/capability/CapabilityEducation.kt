@@ -1,5 +1,7 @@
 package com.bodhalauncher.app.capability
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -76,6 +78,12 @@ class CapabilityEducation(
         remember(capability, resumeTick) { edge.granted(capability) }
 
     /**
+     * Whether the education has already been delivered — what lets a slot in
+     * its ungranted state drop the turn-on after a decline (#159, ADR 0017).
+     */
+    fun educationShown(capability: Capability): Boolean = store.shown(capability)
+
+    /**
      * A touchpoint asking for [capability]. Granted or already-answered touches
      * pass through silently; the sheet counts as delivered the moment it opens,
      * so a first feature touch educates once and never again.
@@ -141,9 +149,21 @@ class CapabilityEducation(
 @Composable
 fun rememberCapabilityEducation(events: EventLogger, sheets: SheetSlot): CapabilityEducation {
     val context = LocalContext.current
+    // The in-app runtime request (#159). The result itself is unused: the answer
+    // is read from the system on the tick, the same way every grant is observed.
+    val educationRef = remember { arrayOfNulls<CapabilityEducation>(1) }
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { educationRef[0]?.onResume() }
     val education = remember {
-        CapabilityEducation(CapabilityEdge(context), EducationStateStore(context), events, sheets)
+        CapabilityEducation(
+            CapabilityEdge(context, requestPermission = permissionLauncher::launch),
+            EducationStateStore(context),
+            events,
+            sheets,
+        )
     }
+    educationRef[0] = education
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->

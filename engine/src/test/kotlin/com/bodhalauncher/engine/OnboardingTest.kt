@@ -65,8 +65,10 @@ class OnboardingTest {
         // The flow is unreachable by swipe, Search or Home control because no
         // surface exists for them to resolve. The whole set is pinned, so any
         // future addition — under whatever name — re-answers this deliberately.
+        // Notifications joined with the digest (#161, ADR 0011): the inbox
+        // lives inside Today and opens as its own surface.
         assertEquals(
-            listOf("Home", "Search", "App Library", "Awareness", "Today", "Focus", "Settings"),
+            listOf("Home", "Search", "App Library", "Awareness", "Today", "Notifications", "Focus", "Settings"),
             Surface.entries.map { it.title },
         )
     }

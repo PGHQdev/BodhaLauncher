@@ -16,7 +16,15 @@ import com.bodhalauncher.engine.Capability
  * state and maps "continue" to the relevant system screen. No education rules
  * live here.
  */
-class CapabilityEdge(private val context: Context) {
+class CapabilityEdge(
+    private val context: Context,
+    /**
+     * Launches the in-app runtime permission dialog — the host's
+     * `ActivityResultLauncher` behind a plain function. Null where no activity
+     * is present (tests); the app-details screen stays the honest fallback.
+     */
+    private val requestPermission: ((String) -> Unit)? = null,
+) {
 
     fun granted(capability: Capability): Boolean = when (capability) {
         Capability.UsageAccess -> hasUsageAccess()
@@ -29,21 +37,32 @@ class CapabilityEdge(private val context: Context) {
 
     /**
      * Step 5 of the education flow: the exact Android surface for the grant.
-     * Runtime permissions (contacts, calendar, location) will use the in-app
-     * request dialog once their features exist; app details is the honest
-     * destination until then.
+     * Calendar continues into the in-app runtime request (#159) — education
+     * always precedes it, so the dialog only ever follows an explicit continue.
+     * Contacts and location join it when their features exist; app details is
+     * the honest destination until then.
      */
     fun openSystemScreen(capability: Capability) {
         val intent = when (capability) {
             Capability.UsageAccess -> Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
             Capability.NotificationAccess -> Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
-            else -> Intent(
-                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                Uri.fromParts("package", context.packageName, null),
-            )
+            Capability.Calendar -> {
+                val request = requestPermission
+                if (request != null) {
+                    request(android.Manifest.permission.READ_CALENDAR)
+                    return
+                }
+                appDetails()
+            }
+            else -> appDetails()
         }
         context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
+
+    private fun appDetails(): Intent = Intent(
+        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+        Uri.fromParts("package", context.packageName, null),
+    )
 
     private fun hasPermission(permission: String): Boolean =
         context.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED

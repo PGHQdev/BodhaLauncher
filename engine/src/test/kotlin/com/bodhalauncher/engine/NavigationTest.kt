@@ -89,7 +89,7 @@ class NavigationTest {
         val titles = Surface.entries.map { it.title }
 
         assertEquals(
-            listOf("Home", "Search", "App Library", "Awareness", "Today", "Focus", "Settings"),
+            listOf("Home", "Search", "App Library", "Awareness", "Today", "Notifications", "Focus", "Settings"),
             titles,
         )
     }

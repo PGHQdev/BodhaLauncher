@@ -16,6 +16,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.bodhalauncher.engine.DayEvent
 import com.bodhalauncher.engine.HomeAction
 import com.bodhalauncher.engine.LibraryIndexEntry
 import com.bodhalauncher.engine.LibraryLayout
@@ -116,6 +117,37 @@ fun DesignGallery() {
         MultiSelectRow(title = "Multi-select row, unavailable — the cap reached", picked = false, onToggle = {}, enabled = false)
         Spacer(Modifier.height(BodhaSpacing.xl))
 
+        // Today's day slot (#159): the event rows, the turn-on and the named
+        // absence, with fixed times so the golden never drifts with the clock.
+        SectionOverline("Day slot")
+        DayEventRow(event = GALLERY_ALL_DAY_EVENT, onClick = {})
+        DayEventRow(event = GALLERY_TIMED_EVENT, onClick = {})
+        Spacer(Modifier.height(BodhaSpacing.s))
+        CardRow(
+            title = "See what's left of your day",
+            subtitle = "Turn on calendar access",
+            onClick = {},
+        )
+        Spacer(Modifier.height(BodhaSpacing.s))
+        SlotNote("Nothing left on the calendar today.")
+        // The Tomorrow peek (#160): one row under its label, only when the day is spent.
+        Spacer(Modifier.height(BodhaSpacing.l))
+        SectionOverline("Tomorrow")
+        DayEventRow(event = GALLERY_TIMED_EVENT, onClick = {})
+        Spacer(Modifier.height(BodhaSpacing.xl))
+
+        // The digest slot (#161): the counts card — a chevron because it
+        // navigates — and its turn-on, with fixed counts so nothing drifts.
+        SectionOverline("Digest")
+        DigestCard(subtitle = "3 People · 1 Time-sensitive · 5 Updates", onTap = {})
+        Spacer(Modifier.height(BodhaSpacing.s))
+        CardRow(
+            title = "Today's notifications, counted",
+            subtitle = "Turn on notification access",
+            onClick = {},
+        )
+        Spacer(Modifier.height(BodhaSpacing.xl))
+
         // Focus (ADR 0026), forced rather than requested: only one node can hold
         // real focus, and the fixture has to show the ring on all four shapes.
         // Screenshots capture at rest, so without these specimens no golden ever
@@ -209,6 +241,18 @@ fun DesignGallery() {
 
 /** Fixed fixture content: no clock, no package manager, so the diff is the identity. */
 private val GALLERY_APP = HomeAction(id = "gallery.app", label = "Gallery app")
+
+private val GALLERY_ALL_DAY_EVENT = DayEvent(
+    eventId = 1, title = "Gallery holiday", allDay = true,
+    begin = java.time.LocalDateTime.of(2026, 8, 5, 0, 0),
+    end = java.time.LocalDateTime.of(2026, 8, 6, 0, 0),
+)
+
+private val GALLERY_TIMED_EVENT = DayEvent(
+    eventId = 2, title = "Gallery stand-up", allDay = false,
+    begin = java.time.LocalDateTime.of(2026, 8, 5, 9, 30),
+    end = java.time.LocalDateTime.of(2026, 8, 5, 10, 0),
+)
 
 private val GALLERY_PICKER_APPS = listOf(
     HomeAction(id = "gallery.one", label = "Atlas"),
