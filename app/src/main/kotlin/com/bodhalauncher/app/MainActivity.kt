@@ -60,7 +60,9 @@ import com.bodhalauncher.engine.EventType
 import com.bodhalauncher.engine.HomeAction
 import com.bodhalauncher.engine.HomeInputs
 import com.bodhalauncher.engine.Place
+import com.bodhalauncher.engine.SessionId
 import com.bodhalauncher.engine.Surface
+import com.bodhalauncher.engine.sessionOrNull
 import com.bodhalauncher.engine.resolveBack
 import com.bodhalauncher.engine.resolveRoot
 import com.bodhalauncher.engine.IntentCategory
@@ -133,7 +135,7 @@ class MainActivity : ComponentActivity() {
                     )
                 ) {
                     Box(modifier = Modifier.fillMaxSize().escapeIsBack()) {
-                        BodhaHost(pinStore, intentionStore, libraryStore, groupStore, openCheckStore, entitlementStore, catalog, app.intentPrompt, app.events, homeIntents.intValue)
+                        BodhaHost(pinStore, intentionStore, libraryStore, groupStore, openCheckStore, entitlementStore, catalog, app.intentPrompt, app.events, homeIntents.intValue, app.sessions.phase.value.sessionOrNull)
                     }
                 }
             }
@@ -168,6 +170,8 @@ private fun BodhaHost(
     intentPrompt: IntentPromptRuntime,
     events: EventLogger,
     homeIntents: Int,
+    /** The running session, for the surfaces whose state is scoped to one. */
+    session: SessionId?,
 ) {
     val pinnedIds by pinStore.pinned
     val hidden by pinStore.hidden
@@ -346,6 +350,16 @@ private fun BodhaHost(
     when (place.surface) {
         // Falls through to Home's own content below.
         Surface.Home -> Unit
+        Surface.Search -> {
+            SearchSurface(
+                pinStore = pinStore,
+                libraryStore = libraryStore,
+                catalog = catalog,
+                session = session,
+                openApp = openApp,
+            )
+            return
+        }
         Surface.Library -> {
             LibrarySurface(
                 pinStore = pinStore,

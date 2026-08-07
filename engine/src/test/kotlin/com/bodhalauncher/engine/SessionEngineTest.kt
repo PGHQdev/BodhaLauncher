@@ -3,6 +3,8 @@ package com.bodhalauncher.engine
 import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
+import kotlin.test.assertNull
 
 class SessionEngineTest {
 
@@ -478,5 +480,35 @@ class SessionEngineTest {
         )
 
         assertEquals(run(*events), run(*events))
+    }
+
+    @Test
+    fun `session-scoped state keeps its key across the merge window and loses it at the end`() {
+        val engine = SessionEngine()
+        engine.onEvent(DeviceEvent.Unlocked(at(0)))
+        val opened = engine.snapshot().phase.sessionOrNull
+
+        engine.onEvent(DeviceEvent.ScreenOff(at(60)))
+        assertEquals(opened, engine.snapshot().phase.sessionOrNull)
+
+        engine.onEvent(DeviceEvent.Unlocked(at(80)))
+        assertEquals(opened, engine.snapshot().phase.sessionOrNull)
+
+        engine.onEvent(DeviceEvent.ScreenOff(at(140)))
+        engine.advanceTo(at(200))
+        assertNull(engine.snapshot().phase.sessionOrNull)
+    }
+
+    @Test
+    fun `the next session is a different key`() {
+        val engine = SessionEngine()
+        engine.onEvent(DeviceEvent.Unlocked(at(0)))
+        val first = engine.snapshot().phase.sessionOrNull
+
+        engine.onEvent(DeviceEvent.ScreenOff(at(60)))
+        engine.advanceTo(at(120))
+        engine.onEvent(DeviceEvent.Unlocked(at(200)))
+
+        assertNotEquals(first, engine.snapshot().phase.sessionOrNull)
     }
 }
