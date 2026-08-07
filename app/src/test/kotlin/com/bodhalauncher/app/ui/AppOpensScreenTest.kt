@@ -16,12 +16,17 @@ import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.bodhalauncher.engine.AwarenessDuration
 import com.bodhalauncher.engine.AwarenessUsage
+import com.bodhalauncher.engine.EntitlementSnapshot
+import com.bodhalauncher.engine.FREE_AWARENESS_DAYS
 import com.bodhalauncher.engine.ForegroundEntry
 import com.bodhalauncher.engine.LaunchRecord
+import com.bodhalauncher.engine.ProBoundary
 import com.bodhalauncher.engine.UnavailableReason
 import com.bodhalauncher.engine.appOpensSourceLine
+import com.bodhalauncher.engine.awarenessWindowTerminusLine
 import com.bodhalauncher.engine.mergeLaunches
 import com.bodhalauncher.engine.resolveAppOpens
+import com.bodhalauncher.engine.resolveAwarenessWindow
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -46,6 +51,9 @@ class AppOpensScreenTest {
         val DAY_HEADINGS = listOf("Friday, 7 August", "Thursday, 6 August")
         val SPAN = AwarenessDuration.Span(8_100_000)
         val NO_ACCESS = AwarenessDuration.Unavailable(UnavailableReason.NoUsageAccess)
+        val NOW: LocalDateTime = LocalDateTime.of(2026, 8, 7, 14, 0)
+        /** A month back — outside any free window, inside what retention kept. */
+        val OLD: LocalDateTime = LocalDateTime.of(2026, 7, 8, 9, 0)
     }
 
     @get:Rule
@@ -86,6 +94,7 @@ class AppOpensScreenTest {
         // in to the education and does not have to say so.
         usage: AwarenessUsage = AwarenessUsage.Live,
         foreground: AwarenessDuration = SPAN,
+        boundary: ProBoundary? = null,
     ) = compose.setContent {
         BodhaTheme {
             AppOpensScreen(
@@ -93,8 +102,33 @@ class AppOpensScreenTest {
                 label = label ?: "atlas",
                 usage = usage,
                 onTurnOn = { turnedOn++ },
+                boundary = boundary,
+                boundaryTitle = awarenessWindowTerminusLine(FREE_AWARENESS_DAYS),
+                onBoundary = {},
             )
         }
+    }
+
+    /**
+     * The App view reads the whole retained log and clamps it here (#177), which
+     * is the only reason it can state a boundary at all — a query already
+     * narrowed to seven days would have nothing withheld to compare against.
+     * Once, at the foot, beneath the opens it cut.
+     */
+    @Test
+    fun `the App view states the boundary once, beneath its opens`() {
+        val window = resolveAwarenessWindow(EntitlementSnapshot(proActive = false), NOW)
+        val render = window.launches(launches + opened(minute = 0, day = 6).copy(at = OLD))
+
+        setScreen(launches = render.records, boundary = render.boundary)
+
+        val drawn = drawnText()
+        val terminus = awarenessWindowTerminusLine(FREE_AWARENESS_DAYS)
+        assertEquals(1, drawn.count { it == terminus })
+        assertEquals(terminus, drawn.last())
+        assertTrue(drawn.none { it == render.boundary?.explanation })
+        // The old open is gone from the rows, and the counts are of what renders.
+        assertTrue("3 opens · 3 sessions" in drawn)
     }
 
     @Test

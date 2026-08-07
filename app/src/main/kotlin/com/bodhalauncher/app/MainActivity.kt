@@ -747,6 +747,10 @@ private fun BodhaHost(
                 // same log the surfaces write to (#173).
                 events = events,
                 catalog = catalog,
+                // How much of the record renders (#177): the same cached
+                // snapshot the Library's Open Check rule cap already reads, so
+                // one gate answers for the whole app and nothing here fetches.
+                entitlementStore = entitlementStore,
                 // Foreground durations and the opens Bodha did not mediate, from
                 // the same reader Home's context lines already use (#175).
                 usage = usage,

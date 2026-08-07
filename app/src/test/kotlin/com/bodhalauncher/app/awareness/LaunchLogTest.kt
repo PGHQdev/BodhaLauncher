@@ -5,8 +5,10 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.bodhalauncher.app.data.BodhaDatabase
 import com.bodhalauncher.engine.DashboardInputs
 import com.bodhalauncher.engine.DashboardRow
+import com.bodhalauncher.engine.EntitlementSnapshot
 import com.bodhalauncher.engine.RetentionCategory
 import com.bodhalauncher.engine.SessionId
+import com.bodhalauncher.engine.resolveAwarenessWindow
 import com.bodhalauncher.engine.resolvePrivacyDashboard
 import java.time.Instant
 import java.time.LocalDateTime
@@ -14,6 +16,7 @@ import java.time.ZoneId
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
@@ -29,6 +32,10 @@ import org.robolectric.annotation.Config
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [35], application = android.app.Application::class)
 class LaunchLogTest {
+
+    private companion object {
+        val NOW: LocalDateTime = LocalDateTime.parse("2026-08-07T14:00:00")
+    }
 
     private lateinit var db: BodhaDatabase
     private lateinit var log: LaunchLog
@@ -110,6 +117,50 @@ class LaunchLogTest {
         log.write("atlas", at("2026-08-07T09:42:00"), SessionId(1))
 
         assertEquals(2, db.launchRecords().forApp("atlas").size)
+    }
+
+    /**
+     * One read, two tiers (#177). The query is the same rows either way and the
+     * window is the only thing that differs, which is what makes upgrading a
+     * recomposition rather than a second trip to the database — and what would be
+     * false the moment a bound reached this DAO.
+     */
+    @Test
+    fun `the launch query takes no bound, so both tiers read the same rows`() = runBlocking {
+        log.write("atlas", at("2026-06-01T09:00:00"), session = null)
+        log.write("atlas", at("2026-08-07T09:42:00"), SessionId(1))
+
+        val rows = db.launchRecords().forApp("atlas").map { it.toRecord() }
+        val free = resolveAwarenessWindow(EntitlementSnapshot(proActive = false), NOW).launches(rows)
+        val pro = resolveAwarenessWindow(EntitlementSnapshot(proActive = true), NOW).launches(rows)
+
+        assertEquals(2, rows.size)
+        assertEquals(1, free.records.size)
+        assertEquals(2, pro.records.size)
+        assertNotNull(free.boundary)
+        assertNull(pro.boundary)
+    }
+
+    /**
+     * The window lives in the render path and nowhere else (#177), asserted
+     * through the DAO and the dashboard rather than through a surface: a reader
+     * that is not a view sees every retained record whatever the tier.
+     */
+    @Test
+    fun `the launch log hands back every retained record, and only the window withholds one`() = runBlocking {
+        log.write("atlas", at("2026-06-01T09:00:00"), session = null)
+        log.write("atlas", at("2026-08-07T09:42:00"), SessionId(1))
+
+        assertEquals(2, db.launchRecords().count())
+        assertEquals(2, db.launchRecords().dashboardSummary().count)
+        assertEquals(2, db.launchRecords().forApp("atlas").size)
+
+        val rows = db.launchRecords().forApp("atlas").map { it.toRecord() }
+        assertEquals(
+            listOf(LocalDateTime.parse("2026-08-07T09:42:00")),
+            resolveAwarenessWindow(EntitlementSnapshot(proActive = false), NOW)
+                .launches(rows).records.map { it.at },
+        )
     }
 
     /**

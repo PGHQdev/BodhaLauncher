@@ -2,6 +2,7 @@ package com.bodhalauncher.app.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -23,7 +24,16 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.bodhalauncher.engine.AwarenessSession
 import com.bodhalauncher.engine.AwarenessToday
 import com.bodhalauncher.engine.AwarenessView
+import com.bodhalauncher.engine.EntitlementSnapshot
+import com.bodhalauncher.engine.FREE_AWARENESS_DAYS
+import com.bodhalauncher.engine.GateDecision
+import com.bodhalauncher.engine.GatedRequest
+import com.bodhalauncher.engine.ProBoundary
 import com.bodhalauncher.engine.SessionRecord
+import com.bodhalauncher.engine.awarenessWindowTerminusLine
+import com.bodhalauncher.engine.resolveAwarenessSessions
+import com.bodhalauncher.engine.resolveAwarenessWindow
+import com.bodhalauncher.engine.resolveEntitlement
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -83,12 +93,20 @@ class AwarenessScreenTest {
 
     private val opened = mutableListOf<Long>()
     private val picked = mutableListOf<AwarenessView>()
+    private var stated = 0
+
+    /** The gate's own copy, read from the gate so a copy edit lands here too. */
+    private val gateCopy = (
+        resolveEntitlement(EntitlementSnapshot(), GatedRequest.AwarenessHistory) as GateDecision.Capped
+        ).boundary
+    private val terminus = awarenessWindowTerminusLine(FREE_AWARENESS_DAYS)
 
     private fun setScreen(
         sessions: List<AwarenessSession>,
         today: AwarenessToday?,
         day: LocalDate = LocalDate.of(2026, 8, 7),
         isToday: Boolean = true,
+        boundary: ProBoundary? = null,
     ) = compose.setContent {
         BodhaTheme {
             AwarenessScreen(
@@ -98,6 +116,9 @@ class AwarenessScreenTest {
                 isToday = isToday,
                 onPickView = { picked += it },
                 onOpenSession = { opened += it.record.id },
+                boundary = boundary,
+                boundaryTitle = awarenessWindowTerminusLine(FREE_AWARENESS_DAYS),
+                onBoundary = { stated += 1 },
                 onBack = {},
             )
         }
@@ -254,6 +275,130 @@ class AwarenessScreenTest {
 
         compose.onRoot().performKeyInput { pressKey(Key.Escape) }
         assertEquals(1, backs)
+    }
+
+    /**
+     * At the edge of the window, once, and beneath everything it clamped (#177).
+     * Not on a row, because the reader crossed the edge once and marking every
+     * row would be the same sentence repeated down the screen.
+     */
+    @Test
+    fun `the boundary is stated once, beneath the rows, and on no row`() {
+        setScreen(day, AwarenessToday.Sessions(finished = 2, running = true), boundary = gateCopy)
+
+        val drawn = drawnText()
+        assertEquals(1, drawn.count { it == terminus })
+        // Last of everything drawn, after the final session row.
+        assertEquals(terminus, drawn.last())
+        val rows = nodes()
+            .filter { SemanticsActions.OnClick in it.config }
+            .map { node -> node.config.getOrNull(SemanticsProperties.Text).orEmpty().map { it.text } }
+        assertTrue(rows.none { it.size > 1 && terminus in it })
+    }
+
+    /**
+     * A view that stopped for want of records has nothing true to say about Pro,
+     * so nothing is said. A permanent line naming what Pro costs on a screen that
+     * lost nothing is an upsell (#177, ADR 0005).
+     */
+    @Test
+    fun `no boundary renders when the gate withheld nothing`() {
+        setScreen(day, AwarenessToday.Sessions(finished = 2, running = true))
+
+        assertTrue(drawnText().none { it == terminus })
+        assertTrue(drawnText().none { it == gateCopy.explanation })
+    }
+
+    /**
+     * Face is decided by authorship (ADR 0021, CONTEXT.md **Voice**). The row
+     * names what happened to the list — machinery, in the sans a `CardRow` title
+     * takes — and the sentence Bodha wrote stays in the dialog, where it is
+     * already faced as voice.
+     */
+    @Test
+    fun `the terminus row is machinery and the authored sentence stays in the dialog`() {
+        setScreen(day, AwarenessToday.Sessions(finished = 2, running = true), boundary = gateCopy)
+
+        assertTrue(terminus in drawnText())
+        assertTrue(drawnText().none { it == gateCopy.explanation })
+        // One actionable node, named by the terminus, and never phrased as a loss.
+        val row = nodes().single { SemanticsActions.OnClick in it.config && it.spokenName() == terminus }
+        row.config[SemanticsActions.OnClick].action?.invoke()
+        assertEquals(1, stated)
+    }
+
+    /** ADR 0020: the terminus is a control, so it owes the floor on both axes. */
+    @Test
+    fun `the boundary is one named node at the touch floor on both axes`() {
+        setScreen(day, AwarenessToday.Sessions(finished = 2, running = true), boundary = gateCopy)
+
+        val floor = with(compose.density) { TOUCH_TARGET_MIN.roundToPx() }
+        val row = nodes().single { SemanticsActions.OnClick in it.config && it.spokenName() == terminus }
+        assertTrue(
+            "${row.size.width}x${row.size.height}px",
+            row.size.width >= floor && row.size.height >= floor,
+        )
+        // Rule 3: it opens a dialog rather than navigating, so no chevron.
+        assertEquals(3, drawnText().count { it == "›" })
+    }
+
+    /**
+     * A Pro flip is a recomposition over the list already in hand, and that whole
+     * claim rests on `window` being a `remember` key where the resolution happens
+     * (#177). There is no `AwarenessSurfaceTest`, so the key list is held here or
+     * by nothing: the same records, one snapshot flip, a wider render and no
+     * second read anywhere in the harness.
+     */
+    @Test
+    fun `the window is a remember key, so a flipped snapshot re-resolves`() {
+        val records = listOf(
+            SessionRecord(
+                id = 1,
+                start = LocalDateTime.of(2026, 7, 8, 9, 12),
+                end = LocalDateTime.of(2026, 7, 8, 9, 14),
+            ),
+            SessionRecord(
+                id = 2,
+                start = LocalDateTime.of(2026, 8, 7, 9, 41),
+                end = LocalDateTime.of(2026, 8, 7, 9, 53),
+            ),
+        )
+        val now = LocalDateTime.of(2026, 8, 7, 14, 0)
+        compose.setContent {
+            BodhaTheme {
+                var snapshot by remember { mutableStateOf(EntitlementSnapshot(proActive = false)) }
+                val window = resolveAwarenessWindow(snapshot, now)
+                val render = remember(records, window) { window.sessions(records) }
+                Column(Modifier.fillMaxSize()) {
+                    Box(Modifier.weight(1f)) {
+                        AwarenessScreen(
+                            today = AwarenessToday.Sessions(render.records.size, running = false),
+                            sessions = resolveAwarenessSessions(render.records, emptyList()),
+                            day = LocalDate.of(2026, 8, 7),
+                            isToday = true,
+                            onPickView = {},
+                            onOpenSession = {},
+                            boundary = render.boundary,
+                            boundaryTitle = awarenessWindowTerminusLine(window.cap),
+                            onBoundary = {},
+                            onBack = {},
+                        )
+                    }
+                    ListRow("Pro", onClick = { snapshot = EntitlementSnapshot(proActive = true) })
+                }
+            }
+        }
+
+        assertTrue("9:41 · 12 minutes" in drawnText())
+        assertTrue("9:12 · 2 minutes" !in drawnText())
+        assertTrue(terminus in drawnText())
+
+        compose.onNodeWithText("Pro").performClick()
+
+        // The older record renders from the same list, with no read in between —
+        // and the boundary goes with it, because nothing is withheld any more.
+        assertTrue("9:12 · 2 minutes" in drawnText())
+        assertTrue(terminus !in drawnText())
     }
 
     @Test

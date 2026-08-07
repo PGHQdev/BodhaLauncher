@@ -19,14 +19,21 @@ import com.bodhalauncher.engine.AwarenessToday
 import com.bodhalauncher.engine.AwarenessUsage
 import com.bodhalauncher.engine.AwarenessView
 import com.bodhalauncher.engine.AwarenessWeek
+import com.bodhalauncher.engine.EntitlementSnapshot
+import com.bodhalauncher.engine.FREE_AWARENESS_DAYS
+import com.bodhalauncher.engine.GateDecision
+import com.bodhalauncher.engine.GatedRequest
 import com.bodhalauncher.engine.LaunchRecord
 import com.bodhalauncher.engine.Place
+import com.bodhalauncher.engine.ProBoundary
 import com.bodhalauncher.engine.SessionDetail
 import com.bodhalauncher.engine.SessionRecord
 import com.bodhalauncher.engine.Surface
 import com.bodhalauncher.engine.UnavailableReason
+import com.bodhalauncher.engine.awarenessWindowTerminusLine
 import com.bodhalauncher.engine.resolveAppOpens
 import com.bodhalauncher.engine.resolveBack
+import com.bodhalauncher.engine.resolveEntitlement
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -94,12 +101,23 @@ class AwarenessRouteTest {
      * every one of them, and there is no state anywhere for a second back press
      * to walk down. Two levels of drill-down and a switch, still no stack.
      */
+    /**
+     * The gate's own copy, and the terminus that opens the dialog stating it
+     * (#177). A free tier, so the Today branch below is standing on a day whose
+     * older records the window withheld.
+     */
+    private val boundary = (
+        resolveEntitlement(EntitlementSnapshot(), GatedRequest.AwarenessHistory) as GateDecision.Capped
+        ).boundary
+    private val terminus = awarenessWindowTerminusLine(FREE_AWARENESS_DAYS)
+
     @Composable
     private fun AwarenessBranch() {
         var open by remember { mutableStateOf<Long?>(null) }
         var openApp by remember { mutableStateOf<String?>(null) }
         var view by remember { mutableStateOf(AwarenessView.Today) }
         var picked by remember { mutableStateOf<LocalDate?>(null) }
+        var boundaryShown by remember { mutableStateOf<ProBoundary?>(null) }
         val appId = openApp
         when {
             appId != null -> AppOpensScreen(
@@ -133,8 +151,16 @@ class AwarenessRouteTest {
                 isToday = (picked ?: today) == today,
                 onPickView = { view = it; picked = null },
                 onOpenSession = { open = it.record.id },
+                boundary = boundary,
+                boundaryTitle = terminus,
+                onBoundary = { boundaryShown = boundary },
                 onBack = {},
             )
+        }
+        // The tail the one `when` exists for: the dialog renders over whichever
+        // branch is showing, exactly as it does on the surface (#177).
+        boundaryShown?.let {
+            ProBoundaryDialog(boundary = it, onDismiss = { boundaryShown = null })
         }
     }
 
@@ -217,6 +243,25 @@ class AwarenessRouteTest {
         compose.tabTo(ACTIVITY_ROOT, "Open Awareness")
         compose.press(ACTIVITY_ROOT, Key.Enter)
         assertTrue("1 session today" in compose.drawnTextIn(ACTIVITY_ROOT))
+    }
+
+    /**
+     * The boundary is a control like any other (#177, ADR 0020, ADR 0022): Tab
+     * reaches it and Enter states it. What it states is the authored sentence, in
+     * the dialog — the row above carried only the machinery naming what happened.
+     */
+    @Test
+    fun `Tab reaches the boundary and Enter states it`() {
+        setHost()
+
+        compose.tabTo(ACTIVITY_ROOT, terminus)
+        compose.press(ACTIVITY_ROOT, Key.Enter)
+
+        assertEquals(listOf(boundary.explanation), compose.drawnTextIn(DIALOG_ROOT))
+        assertFalse(boundary.explanation in compose.drawnTextIn(ACTIVITY_ROOT))
+
+        compose.press(DIALOG_ROOT, Key.Escape)
+        assertTrue(terminus in compose.drawnTextIn(ACTIVITY_ROOT))
     }
 
     /** ADR 0022: focus, then Enter, for every one of the seven. */

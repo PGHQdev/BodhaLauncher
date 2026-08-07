@@ -876,3 +876,121 @@ fun awarenessWeekRateLine(week: AwarenessWeek): String? {
 private fun hoursPerDayPhrase(millisPerDay: Long): String =
     String.format(Locale.ROOT, "%.1fh/day", millisPerDay / 3_600_000.0)
 
+/**
+ * What one view is about to draw, and whether the entitlement window cut
+ * anything out of it (#177).
+ *
+ * [boundary] is non-null **only where something was actually withheld**, which
+ * is the whole reason the filter hands back a pair rather than a list. A view
+ * that stopped for want of records and a view that stopped because the reader is
+ * not on Pro look identical from the outside, and only one of them has anything
+ * true to say about Pro.
+ */
+data class AwarenessRender<T>(val records: List<T>, val boundary: ProBoundary?)
+
+/**
+ * How much of Awareness renders (#177, ADR 0005, ADR 0013).
+ *
+ * **Retention governs what exists; entitlement governs what renders.** A free
+ * user's records accumulate under the ordinary retention config, and this window
+ * filters the list a query already returned. Three things fall out of that
+ * choice at once, and none of them needs a second code path to be true:
+ *
+ * - a reader that is not a view — the privacy dashboard, a later export, #183's
+ *   opens tally — sees every retained record, because nothing it calls knows
+ *   this type exists;
+ * - the caller learns for free whether anything was withheld, because the filter
+ *   compares sizes rather than trusting the query;
+ * - a Pro render provably takes the same path as a free one, because [from] is
+ *   null and the filter hands back the list it was given.
+ *
+ * [from] is a **floor on age and never a range**: the newest end is whatever the
+ * caller read. So Pro is this same view with the filter removed, and the Week's
+ * seven days sit inside the free window by construction (see
+ * [AWARENESS_WEEK_DAYS]) rather than by a second rule about the same seven days.
+ *
+ * **The window governs Bodha's own records and nothing else.** A figure read
+ * from Android's usage statistics is not a record Bodha kept — it is a
+ * measurement of the device, taken on demand and thrown away (ADR 0009) — so the
+ * period rate and the one before it render at every tier. Clamping them would
+ * withhold a figure with no boundary beside it to explain the absence, which is
+ * the one thing AC 4 forbids.
+ */
+data class AwarenessWindow(
+    /** The oldest day that renders, or null on Pro, where every retained day does. */
+    val from: LocalDate?,
+    /** The gate's own copy, stated only where [AwarenessRender] found a cut. */
+    val boundary: ProBoundary?,
+    /** How many days the tier renders, for the terminus line. Null on Pro. */
+    val cap: Int?,
+) {
+
+    /** The Week's days (#176), each kept or dropped whole — never drawn as empty. */
+    fun days(days: List<LocalDate>): AwarenessRender<LocalDate> = render(days) { it }
+
+    /** A session is placed by the day it started (ADR 0003), stamped at write. */
+    fun sessions(records: List<SessionRecord>): AwarenessRender<SessionRecord> =
+        render(records) { it.day }
+
+    /** A launch is placed by the day it happened, computed at read (see [AppDay]). */
+    fun launches(launches: List<LaunchRecord>): AwarenessRender<LaunchRecord> =
+        render(launches) { dayKey(it.at) }
+
+    private fun <T> render(items: List<T>, day: (T) -> LocalDate): AwarenessRender<T> {
+        if (from == null) return AwarenessRender(items, boundary = null)
+        val kept = items.filter { !day(it).isBefore(from) }
+        return AwarenessRender(kept, boundary?.takeIf { kept.size < items.size })
+    }
+}
+
+/**
+ * Resolves the window from the cached entitlement snapshot (#177, #22).
+ *
+ * Exhaustive over the gate rather than over a boolean, so the cap is ADR 0005's
+ * one number in one place and this function states no policy of its own. The
+ * [GateDecision.Locked] arm renders the current day alone — Awareness never
+ * resolves to it today, and an arm that threw would be a crash waiting on a
+ * pricing decision.
+ *
+ * The snapshot's staleness is not this function's problem and deliberately so:
+ * [EntitlementSnapshot] already promises that a stale or never-fetched cache
+ * never downgrades mid-session, so a fetch that failed resolves exactly what a
+ * fetch that never happened does, and neither narrows a window the reader was
+ * already looking through.
+ */
+fun resolveAwarenessWindow(
+    snapshot: EntitlementSnapshot,
+    now: LocalDateTime,
+): AwarenessWindow = when (val decision = resolveEntitlement(snapshot, GatedRequest.AwarenessHistory)) {
+    GateDecision.Allowed -> AwarenessWindow(from = null, boundary = null, cap = null)
+    is GateDecision.Capped -> AwarenessWindow(
+        from = dayKey(now).minusDays(decision.limit - 1L),
+        boundary = decision.boundary,
+        cap = decision.limit,
+    )
+    is GateDecision.Locked -> AwarenessWindow(
+        from = dayKey(now),
+        boundary = decision.boundary,
+        cap = 0,
+    )
+}
+
+/**
+ * What the terminus at the foot of a clamped view says (#177).
+ *
+ * **Machinery, not voice.** It names what happened to the list above it, in the
+ * sans every row title takes (ADR 0021, CONTEXT.md **Machinery**). The authored
+ * sentence — [ProBoundary.explanation], which Bodha wrote and means — stays in
+ * the dialog the terminus opens, where it is already set in the serif. Two
+ * registers for one fact, and each in the face its authorship earns.
+ *
+ * It states what renders rather than what does not. "Seven days render free" is
+ * the same fact as "you cannot see older than seven days" and is not a loss
+ * (#11): the records are all still there, and Pro is what draws them.
+ */
+fun awarenessWindowTerminusLine(cap: Int?): String = when (cap) {
+    null, 0 -> "Today renders free"
+    1 -> "1 day renders free"
+    else -> "${plural(cap.toLong(), "day")} render free"
+}
+

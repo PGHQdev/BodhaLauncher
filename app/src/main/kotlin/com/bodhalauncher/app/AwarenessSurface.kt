@@ -12,6 +12,7 @@ import com.bodhalauncher.app.awareness.toRecord
 import com.bodhalauncher.app.capability.CapabilityEducation
 import com.bodhalauncher.app.data.BodhaDatabase
 import com.bodhalauncher.app.data.EventLogger
+import com.bodhalauncher.app.entitlement.EntitlementStore
 import com.bodhalauncher.app.focus.toIntentSignal
 import com.bodhalauncher.app.home.AppCatalog
 import com.bodhalauncher.app.home.UsageReader
@@ -21,6 +22,7 @@ import com.bodhalauncher.app.session.toRecord
 import com.bodhalauncher.app.ui.AppOpensScreen
 import com.bodhalauncher.app.ui.AwarenessScreen
 import com.bodhalauncher.app.ui.AwarenessWeekScreen
+import com.bodhalauncher.app.ui.ProBoundaryDialog
 import com.bodhalauncher.app.ui.SessionDetailScreen
 import com.bodhalauncher.app.ui.minuteNow
 import com.bodhalauncher.engine.AWARENESS_WEEK_DAYS
@@ -29,11 +31,13 @@ import com.bodhalauncher.engine.Capability
 import com.bodhalauncher.engine.EducationEntry
 import com.bodhalauncher.engine.IntentSignal
 import com.bodhalauncher.engine.LaunchRecord
+import com.bodhalauncher.engine.ProBoundary
 import com.bodhalauncher.engine.RetentionCategory
 import com.bodhalauncher.engine.RetentionConfig
 import com.bodhalauncher.engine.SessionDetail
 import com.bodhalauncher.engine.SessionRecord
 import com.bodhalauncher.engine.awarenessDayRecords
+import com.bodhalauncher.engine.awarenessWindowTerminusLine
 import com.bodhalauncher.engine.dayKey
 import com.bodhalauncher.engine.dayStart
 import com.bodhalauncher.engine.mergeLaunches
@@ -43,6 +47,7 @@ import com.bodhalauncher.engine.resolveAwarenessDay
 import com.bodhalauncher.engine.resolveAwarenessSessions
 import com.bodhalauncher.engine.resolveAwarenessUsage
 import com.bodhalauncher.engine.resolveAwarenessWeek
+import com.bodhalauncher.engine.resolveAwarenessWindow
 import com.bodhalauncher.engine.resolveRetention
 import com.bodhalauncher.engine.resolveSessionDetail
 import com.bodhalauncher.engine.totalForegroundMillis
@@ -135,12 +140,23 @@ private data class AwarenessWeekReading(
  * neither adds depth; picking a day on the Week sets the day and switches the
  * view, and switching the view by hand drops both the picked day and the open
  * session — a switch answers "which view", not "where was I".
+ *
+ * **Every branch runs the same pipeline, in this order: read unfiltered, then
+ * clamp, then resolve** (#177). Nothing that reaches a DAO knows about
+ * entitlement, so retention, the privacy dashboard and any later export are
+ * unaffected by construction rather than by care — and a Pro flip is a
+ * recomposition over a list already in hand rather than a second trip to the
+ * database. That last claim rests entirely on `window` being a `remember` key
+ * wherever the resolution happens, so the key lists below are load-bearing
+ * rather than incidental.
  */
 @Composable
 fun AwarenessSurface(
     sessions: SessionRuntime,
     events: EventLogger,
     catalog: AppCatalog,
+    /** The same cached snapshot the Library's rule cap reads (#22) — never a fetch. */
+    entitlementStore: EntitlementStore,
     usage: UsageReader,
     education: CapabilityEducation,
     onBack: () -> Unit,
@@ -179,15 +195,29 @@ fun AwarenessSurface(
             }.getOrNull()
         } ?: value
     }
+    // How much of what was read renders (#177). Resolved from the cached
+    // snapshot rather than fetched: the cache is the gate's whole truth, and a
+    // billing outage must never narrow a window mid-session.
+    val window = resolveAwarenessWindow(entitlementStore.snapshot.value, now)
+    val terminus = awarenessWindowTerminusLine(window.cap)
+    var boundaryShown by remember { mutableStateOf<ProBoundary?>(null) }
+    // Clamped here rather than inside the read, so what renders is decided in
+    // composition over a list already in hand — which is what makes flipping the
+    // snapshot to Pro a recomposition rather than a second query. #178 adds the
+    // exclusions to these keys, ahead of the window.
+    val dayRender = remember(day, window) { day?.let { window.sessions(it.records) } }
     // Resolved here rather than inside the read, so what renders is decided in
-    // composition over a list already in hand. #177 adds the entitlement window
-    // to these keys and #178 adds the exclusions; both are recompositions.
-    val shownDay = remember(day, shown, now) {
-        day?.let { resolveAwarenessDay(it.records, shown, now) }
+    // composition over a list already in hand.
+    val shownDay = remember(dayRender, shown, now) {
+        dayRender?.let { resolveAwarenessDay(it.records, shown, now) }
     }
-    val shownSessions = remember(day, shown, now) {
-        day?.let { resolveAwarenessSessions(awarenessDayRecords(it.records, shown, now), it.signals) }
-            .orEmpty()
+    val shownSessions = remember(dayRender, day, shown, now) {
+        dayRender?.let {
+            resolveAwarenessSessions(
+                awarenessDayRecords(it.records, shown, now),
+                day?.signals.orEmpty(),
+            )
+        }.orEmpty()
     }
     // Resolved once per id rather than per recomposition: an icon is a binder
     // call and a bitmap decode, and a label is a walk of every installed app.
@@ -271,12 +301,18 @@ fun AwarenessSurface(
                 }
             }
             val label = labelFor(appId)
+            // The clamp is the last step before resolving, over the whole
+            // retained log the query returned (#177). Narrowing `forApp` instead
+            // would be the same rows on a free phone and a different code path
+            // on a Pro one — and this view could then never state a boundary,
+            // because there would be nothing withheld for it to compare against.
+            val appRender = remember(reading, window) { reading?.let { window.launches(it.launches) } }
             AppOpensScreen(
                 view = reading?.let {
                     resolveAppOpens(
                         appId = appId,
                         label = label,
-                        launches = it.launches,
+                        launches = appRender?.records.orEmpty(),
                         // The one place the id-to-package bridge is needed: the
                         // merge needs none, because a work-profile id matches no
                         // usage entry by construction and so collapses to the
@@ -291,6 +327,9 @@ fun AwarenessSurface(
                 label = label ?: appId,
                 usage = usageState,
                 onTurnOn = { education.ask(Capability.UsageAccess, EducationEntry.FeatureTouch) },
+                boundary = appRender?.boundary,
+                boundaryTitle = terminus,
+                onBoundary = { boundaryShown = appRender?.boundary },
             )
         }
 
@@ -365,20 +404,33 @@ fun AwarenessSurface(
                     }.getOrNull()
                 } ?: value
             }
+            val week = remember(reading, usageState, now, excludedPackages) {
+                reading?.let {
+                    resolveAwarenessWeek(
+                        records = it.records,
+                        signals = it.signals,
+                        // Both rates are readings of the device rather than
+                        // records Bodha kept, so the window does not govern them
+                        // and the period before renders at every tier (#177).
+                        foregroundMillis = totalForegroundMillis(it.foreground, excludedPackages),
+                        previousForegroundMillis =
+                            totalForegroundMillis(it.previousForeground, excludedPackages),
+                        usage = usageState,
+                        now = now,
+                    )
+                }
+            }
+            // The seven days consult the same gate every other view does, even
+            // though a rolling seven sits inside the free cap by construction and
+            // nothing is ever dropped at today's numbers. A withheld day is
+            // **absent** rather than drawn as #176's named-empty row, which would
+            // say a day held nothing when it held records this tier cannot render.
+            val weekRender = remember(week, window) {
+                week?.let { w -> window.days(w.days.map { it.day }) }
+            }
+            val shownDays = weekRender?.records.orEmpty()
             AwarenessWeekScreen(
-                week = remember(reading, usageState, now, excludedPackages) {
-                    reading?.let {
-                        resolveAwarenessWeek(
-                            records = it.records,
-                            signals = it.signals,
-                            foregroundMillis = totalForegroundMillis(it.foreground, excludedPackages),
-                            previousForegroundMillis =
-                                totalForegroundMillis(it.previousForeground, excludedPackages),
-                            usage = usageState,
-                            now = now,
-                        )
-                    }
-                },
+                week = week?.let { w -> w.copy(days = w.days.filter { it.day in shownDays }) },
                 usage = usageState,
                 onPickView = onPickView,
                 // Picking a day is a day and a view at once: the Week hands the
@@ -391,6 +443,9 @@ fun AwarenessSurface(
                 onTurnOnUsage = {
                     education.ask(Capability.UsageAccess, EducationEntry.FeatureTouch)
                 },
+                boundary = weekRender?.boundary,
+                boundaryTitle = terminus,
+                onBoundary = { boundaryShown = weekRender?.boundary },
             )
         }
 
@@ -401,8 +456,17 @@ fun AwarenessSurface(
             isToday = isToday,
             onPickView = onPickView,
             onOpenSession = { open = it.record.id },
+            boundary = dayRender?.boundary,
+            boundaryTitle = terminus,
+            onBoundary = { boundaryShown = dayRender?.boundary },
             onBack = onBack,
         )
+    }
+    // The tail the one `when` exists for: a dialog reachable from every branch,
+    // opened by whichever terminus the reader pressed, and stating the same
+    // authored sentence wherever it was opened from (#177).
+    boundaryShown?.let {
+        ProBoundaryDialog(boundary = it, onDismiss = { boundaryShown = null })
     }
 }
 

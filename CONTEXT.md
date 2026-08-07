@@ -72,6 +72,10 @@ _Avoid_: external launch, background launch, missed launch (nothing was missed; 
 An app's time in front over a rendered window, from Android's usage statistics. Needs usage access, covers the main profile only, and where it is absent the field states the absence in words and never resolves to 0.
 _Avoid_: screen time, usage time (both read as a verdict)
 
+**Entitlement window**:
+How much of Awareness renders: seven days free, everything retention kept on Pro. Applied in the render path only, so the records exist either way and export and the privacy dashboard reach all of them. It governs Bodha's own records, not a reading taken from Android — which is why a period rate renders at every tier.
+_Avoid_: retention window (that's what exists, not what renders), history cap, paywall
+
 **Intentional session**:
 A session in which the user stated an intent — answered the Intent Prompt, wrote an Open Check intention, or ran a Focus session. Every other session is unclassified.
 _Avoid_: unintentional session (the phone doesn't know), mindful session

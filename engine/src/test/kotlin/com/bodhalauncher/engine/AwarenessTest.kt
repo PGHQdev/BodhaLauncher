@@ -986,6 +986,13 @@ class AwarenessTest {
             awarenessWeekRateLine(week(millis = 78_120_000, previousMillis = 85_680_000)),
             awarenessWeekRateLine(week(millis = 85_680_000, previousMillis = 78_120_000)),
             awarenessWeekRateLine(week(millis = 78_120_000)),
+        ) + listOf(
+            // The entitlement terminus states what renders, never what was lost
+            // (#177) — the sweep is what holds it to that.
+            awarenessWindowTerminusLine(FREE_AWARENESS_DAYS),
+            awarenessWindowTerminusLine(1),
+            awarenessWindowTerminusLine(0),
+            awarenessWindowTerminusLine(null),
         )
         val forbidden = listOf("+", "-", "more", "less", "up", "down", "better", "worse", "most", "least")
         for (line in lines) {

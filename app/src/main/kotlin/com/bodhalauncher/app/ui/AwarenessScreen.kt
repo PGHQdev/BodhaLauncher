@@ -33,6 +33,7 @@ import com.bodhalauncher.engine.AwarenessToday
 import com.bodhalauncher.engine.AwarenessUsage
 import com.bodhalauncher.engine.AwarenessView
 import com.bodhalauncher.engine.AwarenessWeek
+import com.bodhalauncher.engine.ProBoundary
 import com.bodhalauncher.engine.SessionDetail
 import com.bodhalauncher.engine.appDayLine
 import com.bodhalauncher.engine.appOpensLine
@@ -75,6 +76,10 @@ fun AwarenessScreen(
     isToday: Boolean,
     onPickView: (AwarenessView) -> Unit,
     onOpenSession: (AwarenessSession) -> Unit,
+    /** Non-null only where the entitlement window withheld one of this day's records (#177). */
+    boundary: ProBoundary? = null,
+    boundaryTitle: String = "",
+    onBoundary: () -> Unit = {},
     onBack: () -> Unit,
 ) {
     if (today == null) {
@@ -94,6 +99,9 @@ fun AwarenessScreen(
                 arrival = if (sessions.isEmpty()) Modifier.focusOnOpen() else Modifier,
             )
         },
+        boundary = boundary,
+        boundaryTitle = boundaryTitle,
+        onBoundary = onBoundary,
     ) {
         sessions.forEachIndexed { index, session ->
             SessionRow(
@@ -167,6 +175,17 @@ private fun AwarenessList(
      * for itself whether a row takes arrival first; the drill-downs pass none.
      */
     switch: (@Composable () -> Unit)? = null,
+    /**
+     * The entitlement window's terminus (#177), non-null **only where the window
+     * actually withheld a record**. A view that stopped for want of records has
+     * nothing true to say about Pro, and a permanent line naming what Pro costs
+     * on a screen that lost nothing is an upsell — which [ProBoundaryDialog]'s
+     * own copy refuses to be.
+     */
+    boundary: ProBoundary? = null,
+    /** What the terminus says: machinery, and never the authored sentence (ADR 0021). */
+    boundaryTitle: String = "",
+    onBoundary: () -> Unit = {},
     content: @Composable () -> Unit,
 ) {
     val colors = LocalBodhaColors.current
@@ -197,6 +216,17 @@ private fun AwarenessList(
         }
         Spacer(Modifier.height(BodhaSpacing.l))
         content()
+        // Once, at the edge of the window, beneath everything it renders — never
+        // repeated per row, because the reader crossed the edge once. A card
+        // rather than a hairline row because it is the list's terminus rather
+        // than one more record in it (ADR 0025 rule 1), and no chevron because it
+        // opens a dialog rather than navigating (rule 3).
+        boundary?.let {
+            Spacer(Modifier.height(BodhaSpacing.l))
+            // Plain, deliberately: Awareness's primary action is reading the
+            // record, and there is nothing here to buy until billing lands (#22).
+            CardRow(title = boundaryTitle, onClick = onBoundary)
+        }
     }
 }
 
@@ -299,6 +329,16 @@ fun AwarenessWeekScreen(
     onOpenDay: (LocalDate) -> Unit,
     /** Enters the one capability-education flow (#157), never a second copy of it. */
     onTurnOnUsage: () -> Unit,
+    /**
+     * Non-null only where the window dropped one of the seven days (#177). A
+     * rolling seven sits inside the free window by construction, so on today's
+     * caps this is always null — the parameter is here because the cap is
+     * ADR 0005's to change and a Week that silently shortened itself would be
+     * the one clamped view with nothing to explain it.
+     */
+    boundary: ProBoundary? = null,
+    boundaryTitle: String = "",
+    onBoundary: () -> Unit = {},
 ) {
     val colors = LocalBodhaColors.current
     AwarenessList(
@@ -311,6 +351,9 @@ fun AwarenessWeekScreen(
                 arrival = if (week == null) Modifier.focusOnOpen() else Modifier,
             )
         },
+        boundary = boundary,
+        boundaryTitle = boundaryTitle,
+        onBoundary = onBoundary,
     ) {
         if (week == null) return@AwarenessList
         // Where there is a rate it is the line under the title, and this says
@@ -380,6 +423,12 @@ fun SessionRow(
  * (#174): a session that opened nothing has no rows at all, and conditional
  * arrival focus would leave exactly that case with no chain for Escape to travel
  * up.
+ *
+ * It is the one Awareness view that carries no entitlement boundary (#177), and
+ * that is a fact about the record rather than an omission: a session is reached
+ * from a list the window has already clamped, and a launch is never older than
+ * the session it was made in — so nothing here can fall outside a window the row
+ * that opened it fell inside.
  */
 @Composable
 fun SessionDetailScreen(
@@ -510,6 +559,15 @@ fun AppOpensScreen(
     usage: AwarenessUsage,
     /** Enters the one capability-education flow (#157), never a second copy of it. */
     onTurnOn: () -> Unit,
+    /**
+     * Non-null only where the window withheld an open (#177). The launch log is
+     * read whole and clamped here, which is what lets this view state a boundary
+     * at all — a query narrowed to seven days would have nothing to compare
+     * against and would never speak.
+     */
+    boundary: ProBoundary? = null,
+    boundaryTitle: String = "",
+    onBoundary: () -> Unit = {},
 ) {
     val colors = LocalBodhaColors.current
     val formats = LocalBodhaFormats.current
@@ -517,7 +575,14 @@ fun AppOpensScreen(
         AwarenessList(title = label, line = null, focusSelf = true) {}
         return
     }
-    AwarenessList(title = view.name, line = appOpensLine(view), focusSelf = true) {
+    AwarenessList(
+        title = view.name,
+        line = appOpensLine(view),
+        focusSelf = true,
+        boundary = boundary,
+        boundaryTitle = boundaryTitle,
+        onBoundary = onBoundary,
+    ) {
         val foreground = awarenessForegroundLine(view.foreground, usage)
         if (usage is AwarenessUsage.Ungranted && usage.offersTurnOn) {
             // Plain emphasis and one ink: this is a way in, not the screen's
