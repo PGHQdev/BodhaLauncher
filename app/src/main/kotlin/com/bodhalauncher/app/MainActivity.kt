@@ -379,6 +379,16 @@ private fun BodhaHost(
     when (place.surface) {
         // Falls through to Home's own content below.
         Surface.Home -> Unit
+        Surface.Search -> {
+            SearchSurface(
+                pinStore = pinStore,
+                libraryStore = libraryStore,
+                catalog = catalog,
+                session = sessions.currentSession,
+                openApp = openApp,
+            )
+            return
+        }
         Surface.Library -> {
             LibrarySurface(
                 pinStore = pinStore,

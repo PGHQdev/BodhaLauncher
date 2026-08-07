@@ -264,6 +264,25 @@ fun Modifier.focusOnOpen(): Modifier {
 }
 
 /**
+ * Arrival focus for the one surface that wants the IME with it: Search.
+ *
+ * ADR 0014's zero-query state is "empty field, keyboard up", and Search exists to
+ * be typed into — so [focusOnOpen]'s hide-on-arrival, which is ADR 0022's general
+ * rule, is the wrong half of the behaviour here (#180). Focusing a text field is
+ * already what shows the IME, so this is [focusOnOpen] with the hide removed
+ * rather than a second mechanism.
+ *
+ * It carries the same Escape dependency: the surface holds focus from the first
+ * frame, so the root binding is reachable without the user pressing Tab first.
+ */
+@Composable
+fun Modifier.focusOnOpenWithIme(): Modifier {
+    val requester = remember { FocusRequester() }
+    LaunchedEffect(Unit) { requester.requestFocus() }
+    return focusRequester(requester)
+}
+
+/**
  * **Down enters the list beneath a field.** Enter then activates the row through
  * its own `clickable`, for free.
  *

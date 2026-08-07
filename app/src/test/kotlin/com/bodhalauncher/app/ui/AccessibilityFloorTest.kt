@@ -1,16 +1,23 @@
 package com.bodhalauncher.app.ui
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.bodhalauncher.engine.HomeAction
 import com.bodhalauncher.engine.LibraryIndexEntry
 import com.bodhalauncher.engine.OpenCheckLines
+import com.bodhalauncher.engine.SearchInputs
+import com.bodhalauncher.engine.resolveSearch
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -81,8 +88,7 @@ class AccessibilityFloorTest {
         assertTrue(
             "the fixtures must render actionable components, or this suite proves nothing",
             actionableNodes().size >= 12,
-        )
-    }
+        )    }
 
     @Test
     fun `every actionable node meets the touch-target floor on both axes`() {
@@ -150,6 +156,11 @@ private val RAIL_INDEX = listOf('A', 'F', 'M')
  * Every fixture that exists, composed together. The gallery holds the shared
  * components; the two sheets are here because they already had fixtures, and a
  * sheet is where several text fields and footer actions actually live.
+ *
+ * Search comes as a whole screen rather than as a gallery specimen: its field is
+ * its own and not a shared component (#180), so the gallery — which holds the
+ * roster, not the screens — is the wrong place for it, and this walk is the guard
+ * it must not escape.
  */
 @Composable
 private fun AllFixtures() {
@@ -172,5 +183,25 @@ private fun AllFixtures() {
             onAddFive = {},
             onContinue = {},
         )
+        // Last and height-bounded: SearchScreen fills what it is given, and what
+        // is above it must keep the size it measured.
+        Box(Modifier.height(SEARCH_FIXTURE_HEIGHT)) {
+            SearchScreen(
+                state = resolveSearch(SearchInputs(apps = listOf(SEARCH_APP), query = SEARCH_QUERY)),
+                query = SEARCH_QUERY,
+                onQueryChange = {},
+                iconFor = { null },
+                iconKey = Unit,
+                onOpen = {},
+            )
+        }
     }
 }
+
+/** Enough for the field and the one row beneath it, which is all this fixture needs. */
+private val SEARCH_FIXTURE_HEIGHT = 240.dp
+
+/** Matches at a word boundary, so the fixture draws a result row as well as the field. */
+private const val SEARCH_QUERY = "gallery"
+
+private val SEARCH_APP = HomeAction(id = "fixture.search.app", label = "Gallery app")

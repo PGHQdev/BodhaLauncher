@@ -20,6 +20,7 @@ import com.bodhalauncher.engine.SessionId
 import com.bodhalauncher.engine.SessionPhase
 import com.bodhalauncher.engine.Transition
 import com.bodhalauncher.engine.UsageRecord
+import com.bodhalauncher.engine.sessionOrNull
 import java.time.Duration
 import java.time.Instant
 
@@ -39,16 +40,16 @@ class SessionRuntime(private val context: Context) {
     private val listeners = mutableListOf<(Transition) -> Unit>()
 
     /**
-     * Which session anything saved right now belongs to (#134). A provisional
-     * end still counts: the merge window may yet resume it, so state saved under
-     * it is not stale — that is the same reading [applySessionBoundary] takes.
+     * Which session anything scoped to one belongs to right now — the sheet slot's
+     * saved state (#134) and Search's query (#180). Backed by [sessionOrNull], so
+     * the merge window's rule that a provisional end still names its session is
+     * read from the engine rather than restated beside it.
+     *
+     * [phase] is snapshot state, so composition reading this recomposes when the
+     * session changes.
      */
     val currentSession: SessionId?
-        get() = when (val current = phase.value) {
-            is SessionPhase.Active -> current.session
-            is SessionPhase.ProvisionalEnd -> current.session
-            SessionPhase.Idle -> null
-        }
+        get() = phase.value.sessionOrNull
 
     /** Register before [start] — restart reconciliation and backfill also publish. */
     fun addTransitionListener(listener: (Transition) -> Unit) {

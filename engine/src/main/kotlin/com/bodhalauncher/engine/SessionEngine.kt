@@ -52,6 +52,21 @@ sealed interface SessionPhase {
 }
 
 /**
+ * The session this phase belongs to, and the key session-scoped state hangs off.
+ *
+ * A provisional end still names its session, so state keyed on this survives a
+ * screen-off that a re-unlock inside the merge window resumes, and is dropped only
+ * once the end is final — which is the merge window's rule rather than a second
+ * reading of it.
+ */
+val SessionPhase.sessionOrNull: SessionId?
+    get() = when (this) {
+        is SessionPhase.Active -> session
+        is SessionPhase.ProvisionalEnd -> session
+        SessionPhase.Idle -> null
+    }
+
+/**
  * The engine's complete state, exposed after every transition so the adapter can
  * persist it; restoring it into a fresh engine continues exactly where this one was.
  */
