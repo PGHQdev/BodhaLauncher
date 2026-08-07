@@ -11,6 +11,7 @@ import com.bodhalauncher.app.focus.PendingFocusEnd
 import com.bodhalauncher.engine.EducationScreen
 import com.bodhalauncher.engine.HomeAction
 import com.bodhalauncher.engine.PromptDecision
+import com.bodhalauncher.engine.SearchContact
 import com.bodhalauncher.engine.SessionId
 import com.bodhalauncher.engine.TimedSessionEnd
 
@@ -40,6 +41,9 @@ sealed class Sheet {
 
     /** A search result's actions — the Library's hide and pin, met in Search (#184). */
     class ResultActions(val app: HomeAction) : Sheet()
+
+    /** A contact result's actions — call and message live here, never on the tap (#186). */
+    class ContactActions(val contact: SearchContact) : Sheet()
 
     /**
      * The reflexive-use prompt on Home (#4). It carries the decision it was

@@ -31,7 +31,9 @@ import com.bodhalauncher.app.home.ModeStore
 import com.bodhalauncher.app.home.PinStore
 import com.bodhalauncher.app.home.SearchDefaultStore
 import com.bodhalauncher.app.home.UsageReader
+import com.bodhalauncher.app.contacts.ContactsReader
 import com.bodhalauncher.app.inbox.MuteStore
+import com.bodhalauncher.app.today.CalendarReader
 import com.bodhalauncher.app.capability.CapabilityEducationHost
 import com.bodhalauncher.app.capability.rememberCapabilityEducation
 import com.bodhalauncher.app.data.EventLogger
@@ -630,6 +632,10 @@ private fun BodhaHost(
                 libraryStore = libraryStore,
                 defaultStore = defaultStore,
                 catalog = catalog,
+                education = education,
+                calendar = remember { CalendarReader(context) },
+                contacts = remember { ContactsReader(context) },
+                focusStore = focusStore,
                 session = sessions.currentSession,
                 surfaces = BUILT_SURFACES,
                 sheets = sheets,

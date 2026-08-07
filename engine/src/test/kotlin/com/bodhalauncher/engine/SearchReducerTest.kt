@@ -396,4 +396,159 @@ class SearchReducerTest {
 
         assertEquals(listOf("New chat", "New selfie"), labels(search, SearchSection.Shortcuts))
     }
+
+    // --- Contacts (#186) ---
+
+    private fun contact(name: String) =
+        SearchContact(contactId = name.hashCode().toLong(), lookupKey = name.lowercase(), name = name)
+
+    @Test
+    fun `contacts match by the word-boundary rule in their own section`() {
+        val search = resolveSearch(
+            SearchInputs(
+                contacts = listOf(contact("John Okafor"), contact("Marjorie Johns"), contact("Ines")),
+                query = "jo",
+            )
+        )
+
+        // "jo" prefixes "John" and "Johns" at a word boundary; nothing mid-word.
+        assertEquals(listOf("John Okafor", "Marjorie Johns"), labels(search, SearchSection.Contacts))
+    }
+
+    @Test
+    fun `contacts order lexically with no reason lines — no affinity signal exists`() {
+        val search = resolveSearch(
+            SearchInputs(
+                contacts = listOf(contact("john b"), contact("Adele Johnson"), contact("Johanna")),
+                query = "jo",
+            )
+        )
+
+        assertEquals(listOf("Adele Johnson", "Johanna", "john b"), labels(search, SearchSection.Contacts))
+        assertEquals(listOf(null, null, null), reasons(search, SearchSection.Contacts))
+    }
+
+    @Test
+    fun `without the contacts grant the section is a named state, never absent`() {
+        val search = resolveSearch(
+            SearchInputs(contacts = listOf(contact("John")), contactsGranted = false, query = "jo")
+        )
+
+        assertEquals(listOf(SEARCH_CONTACTS_OFF), labels(search, SearchSection.Contacts))
+        assertTrue(
+            search.nothingFound,
+            "a named state is not a find: the query itself still matched nothing",
+        )
+    }
+
+    @Test
+    fun `a real match beside a named state clears the empty state`() {
+        val search = resolveSearch(
+            SearchInputs(apps = installed, contactsGranted = false, query = "insta")
+        )
+
+        assertEquals(listOf("Instagram"), labels(search, SearchSection.Apps))
+        assertEquals(listOf(SEARCH_CONTACTS_OFF), labels(search, SearchSection.Contacts))
+        assertFalse(search.nothingFound)
+    }
+
+    // --- Calendar (#187) ---
+
+    private fun instance(
+        title: String,
+        beginHour: Int = 10,
+        day: Int = 7,
+        visible: Boolean = true,
+        declined: Boolean = false,
+    ) = ProviderInstance(
+        eventId = title.hashCode().toLong(),
+        title = title,
+        allDay = false,
+        begin = java.time.LocalDateTime.of(2026, 8, day, beginHour, 0),
+        end = java.time.LocalDateTime.of(2026, 8, day, beginHour + 1, 0),
+        calendarVisible = visible,
+        selfDeclined = declined,
+    )
+
+    @Test
+    fun `calendar matches event titles, chronologically, declined and hidden dropped`() {
+        val search = resolveSearch(
+            SearchInputs(
+                calendarInstances = listOf(
+                    instance("Dentist follow-up", day = 20),
+                    instance("Dentist appointment", day = 12),
+                    instance("Dentist declined", day = 8, declined = true),
+                    instance("Dentist hidden", day = 9, visible = false),
+                    instance("Standup", day = 10),
+                ),
+                query = "dent",
+            )
+        )
+
+        assertEquals(
+            listOf("Dentist appointment", "Dentist follow-up"),
+            labels(search, SearchSection.Calendar),
+        )
+    }
+
+    @Test
+    fun `the calendar section is absent while its read is still in flight`() {
+        val search = resolveSearch(SearchInputs(apps = installed, calendarInstances = null, query = "insta"))
+
+        assertEquals(listOf(SearchSection.Apps), search.sections.map { it.section })
+    }
+
+    @Test
+    fun `without the calendar grant the section is a named state, never absent`() {
+        val search = resolveSearch(SearchInputs(calendarGranted = false, query = "dent"))
+
+        assertEquals(listOf(SEARCH_CALENDAR_OFF), labels(search, SearchSection.Calendar))
+    }
+
+    @Test
+    fun `the searched range is 7 days back through 30 forward of the day boundary`() {
+        // 2am belongs to the previous day key (ADR 0003), so the boundary is yesterday's 4am.
+        val (from, until) = searchCalendarWindow(java.time.LocalDateTime.of(2026, 8, 7, 2, 0))
+
+        assertEquals(java.time.LocalDateTime.of(2026, 7, 30, 4, 0), from)
+        assertEquals(java.time.LocalDateTime.of(2026, 9, 5, 4, 0), until)
+    }
+
+    @Test
+    fun `sections keep the fixed order — contacts, calendar, between shortcuts and actions`() {
+        val search = resolveSearch(
+            SearchInputs(
+                apps = listOf(app("Dent")),
+                contacts = listOf(contact("Dentist Dan")),
+                calendarInstances = listOf(instance("Dentist")),
+                actions = listOf(SearchAction(id = "a", label = "Dental settings")),
+                query = "dent",
+            )
+        )
+
+        assertEquals(
+            listOf(SearchSection.Apps, SearchSection.Contacts, SearchSection.Calendar, SearchSection.Actions),
+            search.sections.map { it.section },
+        )
+    }
+
+    // --- Focus setups (#190) ---
+
+    @Test
+    fun `a previous Focus label matches by the word-boundary rule in the actions section`() {
+        val setup = FocusSetup(label = "Deep work", minutes = 60, allowedAppIds = setOf("com.a"))
+        val search = resolveSearch(SearchInputs(focusSetups = listOf(setup), query = "wo"))
+
+        val rows = search.sections.first { it.section == SearchSection.Actions }.rows
+        assertEquals(listOf("Deep work"), rows.map { it.result.label })
+        assertEquals(setup, (rows.single().result as FocusActionResult).setup)
+    }
+
+    @Test
+    fun `with no previous sessions the focus domain contributes nothing at all`() {
+        val search = resolveSearch(SearchInputs(apps = installed, query = "focus"))
+
+        assertTrue(search.sections.none { section -> section.rows.any { it.result is FocusActionResult } })
+        assertTrue(search.nothingFound)
+    }
 }

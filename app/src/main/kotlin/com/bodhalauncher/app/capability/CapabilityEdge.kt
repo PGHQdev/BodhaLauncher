@@ -37,23 +37,25 @@ class CapabilityEdge(
 
     /**
      * Step 5 of the education flow: the exact Android surface for the grant.
-     * Calendar continues into the in-app runtime request (#159) — education
-     * always precedes it, so the dialog only ever follows an explicit continue.
-     * Contacts and location join it when their features exist; app details is
+     * Calendar and contacts continue into the in-app runtime request (#159,
+     * #186) — education always precedes it, so the dialog only ever follows an
+     * explicit continue. Location joins when its feature exists; app details is
      * the honest destination until then.
      */
     fun openSystemScreen(capability: Capability) {
+        val runtimePermission = when (capability) {
+            Capability.Calendar -> android.Manifest.permission.READ_CALENDAR
+            Capability.Contacts -> android.Manifest.permission.READ_CONTACTS
+            else -> null
+        }
+        val request = requestPermission
+        if (runtimePermission != null && request != null) {
+            request(runtimePermission)
+            return
+        }
         val intent = when (capability) {
             Capability.UsageAccess -> Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
             Capability.NotificationAccess -> Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
-            Capability.Calendar -> {
-                val request = requestPermission
-                if (request != null) {
-                    request(android.Manifest.permission.READ_CALENDAR)
-                    return
-                }
-                appDetails()
-            }
             else -> appDetails()
         }
         context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))

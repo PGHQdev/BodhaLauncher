@@ -13,6 +13,7 @@ import com.bodhalauncher.engine.DataCategorySummary
 import com.bodhalauncher.engine.EventType
 import com.bodhalauncher.engine.FocusRecord
 import com.bodhalauncher.engine.FocusSession
+import com.bodhalauncher.engine.FocusSetup
 import com.bodhalauncher.engine.RetentionCategory
 import com.bodhalauncher.engine.RetentionConfig
 import com.bodhalauncher.engine.endFocusSession
@@ -100,6 +101,15 @@ class FocusStore(context: Context, private val dao: FocusRecordDao, private val 
     val pending = mutableStateOf(loadPending())
 
     /**
+     * Previous setups, most recent first — what Search offers to start again
+     * (#190). One entry per label: restarting a label moves it up carrying its
+     * latest duration and allowed apps. Capped at [MAX_SETUPS], a default
+     * chosen here and cheap to change; unlike the records these are a
+     * convenience list, so no retention category applies (ADR 0029).
+     */
+    val setups = mutableStateOf(loadSetups())
+
+    /**
      * The last ended session's row, persisted so extend can remove it even
      * across a restart. Written on the single lane after the insert, so a
      * following extend's delete always finds it (FIFO).
@@ -112,9 +122,38 @@ class FocusStore(context: Context, private val dao: FocusRecordDao, private val 
     fun start(label: String, minutes: Long, allowedAppIds: Set<String>, now: Instant) {
         if (active.value != null) return
         setActive(startFocusSession(label, minutes, allowedAppIds, now))
+        recordSetup(FocusSetup(label.trim(), minutes, allowedAppIds))
         // Type and timestamp only — no label, no app names (ADR 0009).
         events.log(EventType.FocusStarted)
     }
+
+    private fun recordSetup(setup: FocusSetup) {
+        val kept = listOf(setup) + setups.value.filter { it.label != setup.label }
+        setups.value = kept.take(MAX_SETUPS)
+        prefs.edit {
+            putString(
+                KEY_SETUPS,
+                setups.value.joinToString(SETUP_SEP) {
+                    listOf(it.label, it.minutes.toString(), it.allowedAppIds.joinToString(ID_SEP))
+                        .joinToString(FIELD_SEP)
+                },
+            )
+        }
+    }
+
+    private fun loadSetups(): List<FocusSetup> =
+        prefs.getString(KEY_SETUPS, null).orEmpty()
+            .split(SETUP_SEP)
+            .mapNotNull { entry ->
+                val fields = entry.split(FIELD_SEP)
+                if (fields.size != 3) return@mapNotNull null
+                val minutes = fields[1].toLongOrNull() ?: return@mapNotNull null
+                FocusSetup(
+                    label = fields[0],
+                    minutes = minutes,
+                    allowedAppIds = fields[2].split(ID_SEP).filter { it.isNotEmpty() }.toSet(),
+                )
+            }
 
     /** End from the running surface: the moment shows immediately, since the user is on root. */
     fun endEarly(now: Instant) = end(now)
@@ -281,5 +320,12 @@ class FocusStore(context: Context, private val dao: FocusRecordDao, private val 
 
         const val KEY_LAST_ROW = "lastEndedRowId"
         const val NONE = -1L
+
+        const val KEY_SETUPS = "setups"
+        const val MAX_SETUPS = 12
+        // Control characters no keyboard types, so a label never collides.
+        const val SETUP_SEP = "\u001E"
+        const val FIELD_SEP = "\u001F"
+        const val ID_SEP = "\u0000"
     }
 }

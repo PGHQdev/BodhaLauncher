@@ -78,6 +78,13 @@ class CapabilityEducation(
         remember(capability, resumeTick) { edge.granted(capability) }
 
     /**
+     * The same read, for a caller that owns its own moment of observation —
+     * Search re-reads per query rather than per resume, so a mid-session grant
+     * lands on the next query instead of retroactively re-rendering (#186).
+     */
+    fun grantedNow(capability: Capability): Boolean = edge.granted(capability)
+
+    /**
      * Whether the education has already been delivered — what lets a slot in
      * its ungranted state drop the turn-on after a decline (#159, ADR 0017).
      */
