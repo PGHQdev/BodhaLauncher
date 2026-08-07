@@ -124,6 +124,20 @@ data class SurfaceResult(val surface: Surface) : SearchResult {
 }
 
 /**
+ * One of Bodha's own Settings rows (#191, ADR 0019): people search for the
+ * control — "theme", "export", "delete" — so the individual row is the target
+ * and the section it sits in is not. Selecting one goes to Settings and stands
+ * on the row, which is why it wears the chevron a [SurfaceResult] does.
+ *
+ * Matched on [SettingsRow.label], the string the row is drawn under, so what
+ * answers and what appears are the same word.
+ */
+data class SettingsRowResult(val row: SettingsRow) : SearchResult {
+    override val key get() = "settings-row:${row.id}"
+    override val label get() = row.label
+}
+
+/**
  * A ranked result: what matched, and the one-line reason it sits where it does.
  * [reason] cites only a tier that actually lifted the row — an exact match or the
  * user's own pin. Match quality is every row's baseline, so it explains nothing
@@ -163,6 +177,18 @@ data class SearchInputs(
      * host owns which have shipped, so an unbuilt one never appears as a result.
      */
     val surfaces: List<Surface> = emptyList(),
+    /**
+     * Bodha's own Settings rows, from [SETTINGS_ROWS] — the catalogue that sits
+     * beside the row definitions, so a row added there is findable by
+     * construction and Search keeps no second list (ADR 0019). The privacy
+     * dashboard's rows are members of that one flat catalogue like any other, so
+     * "delete" reaches delete-local-data without the domain learning about
+     * sub-screens.
+     *
+     * Handed in rather than read, for [surfaces]' reason: the host owns which
+     * rows this build renders, so a row whose control is absent never appears.
+     */
+    val settingsRows: List<SettingsRow> = emptyList(),
     /** What has been typed; [isBlankQuery] text lists nothing at all. */
     val query: String = "",
     /** App ids the user has hidden in the App Library (#62). */
@@ -311,13 +337,22 @@ fun resolveSearch(inputs: SearchInputs): SearchState {
     val focusActions = inputs.focusSetups
         .filter { matchesQuery(it.label, inputs.query) }
         .map(::FocusActionResult)
+    // Bodha's own settings are reached rather than found, so they share the
+    // actions section too (#191). Rows only: a section is a category, and people
+    // search for the control (ADR 0019).
+    val settingsRows = inputs.settingsRows
+        .filter { matchesQuery(it.label, inputs.query) }
+        .map(::SettingsRowResult)
 
     val sections = listOf(
         SearchSectionState(SearchSection.Apps, rank(apps, inputs)),
         SearchSectionState(SearchSection.Shortcuts, rank(shortcuts, inputs)),
         SearchSectionState(SearchSection.Contacts, contacts),
         SearchSectionState(SearchSection.Calendar, calendar),
-        SearchSectionState(SearchSection.Actions, rank(actions + surfaces + focusActions, inputs)),
+        SearchSectionState(
+            SearchSection.Actions,
+            rank(actions + surfaces + focusActions + settingsRows, inputs),
+        ),
     ).filter { it.rows.isNotEmpty() }
     // A named state is not a find: with only ungranted rows standing, the query
     // itself still matched nothing, and the one empty state says so above them.

@@ -31,10 +31,13 @@ import com.bodhalauncher.engine.EventResult
 import com.bodhalauncher.engine.FocusActionResult
 import com.bodhalauncher.engine.HomeAction
 import com.bodhalauncher.engine.ProviderInstance
+import com.bodhalauncher.engine.SETTINGS_ROWS
 import com.bodhalauncher.engine.SearchContact
 import com.bodhalauncher.engine.SearchInputs
 import com.bodhalauncher.engine.SearchShortcut
 import com.bodhalauncher.engine.SessionId
+import com.bodhalauncher.engine.SettingsRowId
+import com.bodhalauncher.engine.SettingsRowResult
 import com.bodhalauncher.engine.ShortcutResult
 import com.bodhalauncher.engine.Surface
 import com.bodhalauncher.engine.SurfaceResult
@@ -82,6 +85,8 @@ fun SearchSurface(
     openApp: (HomeAction) -> Unit,
     /** The navigation model's entry point, not a route of Search's own (#189). */
     openSurface: (Surface) -> Unit,
+    /** Settings, standing on the row that matched (#191); the host owns where that row lives. */
+    openSettingsRow: (SettingsRowId) -> Unit,
 ) {
     val allApps by catalog.apps
     val hidden by pinStore.hidden
@@ -138,6 +143,12 @@ fun SearchSurface(
                 query = query,
                 actions = settingsScreens.map { it.searchAction() },
                 surfaces = surfaces,
+                // The catalogue itself (ADR 0019): Settings renders exactly these,
+                // so what is findable and what is drawn are one list rather than
+                // two agreeing. A row that becomes conditional — a Pro control, an
+                // account action — is filtered here as well as there, which is
+                // what this input exists to make possible (#191).
+                settingsRows = SETTINGS_ROWS,
                 hidden = hidden,
                 pinned = pinned.toSet(),
                 defaults = defaultStore.defaults.value,
@@ -167,6 +178,7 @@ fun SearchSurface(
                     if (match != null) catalog.launchShortcut(match)
                 }
                 is SurfaceResult -> openSurface(result.surface)
+                is SettingsRowResult -> openSettingsRow(result.row.id)
                 is ActionResult -> {
                     val screen = settingsScreens.firstOrNull { it.searchAction().id == result.action.id }
                     if (screen != null) openSettingsScreen(context, screen)

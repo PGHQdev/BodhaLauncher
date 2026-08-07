@@ -83,6 +83,7 @@ import com.bodhalauncher.engine.EventType
 import com.bodhalauncher.engine.HomeAction
 import com.bodhalauncher.engine.HomeInputs
 import com.bodhalauncher.engine.Place
+import com.bodhalauncher.engine.SettingsRowId
 import com.bodhalauncher.engine.Surface
 import com.bodhalauncher.engine.Transition
 import com.bodhalauncher.engine.resolveBack
@@ -395,6 +396,11 @@ private fun BodhaHost(
     // Every capability Bodha asks for, from any surface, enters here (#157).
     val education = rememberCapabilityEducation(events, sheets)
     var place by remember { mutableStateOf(Place(resolveRoot(focusRunning))) }
+    // Which Settings row this arrival is about (#191). It describes the way in
+    // rather than the surface, so every route that opens Settings says what it
+    // means: Search's row result names one, and the two routes that open Settings
+    // as a whole clear it.
+    var settingsTarget by remember { mutableStateOf<SettingsRowId?>(null) }
     // The system Home button lands on root from wherever you were, and takes the
     // education sheet the departed surface opened with it — it belongs to that ask.
     LaunchedEffect(homeIntents) {
@@ -687,7 +693,8 @@ private fun BodhaHost(
                 surfaces = BUILT_SURFACES,
                 sheets = sheets,
                 openApp = openApp,
-                openSurface = { place = Place(it) },
+                openSurface = { settingsTarget = null; place = Place(it) },
+                openSettingsRow = { settingsTarget = it; place = Place(Surface.Settings) },
             )
             return
         }
@@ -759,6 +766,7 @@ private fun BodhaHost(
                     date = appearanceStore.date.value,
                     onDate = appearanceStore::set,
                 ),
+                target = settingsTarget,
             )
             return
         }
@@ -855,7 +863,7 @@ private fun BodhaHost(
         EditHomeDialog(
             onAddPin = { pickerOpen = true },
             onContextModes = { modeManageOpen = true },
-            onSettings = { place = Place(Surface.Settings) },
+            onSettings = { settingsTarget = null; place = Place(Surface.Settings) },
             onDismiss = { editingHome = false },
         )
     }

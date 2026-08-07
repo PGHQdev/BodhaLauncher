@@ -28,6 +28,7 @@ import com.bodhalauncher.engine.HomeAction
 import com.bodhalauncher.engine.SearchContact
 import com.bodhalauncher.engine.SearchResult
 import com.bodhalauncher.engine.SearchState
+import com.bodhalauncher.engine.SettingsRowResult
 import com.bodhalauncher.engine.ShortcutResult
 import com.bodhalauncher.engine.SurfaceResult
 import com.bodhalauncher.engine.UngrantedResult
@@ -127,8 +128,15 @@ fun SearchScreen(
                         onLongClick = longClick,
                         // The app's own mark, so bare rather than chipped (rule 5).
                         leading = if (icon != null) ({ AppMark(icon) }) else null,
-                        // Rule 3: only the surface row navigates within Bodha.
-                        trailing = if (result is SurfaceResult) ({ TrailingChevron() }) else null,
+                        // Rule 3: the rows that navigate within Bodha wear the
+                        // chevron — a surface by name (#189), and a Settings row
+                        // you arrive standing on (#191). Everything else acts
+                        // where it stands or leaves for another app.
+                        trailing = if (result is SurfaceResult || result is SettingsRowResult) {
+                            ({ TrailingChevron() })
+                        } else {
+                            null
+                        },
                     )
                 }
             }
