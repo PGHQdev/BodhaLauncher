@@ -17,6 +17,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.bodhalauncher.engine.DayEvent
 import com.bodhalauncher.engine.DaySlot
+import com.bodhalauncher.engine.DigestSection
+import com.bodhalauncher.engine.DigestSlot
+import com.bodhalauncher.engine.digestLine
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
@@ -35,6 +38,10 @@ fun TodayScreen(
     daySlot: DaySlot,
     onEventTap: (DayEvent) -> Unit,
     onDayTurnOn: () -> Unit,
+    /** Null only while the day key's counts are still being read. */
+    digestSlot: DigestSlot?,
+    onDigestTap: () -> Unit,
+    onDigestTurnOn: () -> Unit,
 ) {
     val colors = LocalBodhaColors.current
     Column(
@@ -67,7 +74,61 @@ fun TodayScreen(
         )
         Spacer(Modifier.height(16.dp))
         DaySlotContent(daySlot, onEventTap, onDayTurnOn)
+        digestSlot?.let {
+            Spacer(Modifier.height(16.dp))
+            DigestSlotContent(it, onDigestTap, onDigestTurnOn)
+        }
     }
+}
+
+/**
+ * The digest slot (#161, ADR 0015): counts for the day, no app names, no
+ * previews, and a named cause for every absence. A card with a chevron because
+ * tapping it navigates to the inbox (ADR 0025); the counts stay when the
+ * listener drops or the grant is revoked, and the subtitle says why.
+ */
+@Composable
+private fun DigestSlotContent(
+    slot: DigestSlot,
+    onTap: () -> Unit,
+    onTurnOn: () -> Unit,
+) {
+    when (slot) {
+        is DigestSlot.Ungranted ->
+            if (slot.offersTurnOn) {
+                CardRow(
+                    title = "Today's notifications, counted",
+                    subtitle = "Turn on notification access",
+                    onClick = onTurnOn,
+                )
+            } else {
+                SlotNote("Notification access is off.")
+            }
+        DigestSlot.Empty -> DigestCard(subtitle = "Nothing waiting today.", onTap = onTap)
+        is DigestSlot.Counts -> DigestCard(subtitle = digestLine(slot.counts), onTap = onTap)
+        is DigestSlot.Disconnected -> DigestCard(
+            subtitle = withCause(slot.counts, "the listener is disconnected"),
+            onTap = onTap,
+        )
+        is DigestSlot.Revoked -> DigestCard(
+            subtitle = withCause(slot.counts, "access was turned off"),
+            onTap = onTap,
+        )
+    }
+}
+
+private fun withCause(counts: Map<DigestSection, Int>, cause: String): String =
+    if (counts.isEmpty()) cause.replaceFirstChar(Char::uppercase) + "."
+    else "${digestLine(counts)} — $cause."
+
+@Composable
+fun DigestCard(subtitle: String, onTap: () -> Unit) {
+    CardRow(
+        title = "Notifications",
+        subtitle = subtitle,
+        onClick = onTap,
+        trailing = { TrailingChevron() },
+    )
 }
 
 /**

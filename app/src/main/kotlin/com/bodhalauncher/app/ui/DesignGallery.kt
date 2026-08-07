@@ -136,6 +136,18 @@ fun DesignGallery() {
         DayEventRow(event = GALLERY_TIMED_EVENT, onClick = {})
         Spacer(Modifier.height(BodhaSpacing.xl))
 
+        // The digest slot (#161): the counts card — a chevron because it
+        // navigates — and its turn-on, with fixed counts so nothing drifts.
+        SectionOverline("Digest")
+        DigestCard(subtitle = "3 People · 1 Time-sensitive · 5 Updates", onTap = {})
+        Spacer(Modifier.height(BodhaSpacing.s))
+        CardRow(
+            title = "Today's notifications, counted",
+            subtitle = "Turn on notification access",
+            onClick = {},
+        )
+        Spacer(Modifier.height(BodhaSpacing.xl))
+
         // Focus (ADR 0026), forced rather than requested: only one node can hold
         // real focus, and the fixture has to show the ring on all four shapes.
         // Screenshots capture at rest, so without these specimens no golden ever

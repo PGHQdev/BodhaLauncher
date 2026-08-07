@@ -9,6 +9,10 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
+import com.bodhalauncher.app.inbox.NotificationLogDao
+import com.bodhalauncher.app.inbox.NotificationRecordEntity
 
 /**
  * One on-device event (#25, ADR 0009): a type, a timestamp, at most one duration.
@@ -45,21 +49,40 @@ interface EventLogDao {
 
 /**
  * The local relational store (#19). Behavioral tables land with the feature that
- * first needs them; the event log arrives first (#25). Device-local only.
+ * first needs them; the event log arrived first (#25), the notification log
+ * with the digest (#161). Device-local only.
  */
-@Database(entities = [EventLogEntity::class], version = 1, exportSchema = true)
+@Database(
+    entities = [EventLogEntity::class, NotificationRecordEntity::class],
+    version = 2,
+    exportSchema = true,
+)
 abstract class BodhaDatabase : RoomDatabase() {
 
     abstract fun eventLog(): EventLogDao
+
+    abstract fun notificationLog(): NotificationLogDao
 
     companion object {
         @Volatile
         private var instance: BodhaDatabase? = null
 
+        private val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `notification_log` (" +
+                        "`keyHash` TEXT NOT NULL, `appPackage` TEXT NOT NULL, " +
+                        "`section` TEXT NOT NULL, `category` TEXT, " +
+                        "`postedAtMillis` INTEGER NOT NULL, `updatedAtMillis` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`keyHash`))"
+                )
+            }
+        }
+
         fun get(context: Context): BodhaDatabase = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(
                 context.applicationContext, BodhaDatabase::class.java, "bodha.db"
-            ).build().also { instance = it }
+            ).addMigrations(MIGRATION_1_2).build().also { instance = it }
         }
     }
 }

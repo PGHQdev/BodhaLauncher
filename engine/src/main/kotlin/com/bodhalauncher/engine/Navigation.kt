@@ -13,6 +13,8 @@ enum class Surface(val title: String) {
     Library("App Library"),
     Awareness("Awareness"),
     Today("Today"),
+    /** The notifications inbox: lives inside Today, opens as its own surface, back returns Home (ADR 0011). */
+    Inbox("Notifications"),
     Focus("Focus"),
     Settings("Settings"),
 }
