@@ -237,6 +237,22 @@ class SearchReducerTest {
     }
 
     @Test
+    fun `a keyword match ranks as a label match would`() {
+        val search = resolveSearch(
+            SearchInputs(
+                actions = listOf(
+                    SearchAction(id = "settings:wifi", label = "Wi-Fi", keywords = listOf("wifi")),
+                    SearchAction(id = "settings:wifi-direct", label = "Wifi Direct"),
+                ),
+                query = "wifi",
+            )
+        )
+
+        assertEquals(listOf("Wi-Fi", "Wifi Direct"), labels(search, SearchSection.Actions))
+        assertEquals(listOf(REASON_EXACT_MATCH, null), reasons(search, SearchSection.Actions))
+    }
+
+    @Test
     fun `an action absent from the inputs never appears`() {
         val search = resolveSearch(
             SearchInputs(

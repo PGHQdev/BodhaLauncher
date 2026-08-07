@@ -26,6 +26,6 @@ class SearchDefaultStore(context: Context) {
         defaults.value = load()
     }
 
-    @Suppress("UNCHECKED_CAST")
-    private fun load(): Map<String, String> = prefs.all as Map<String, String>
+    private fun load(): Map<String, String> =
+        prefs.all.mapNotNull { (k, v) -> (v as? String)?.let { k to it } }.toMap()
 }

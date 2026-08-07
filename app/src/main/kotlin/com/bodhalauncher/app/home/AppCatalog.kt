@@ -99,15 +99,7 @@ class AppCatalog(private val context: Context) {
                 LauncherApps.ShortcutQuery.FLAG_MATCH_MANIFEST or
                     LauncherApps.ShortcutQuery.FLAG_MATCH_DYNAMIC
             )
-        launcherApps.getShortcuts(query, user)
-            .orEmpty()
-            .map {
-                AppShortcut(
-                    it.id, it.`package`, (it.shortLabel ?: it.longLabel).toString(), user,
-                    appId = idFor(it.`package`, user),
-                )
-            }
-            .filter { it.label.isNotEmpty() }
+        queryShortcuts(query, user)
     } catch (_: SecurityException) {
         emptyList()
     } catch (_: IllegalStateException) {
@@ -127,15 +119,7 @@ class AppCatalog(private val context: Context) {
                     LauncherApps.ShortcutQuery.FLAG_MATCH_MANIFEST or
                         LauncherApps.ShortcutQuery.FLAG_MATCH_DYNAMIC
                 )
-            launcherApps.getShortcuts(query, user)
-                .orEmpty()
-                .map {
-                    AppShortcut(
-                        it.id, it.`package`, (it.shortLabel ?: it.longLabel).toString(), user,
-                        appId = idFor(it.`package`, user),
-                    )
-                }
-                .filter { it.label.isNotEmpty() }
+            queryShortcuts(query, user)
         }
     } catch (_: SecurityException) {
         emptyList()
@@ -146,6 +130,17 @@ class AppCatalog(private val context: Context) {
         // on a device this never throws.
         emptyList()
     }
+
+    private fun queryShortcuts(query: LauncherApps.ShortcutQuery, user: UserHandle): List<AppShortcut> =
+        launcherApps.getShortcuts(query, user)
+            .orEmpty()
+            .map {
+                AppShortcut(
+                    it.id, it.`package`, (it.shortLabel ?: it.longLabel).toString(), user,
+                    appId = idFor(it.`package`, user),
+                )
+            }
+            .filter { it.label.isNotEmpty() }
 
     fun launchShortcut(shortcut: AppShortcut) {
         try {

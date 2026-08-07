@@ -196,13 +196,20 @@ private fun rank(results: List<SearchResult>, inputs: SearchInputs): List<Search
     val defaultId = inputs.defaults[canonicalQuery(inputs.query)]
         ?.takeIf { id -> inputs.apps.any { it.id == id } }
     fun chosen(result: SearchResult) = result is AppResult && result.app.id == defaultId
+    // An action's keywords rank as its label does — "wifi" against Wi-Fi is an
+    // exact answer, and matched-by-keyword must not sort as matched-nowhere.
+    fun names(result: SearchResult): List<String> =
+        if (result is ActionResult) listOf(result.label) + result.action.keywords
+        else listOf(result.label)
+    fun exact(result: SearchResult) = names(result).any { matchesExactly(it, inputs.query) }
+    fun depth(result: SearchResult) = names(result).minOf { matchDepth(it, inputs.query) }
     val ordered = results.sortedWith(
-        compareByDescending<SearchResult> { matchesExactly(it.label, inputs.query) }
+        compareByDescending(::exact)
             // The per-query default sits above the pin: both are tier two's
             // explicit choice, but one was made about this very query (#185).
             .thenByDescending(::chosen)
             .thenByDescending(::pinned)
-            .thenBy { matchDepth(it.label, inputs.query) }
+            .thenBy(::depth)
             // Locale-independent, for the reason the library's ordering is; the
             // key falls through to [SearchResult.key] so equal labels still tie
             // identically on repeat runs.
@@ -213,7 +220,7 @@ private fun rank(results: List<SearchResult>, inputs: SearchInputs): List<Search
         SearchRow(
             result = result,
             reason = when {
-                matchesExactly(result.label, inputs.query) -> REASON_EXACT_MATCH
+                exact(result) -> REASON_EXACT_MATCH
                 chosen(result) -> REASON_DEFAULT
                 pinned(result) -> REASON_PINNED
                 else -> null
