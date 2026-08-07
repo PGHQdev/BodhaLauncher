@@ -31,13 +31,12 @@ import com.bodhalauncher.app.home.ModeStore
 import com.bodhalauncher.app.home.PinStore
 import com.bodhalauncher.app.home.SearchDefaultStore
 import com.bodhalauncher.app.home.UsageReader
-import com.bodhalauncher.app.contacts.ContactsReader
-import com.bodhalauncher.app.inbox.MuteStore
-import com.bodhalauncher.app.today.CalendarReader
 import com.bodhalauncher.app.capability.CapabilityEducationHost
 import com.bodhalauncher.app.capability.rememberCapabilityEducation
 import com.bodhalauncher.app.data.EventLogger
 import com.bodhalauncher.app.intent.IntentPromptRuntime
+import com.bodhalauncher.app.contacts.ContactsReader
+import com.bodhalauncher.app.inbox.MuteStore
 import com.bodhalauncher.app.onboarding.OnboardingStore
 import com.bodhalauncher.app.onboarding.commitEssentials
 import com.bodhalauncher.app.onboarding.commitFriction
@@ -46,6 +45,7 @@ import com.bodhalauncher.engine.OnboardingStep
 import com.bodhalauncher.app.intent.IntentRecordStore
 import com.bodhalauncher.app.session.SessionRuntime
 import com.bodhalauncher.app.session.applySessionBoundary
+import com.bodhalauncher.app.today.CalendarReader
 import com.bodhalauncher.app.data.BodhaDatabase
 import com.bodhalauncher.app.entitlement.EntitlementStore
 import com.bodhalauncher.app.focus.FocusStore

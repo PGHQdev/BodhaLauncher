@@ -1,5 +1,7 @@
 package com.bodhalauncher.engine
 
+import java.time.LocalDateTime
+
 /** A launcher shortcut as Search sees it: an app's own entry point, matched on its label. */
 data class SearchShortcut(val id: String, val appId: String, val label: String)
 
@@ -91,12 +93,15 @@ data class FocusActionResult(val setup: FocusSetup) : SearchResult {
  * into the lazy list, and sits on the keyboard route like everything else;
  * activating it enters the capability-education flow — a tap on "turn it on"
  * is an explicit user request, so the education always shows (#157).
+ *
+ * [capability] rides along so the section-to-capability mapping exists once,
+ * here, rather than as a second cascade at the surface.
  */
-data class UngrantedResult(val section: SearchSection) : SearchResult {
+data class UngrantedResult(val section: SearchSection, val capability: Capability) : SearchResult {
     override val key get() = "ungranted:$section"
     override val label
-        get() = when (section) {
-            SearchSection.Contacts -> SEARCH_CONTACTS_OFF
+        get() = when (capability) {
+            Capability.Contacts -> SEARCH_CONTACTS_OFF
             else -> SEARCH_CALENDAR_OFF
         }
 }
@@ -239,7 +244,7 @@ const val SEARCH_CALENDAR_DAYS_FORWARD = 30L
  * appointment" and last week's meeting, narrow enough that a two-letter prefix
  * does not return a year of standups. One constant pair, cheap to change.
  */
-fun searchCalendarWindow(now: java.time.LocalDateTime): Pair<java.time.LocalDateTime, java.time.LocalDateTime> {
+fun searchCalendarWindow(now: LocalDateTime): Pair<LocalDateTime, LocalDateTime> {
     val boundary = dayStart(now)
     return boundary.minusDays(SEARCH_CALENDAR_DAYS_BACK) to boundary.plusDays(SEARCH_CALENDAR_DAYS_FORWARD)
 }
@@ -264,7 +269,8 @@ fun resolveSearch(inputs: SearchInputs): SearchState {
     // exists on the minimum supported Android, so none is faked. No reason
     // lines either: no tier ever lifts a contact row (#186).
     val contacts: List<SearchRow> = when {
-        !inputs.contactsGranted -> listOf(SearchRow(UngrantedResult(SearchSection.Contacts)))
+        !inputs.contactsGranted ->
+            listOf(SearchRow(UngrantedResult(SearchSection.Contacts, Capability.Contacts)))
         else -> inputs.contacts
             .filter { matchesQuery(it.name, inputs.query) }
             .sortedWith(
@@ -278,7 +284,8 @@ fun resolveSearch(inputs: SearchInputs): SearchState {
     // question about time, and begin order is the one explainable rank an
     // event has. Declined and hidden-calendar instances drop, as on Today.
     val calendar: List<SearchRow> = when {
-        !inputs.calendarGranted -> listOf(SearchRow(UngrantedResult(SearchSection.Calendar)))
+        !inputs.calendarGranted ->
+            listOf(SearchRow(UngrantedResult(SearchSection.Calendar, Capability.Calendar)))
         inputs.calendarInstances == null -> emptyList()
         else -> inputs.calendarInstances
             .filter { it.calendarVisible && !it.selfDeclined && matchesQuery(it.title, inputs.query) }

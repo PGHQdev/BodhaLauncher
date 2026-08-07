@@ -25,6 +25,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import org.json.JSONArray
+import org.json.JSONObject
 
 /**
  * What an ended Focus session leaves behind (#169, ADR 0029): the label — the
@@ -127,33 +129,41 @@ class FocusStore(context: Context, private val dao: FocusRecordDao, private val 
         events.log(EventType.FocusStarted)
     }
 
+    /** A remembered setup re-enacted whole — Search's start path (#190). */
+    fun start(setup: FocusSetup, now: Instant) =
+        start(setup.label, setup.minutes, setup.allowedAppIds, now)
+
+    // JSON rather than joined strings: the label is arbitrary user text, and
+    // SharedPreferences is XML-backed — a control-character separator is not a
+    // valid XML 1.0 character and could corrupt the whole file on disk.
     private fun recordSetup(setup: FocusSetup) {
         val kept = listOf(setup) + setups.value.filter { it.label != setup.label }
         setups.value = kept.take(MAX_SETUPS)
-        prefs.edit {
-            putString(
-                KEY_SETUPS,
-                setups.value.joinToString(SETUP_SEP) {
-                    listOf(it.label, it.minutes.toString(), it.allowedAppIds.joinToString(ID_SEP))
-                        .joinToString(FIELD_SEP)
-                },
+        val json = JSONArray()
+        setups.value.forEach { entry ->
+            json.put(
+                JSONObject()
+                    .put(SETUP_LABEL, entry.label)
+                    .put(SETUP_MINUTES, entry.minutes)
+                    .put(SETUP_ALLOWED, JSONArray(entry.allowedAppIds.toList()))
             )
         }
+        prefs.edit { putString(KEY_SETUPS, json.toString()) }
     }
 
-    private fun loadSetups(): List<FocusSetup> =
-        prefs.getString(KEY_SETUPS, null).orEmpty()
-            .split(SETUP_SEP)
-            .mapNotNull { entry ->
-                val fields = entry.split(FIELD_SEP)
-                if (fields.size != 3) return@mapNotNull null
-                val minutes = fields[1].toLongOrNull() ?: return@mapNotNull null
-                FocusSetup(
-                    label = fields[0],
-                    minutes = minutes,
-                    allowedAppIds = fields[2].split(ID_SEP).filter { it.isNotEmpty() }.toSet(),
-                )
-            }
+    /** A malformed store loads as empty rather than crashing the launcher at bind. */
+    private fun loadSetups(): List<FocusSetup> = runCatching {
+        val json = JSONArray(prefs.getString(KEY_SETUPS, null) ?: return emptyList())
+        (0 until json.length()).map { i ->
+            val entry = json.getJSONObject(i)
+            val allowed = entry.getJSONArray(SETUP_ALLOWED)
+            FocusSetup(
+                label = entry.getString(SETUP_LABEL),
+                minutes = entry.getLong(SETUP_MINUTES),
+                allowedAppIds = (0 until allowed.length()).mapTo(mutableSetOf(), allowed::getString),
+            )
+        }
+    }.getOrDefault(emptyList())
 
     /** End from the running surface: the moment shows immediately, since the user is on root. */
     fun endEarly(now: Instant) = end(now)
@@ -323,9 +333,8 @@ class FocusStore(context: Context, private val dao: FocusRecordDao, private val 
 
         const val KEY_SETUPS = "setups"
         const val MAX_SETUPS = 12
-        // Control characters no keyboard types, so a label never collides.
-        const val SETUP_SEP = "\u001E"
-        const val FIELD_SEP = "\u001F"
-        const val ID_SEP = "\u0000"
+        const val SETUP_LABEL = "label"
+        const val SETUP_MINUTES = "minutes"
+        const val SETUP_ALLOWED = "allowedAppIds"
     }
 }

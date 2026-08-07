@@ -19,19 +19,19 @@ import com.bodhalauncher.app.data.BodhaDatabase
 import com.bodhalauncher.app.data.EventLogger
 import com.bodhalauncher.app.focus.FocusStore
 import com.bodhalauncher.app.home.AppCatalog
-import com.bodhalauncher.app.today.CalendarReader
 import com.bodhalauncher.app.home.LibraryStore
 import com.bodhalauncher.app.home.PinStore
 import com.bodhalauncher.app.home.SearchDefaultStore
+import com.bodhalauncher.app.today.CalendarReader
 import com.bodhalauncher.app.ui.BodhaTheme
 import com.bodhalauncher.app.ui.SEARCH_FIELD_LABEL
 import com.bodhalauncher.app.ui.SheetSlot
 import com.bodhalauncher.engine.SEARCH_CONTACTS_OFF
 import com.bodhalauncher.engine.SessionId
 import org.junit.Rule
-import org.robolectric.Shadows
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.Shadows
 import org.robolectric.annotation.Config
 
 /**

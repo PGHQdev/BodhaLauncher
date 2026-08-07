@@ -33,7 +33,6 @@ import com.bodhalauncher.engine.HomeAction
 import com.bodhalauncher.engine.ProviderInstance
 import com.bodhalauncher.engine.SearchContact
 import com.bodhalauncher.engine.SearchInputs
-import com.bodhalauncher.engine.SearchSection
 import com.bodhalauncher.engine.SearchShortcut
 import com.bodhalauncher.engine.SessionId
 import com.bodhalauncher.engine.ShortcutResult
@@ -147,7 +146,9 @@ fun SearchSurface(
                 contacts = allContacts,
                 calendarGranted = calendarGranted,
                 calendarInstances = calendarInstances,
-                focusSetups = focusStore.setups.value,
+                // One session at a time is structural (#166): while one runs the
+                // store's start would refuse silently, so nothing is offered.
+                focusSetups = if (focusStore.active.value == null) focusStore.setups.value else emptyList(),
             )
         ),
         query = query,
@@ -176,15 +177,10 @@ fun SearchSurface(
                 is EventResult -> calendar.open(result.event)
                 // The same session lifecycle as starting anywhere else (#190):
                 // the store's start flips root to Focus through the host.
-                is FocusActionResult -> focusStore.start(
-                    result.setup.label, result.setup.minutes, result.setup.allowedAppIds, Instant.now(),
-                )
+                is FocusActionResult -> focusStore.start(result.setup, Instant.now())
                 // Activating a named state is an explicit ask, so the education
                 // always shows and continues into the runtime request (#157).
-                is UngrantedResult -> education.ask(
-                    if (result.section == SearchSection.Contacts) Capability.Contacts else Capability.Calendar,
-                    EducationEntry.UserRequest,
-                )
+                is UngrantedResult -> education.ask(result.capability, EducationEntry.UserRequest)
             }
         },
         // Replaces whatever sheet is open rather than stacking on it — the
