@@ -17,6 +17,8 @@ import com.bodhalauncher.engine.SearchInputs
 import com.bodhalauncher.engine.SearchShortcut
 import com.bodhalauncher.engine.SessionId
 import com.bodhalauncher.engine.ShortcutResult
+import com.bodhalauncher.engine.Surface
+import com.bodhalauncher.engine.SurfaceResult
 import com.bodhalauncher.engine.resolveSearch
 
 /**
@@ -37,7 +39,11 @@ fun SearchSurface(
     catalog: AppCatalog,
     /** The running session, or null once none is; see [query]'s scope below. */
     session: SessionId?,
+    /** The surfaces the host renders; an unbuilt one never appears as a result (#189). */
+    surfaces: List<Surface>,
     openApp: (HomeAction) -> Unit,
+    /** The navigation model's entry point, not a route of Search's own (#189). */
+    openSurface: (Surface) -> Unit,
 ) {
     val allApps by catalog.apps
     val hidden by pinStore.hidden
@@ -63,6 +69,7 @@ fun SearchSurface(
                 shortcuts = shortcuts.map { SearchShortcut(id = it.shortcutId, appId = it.appId, label = it.label) },
                 query = query,
                 actions = settingsScreens.map { it.searchAction() },
+                surfaces = surfaces,
                 hidden = hidden,
                 pinned = pinned.toSet(),
                 hiddenSearchable = hiddenSearchable,
@@ -83,6 +90,7 @@ fun SearchSurface(
                     }
                     if (match != null) catalog.launchShortcut(match)
                 }
+                is SurfaceResult -> openSurface(result.surface)
                 is ActionResult -> {
                     val screen = settingsScreens.firstOrNull { it.searchAction().id == result.action.id }
                     if (screen != null) openSettingsScreen(context, screen)

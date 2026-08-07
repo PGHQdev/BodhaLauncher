@@ -27,6 +27,8 @@ import com.bodhalauncher.engine.SearchResult
 import com.bodhalauncher.engine.SearchSection
 import com.bodhalauncher.engine.SearchShortcut
 import com.bodhalauncher.engine.ShortcutResult
+import com.bodhalauncher.engine.Surface
+import com.bodhalauncher.engine.SurfaceResult
 import com.bodhalauncher.engine.resolveSearch
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -71,7 +73,13 @@ class SearchScreenTest {
         var query by remember { mutableStateOf("") }
         SearchScreen(
             state = resolveSearch(
-                SearchInputs(apps = installed, shortcuts = shortcuts, query = query, pinned = pinned)
+                SearchInputs(
+                    apps = installed,
+                    shortcuts = shortcuts,
+                    surfaces = listOf(Surface.Home, Surface.Library, Surface.Today),
+                    query = query,
+                    pinned = pinned,
+                )
             ),
             query = query,
             onQueryChange = { query = it },
@@ -219,6 +227,17 @@ class SearchScreenTest {
         compose.onNodeWithContentDescription(SEARCH_FIELD_LABEL).performTextClearance()
         type("tele")
         assertFalse(REASON_PINNED in drawnText())
+    }
+
+    @Test
+    fun `a surface answers to its name and opens as a surface`() {
+        var opened: SearchResult? = null
+        compose.setContent { BodhaTheme { Search(onOpen = { opened = it }) } }
+
+        type("library")
+        compose.onNodeWithText("App Library").performClick()
+
+        assertEquals(Surface.Library, (opened as? SurfaceResult)?.surface)
     }
 
     @Test

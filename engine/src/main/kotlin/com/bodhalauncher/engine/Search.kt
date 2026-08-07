@@ -56,6 +56,17 @@ data class ActionResult(val action: SearchAction) : SearchResult {
 }
 
 /**
+ * A surface offered by its name (#189): the universal route to everything past
+ * Home's four swipes. Selecting one navigates, which is why its row alone wears
+ * a chevron. Matched on [Surface.title] — the name the user sees is the name
+ * that answers.
+ */
+data class SurfaceResult(val surface: Surface) : SearchResult {
+    override val key get() = "surface:${surface.name}"
+    override val label get() = surface.title
+}
+
+/**
  * A ranked result: what matched, and the one-line reason it sits where it does.
  * [reason] cites only a tier that actually lifted the row — an exact match or the
  * user's own pin. Match quality is every row's baseline, so it explains nothing
@@ -87,6 +98,11 @@ data class SearchInputs(
     val shortcuts: List<SearchShortcut> = emptyList(),
     /** Actions this device can honour; the actions section draws exactly these, matched. */
     val actions: List<SearchAction> = emptyList(),
+    /**
+     * The surfaces the host actually renders, in [Surface]'s own vocabulary — the
+     * host owns which have shipped, so an unbuilt one never appears as a result.
+     */
+    val surfaces: List<Surface> = emptyList(),
     /** What has been typed; [isBlankQuery] text lists nothing at all. */
     val query: String = "",
     /** App ids the user has hidden in the App Library (#62). */
@@ -152,11 +168,16 @@ fun resolveSearch(inputs: SearchInputs): SearchState {
                 action.keywords.any { matchesQuery(it, inputs.query) }
         }
         .map(::ActionResult)
+    // Going somewhere is an action rather than a thing found, so surfaces share
+    // the actions section rather than adding a sixth heading (#189).
+    val surfaces = inputs.surfaces
+        .filter { matchesQuery(it.title, inputs.query) }
+        .map(::SurfaceResult)
 
     val sections = listOf(
         SearchSectionState(SearchSection.Apps, rank(apps, inputs)),
         SearchSectionState(SearchSection.Shortcuts, rank(shortcuts, inputs)),
-        SearchSectionState(SearchSection.Actions, rank(actions, inputs)),
+        SearchSectionState(SearchSection.Actions, rank(actions + surfaces, inputs)),
     ).filter { it.rows.isNotEmpty() }
     return SearchState(sections = sections, nothingFound = sections.isEmpty())
 }

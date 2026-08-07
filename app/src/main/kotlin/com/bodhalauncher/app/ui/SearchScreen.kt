@@ -23,6 +23,7 @@ import com.bodhalauncher.engine.AppResult
 import com.bodhalauncher.engine.SearchResult
 import com.bodhalauncher.engine.SearchState
 import com.bodhalauncher.engine.ShortcutResult
+import com.bodhalauncher.engine.SurfaceResult
 
 /**
  * Search: a field and whatever the query found, and nothing else.
@@ -81,8 +82,8 @@ fun SearchScreen(
                     val ownerId = when (result) {
                         is AppResult -> result.app.id
                         is ShortcutResult -> result.shortcut.appId
-                        // No app owns an action, so no mark leads its row.
-                        is ActionResult -> null
+                        // No app owns an action or a surface, so no mark leads.
+                        is ActionResult, is SurfaceResult -> null
                     }
                     val icon = remember(ownerId, iconKey) { ownerId?.let(iconFor) }
                     // No long-press yet: result actions are #184's slice. The
@@ -94,6 +95,8 @@ fun SearchScreen(
                         onClick = { onOpen(result) },
                         // The app's own mark, so bare rather than chipped (rule 5).
                         leading = if (icon != null) ({ AppMark(icon) }) else null,
+                        // Rule 3: only the surface row navigates within Bodha.
+                        trailing = if (result is SurfaceResult) ({ TrailingChevron() }) else null,
                     )
                 }
             }

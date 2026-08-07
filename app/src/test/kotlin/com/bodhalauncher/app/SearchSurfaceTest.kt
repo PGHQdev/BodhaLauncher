@@ -49,7 +49,9 @@ class SearchSurfaceTest {
                     libraryStore = libraryStore,
                     catalog = catalog,
                     session = session,
+                    surfaces = emptyList(),
                     openApp = {},
+                    openSurface = {},
                 )
             }
         }

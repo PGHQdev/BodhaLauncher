@@ -250,6 +250,43 @@ class SearchReducerTest {
     }
 
     @Test
+    fun `a surface answers to its name in the actions section`() {
+        val search = resolveSearch(
+            SearchInputs(
+                surfaces = listOf(Surface.Home, Surface.Library, Surface.Today),
+                query = "app",
+            )
+        )
+
+        assertEquals(listOf(SearchSection.Actions), search.sections.map { it.section })
+        assertEquals(listOf("App Library"), labels(search, SearchSection.Actions))
+        assertTrue(search.sections.single().rows.single().result is SurfaceResult)
+    }
+
+    @Test
+    fun `a surface not handed in never appears`() {
+        val search = resolveSearch(
+            SearchInputs(surfaces = listOf(Surface.Home, Surface.Today), query = "aware")
+        )
+
+        assertTrue(search.sections.isEmpty())
+        assertTrue(search.nothingFound)
+    }
+
+    @Test
+    fun `surfaces and device actions share the actions section, ranked together`() {
+        val search = resolveSearch(
+            SearchInputs(
+                actions = listOf(SearchAction(id = "settings:apps", label = "Apps")),
+                surfaces = listOf(Surface.Library),
+                query = "app",
+            )
+        )
+
+        assertEquals(listOf("App Library", "Apps"), labels(search, SearchSection.Actions))
+    }
+
+    @Test
     fun `shortcuts sort alphabetically within their section`() {
         val search = resolveSearch(
             SearchInputs(

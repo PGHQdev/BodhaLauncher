@@ -274,6 +274,15 @@ class MainActivity : ComponentActivity() {
 }
 
 /** The label comes from the surface, so renaming one renames what TalkBack announces. */
+/**
+ * The surfaces the `when` below renders as themselves rather than as a
+ * placeholder — what Search may offer by name (#189). Search is left out: a row
+ * that navigates to where you already stand goes nowhere. Grows as the
+ * placeholder arms of the `when` are replaced.
+ */
+private val BUILT_SURFACES =
+    listOf(Surface.Home, Surface.Library, Surface.Today)
+
 private fun openSurface(target: Surface, go: (Surface) -> Unit) =
     GestureAction("Open ${target.title}") { go(target) }
 
@@ -509,7 +518,9 @@ private fun BodhaHost(
                 libraryStore = libraryStore,
                 catalog = catalog,
                 session = sessions.currentSession,
+                surfaces = BUILT_SURFACES,
                 openApp = openApp,
+                openSurface = { place = Place(it) },
             )
             return
         }
