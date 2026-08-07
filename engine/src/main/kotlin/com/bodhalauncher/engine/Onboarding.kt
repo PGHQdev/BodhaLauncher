@@ -2,15 +2,19 @@ package com.bodhalauncher.engine
 
 /**
  * The onboarding steps, in order (ADR 0018: promise, essentials, friction,
- * first intention, become home). Only [Promise] is built; the others join this
- * enum as their slices land, and the reducer resolves the flow at whatever the
- * last built step currently is.
+ * first intention, become home). All five are built; [BecomeHome] is the step
+ * the completion flag resolves on — granted, declined or skipped, the flow
+ * completes there and never opens again.
  *
  * Onboarding is a flow, not a surface: it is deliberately absent from [Surface],
  * which is what keeps it out of swipes, Search and every Home control.
  */
 enum class OnboardingStep {
     Promise,
+    Essentials,
+    Friction,
+    FirstIntention,
+    BecomeHome,
 }
 
 /**

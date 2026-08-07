@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.bodhalauncher.engine.OnboardingStep
+import com.bodhalauncher.engine.resolveOnboardingStep
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -48,5 +49,24 @@ class OnboardingStoreTest {
     fun `finish persists the completion flag`() {
         OnboardingStore(context).finish()
         assertTrue(OnboardingStore(context).complete.value)
+    }
+
+    @Test
+    fun `a process killed mid-flow resumes at the first step not passed`() {
+        // Skips are advances, so a skipped essentials never re-opens (#137).
+        OnboardingStore(context).advance(OnboardingStep.Essentials)
+        val fresh = OnboardingStore(context)
+        assertEquals(2, fresh.furthestPassed.intValue)
+        assertEquals(
+            OnboardingStep.Friction,
+            resolveOnboardingStep(fresh.complete.value, fresh.furthestPassed.intValue),
+        )
+    }
+
+    @Test
+    fun `passing become home is what resolves the flow`() {
+        val store = OnboardingStore(context)
+        store.advance(OnboardingStep.BecomeHome)
+        assertEquals(null, resolveOnboardingStep(store.complete.value, store.furthestPassed.intValue))
     }
 }

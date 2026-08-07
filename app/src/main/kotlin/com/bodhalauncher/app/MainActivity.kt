@@ -1,9 +1,11 @@
 package com.bodhalauncher.app
 
+import android.app.role.RoleManager
 import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -33,6 +35,10 @@ import com.bodhalauncher.app.capability.rememberCapabilityEducation
 import com.bodhalauncher.app.data.EventLogger
 import com.bodhalauncher.app.intent.IntentPromptRuntime
 import com.bodhalauncher.app.onboarding.OnboardingStore
+import com.bodhalauncher.app.onboarding.commitEssentials
+import com.bodhalauncher.app.onboarding.commitFriction
+import com.bodhalauncher.app.onboarding.commitFirstIntention
+import com.bodhalauncher.engine.OnboardingStep
 import com.bodhalauncher.app.intent.IntentRecordStore
 import com.bodhalauncher.app.session.SessionRuntime
 import com.bodhalauncher.app.session.applySessionBoundary
@@ -90,6 +96,57 @@ import java.time.ZoneId
 class MainActivity : ComponentActivity() {
 
     private lateinit var catalog: AppCatalog
+    private lateinit var onboardingStore: OnboardingStore
+
+    /**
+     * Which step the flow shows, locally: forward is store-driven (advance moves
+     * the marker), but back must revisit a passed step, which the monotonic
+     * marker cannot express. Null means the flow has nothing to show. Recreation
+     * re-resolves from the store, so a killed process resumes at the first step
+     * not passed, with everything written intact (ADR 0018).
+     */
+    private val shownStep = mutableStateOf<OnboardingStep?>(null)
+
+    /**
+     * Whether Bodha holds the home role; re-read on resume (#136), so acquiring
+     * or losing it later flips Home's line without a relaunch.
+     */
+    private val homeRoleHeld = mutableStateOf(true)
+
+    /**
+     * The one grant Bodha asks for (ADR 0018). Granted or declined — including
+     * an OEM that routes to a settings screen instead of a dialog — the result
+     * lands here and the flow completes. Declining is an answer: no retry, no
+     * re-prompt, and the only route back is the future Settings row.
+     */
+    private val roleRequest =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+            homeRoleHeld.value = readHomeRole()
+            advanceStep(OnboardingStep.BecomeHome)
+        }
+
+    /** Every advance — answer or skip — passes through here, from any step. */
+    private fun advanceStep(step: OnboardingStep) {
+        // Type and timestamp only — never step identity (ADR 0009).
+        (application as BodhaApp).events.log(EventType.OnboardingStepCompleted)
+        onboardingStore.advance(step)
+        shownStep.value = OnboardingStep.entries.getOrNull(step.ordinal + 1)
+    }
+
+    private fun readHomeRole(): Boolean =
+        getSystemService(RoleManager::class.java)
+            ?.isRoleHeld(RoleManager.ROLE_HOME) == true
+
+    private fun requestHomeRole() {
+        val roles = getSystemService(RoleManager::class.java)
+        if (roles != null && roles.isRoleAvailable(RoleManager.ROLE_HOME) && !roles.isRoleHeld(RoleManager.ROLE_HOME)) {
+            roleRequest.launch(roles.createRequestRoleIntent(RoleManager.ROLE_HOME))
+        } else {
+            // Already held, or no request to make: either way the flow completes.
+            advanceStep(OnboardingStep.BecomeHome)
+        }
+    }
+
 
     /**
      * Bumped each time the system Home button re-delivers us. The activity is
@@ -115,6 +172,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         visible.value = true
+        homeRoleHeld.value = readHomeRole()
         (application as BodhaApp).intentPrompt.onLauncherVisible()
     }
 
@@ -148,23 +206,45 @@ class MainActivity : ComponentActivity() {
         }
         catalog.startWatching()
         val actionsKeyStore = ActionsKeyStore(this)
-        val onboardingStore = OnboardingStore(this)
+        onboardingStore = OnboardingStore(this)
+        // Before any surface composes, something decides between the flow and
+        // Home (#135, ADR 0018): a tested reducer over the completion flag and
+        // the progress marker, and nothing else.
+        shownStep.value =
+            resolveOnboardingStep(onboardingStore.complete.value, onboardingStore.furthestPassed.intValue)
         setContent {
             BodhaTheme {
-                // Before any surface composes, something decides between the
-                // flow and Home (#135, ADR 0018): a tested reducer over the
-                // completion flag and the progress marker, and nothing else.
-                val onboardingStep =
-                    resolveOnboardingStep(onboardingStore.complete.value, onboardingStore.furthestPassed.intValue)
+                val onboardingStep = shownStep.value
                 if (onboardingStep != null) {
                     OnboardingFlow(
                         step = onboardingStep,
-                        onAdvance = { step ->
-                            // Type and timestamp only — never step identity (ADR 0009).
-                            app.events.log(EventType.OnboardingStepCompleted)
-                            onboardingStore.advance(step)
+                        apps = remember(catalog.apps.value) {
+                            catalog.apps.value.sortedBy { it.label.lowercase() }
                         },
-                        onExit = ::finish,
+                        // A revisited picker shows what it already committed (its
+                        // commit reconciles), so back never lands on a lying screen.
+                        pinnedIds = pinStore.pinned.value,
+                        ruledIds = openCheckStore.rules.value.keys,
+                        // Back steps to the previous step; on the first it leaves the app.
+                        onBack = {
+                            if (onboardingStep.ordinal == 0) finish()
+                            else shownStep.value = OnboardingStep.entries[onboardingStep.ordinal - 1]
+                        },
+                        onSkip = ::advanceStep,
+                        onContinuePromise = { advanceStep(OnboardingStep.Promise) },
+                        onEssentials = { picks ->
+                            commitEssentials(pinStore, picks)
+                            advanceStep(OnboardingStep.Essentials)
+                        },
+                        onFriction = { picks ->
+                            commitFriction(openCheckStore, picks)
+                            advanceStep(OnboardingStep.Friction)
+                        },
+                        onIntention = { text ->
+                            commitFirstIntention(intentionStore, text, LocalDateTime.now())
+                            advanceStep(OnboardingStep.FirstIntention)
+                        },
+                        onRequestHomeRole = ::requestHomeRole,
                     )
                     return@BodhaTheme
                 }
@@ -180,7 +260,7 @@ class MainActivity : ComponentActivity() {
                     )
                 ) {
                     Box(modifier = Modifier.fillMaxSize().escapeIsBack()) {
-                        BodhaHost(pinStore, modeStore, intentionStore, libraryStore, groupStore, openCheckStore, entitlementStore, catalog, app.sessions, app.intentPrompt, app.events, homeIntents.intValue, visible.value)
+                        BodhaHost(pinStore, modeStore, intentionStore, libraryStore, groupStore, openCheckStore, entitlementStore, catalog, app.sessions, app.intentPrompt, app.events, homeIntents.intValue, visible.value, homeRoleHeld.value)
                     }
                 }
             }
@@ -218,6 +298,7 @@ private fun BodhaHost(
     events: EventLogger,
     homeIntents: Int,
     launcherVisible: Boolean,
+    homeRoleHeld: Boolean,
 ) {
     val pinnedIds by pinStore.pinned
     val hidden by pinStore.hidden
@@ -481,6 +562,7 @@ private fun BodhaHost(
             pinned = pinned,
             hidden = hidden,
             sessionIntent = sessionIntent,
+            homeRoleHeld = homeRoleHeld,
         )
     )
 

@@ -110,4 +110,11 @@ class HomeReducerTest {
         assertEquals(true, home.focusActive)
         assertEquals(IntentCategory.Communicate, home.sessionIntent)
     }
+
+    @Test
+    fun `the home role passes through, and absent it defaults to held`() {
+        // Held by default so every caller that predates #136 renders no line.
+        assertEquals(true, resolveHome(HomeInputs()).homeRoleHeld)
+        assertEquals(false, resolveHome(HomeInputs(homeRoleHeld = false)).homeRoleHeld)
+    }
 }

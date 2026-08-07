@@ -101,7 +101,10 @@ fun HomeScreen(
             }
             if (onAddAction != null && state.actions.size < MAX_ACTIONS) {
                 CardRow(
-                    title = "Add a pin",
+                    // Empty, the row is the empty state (#137): it invites the
+                    // first pin and names where the rest are.
+                    title = if (state.actions.isEmpty()) "Pin your first app" else "Add a pin",
+                    subtitle = if (state.actions.isEmpty()) "The rest live in the App Library" else null,
                     onClick = onAddAction,
                     // Bodha's own glyph, so it takes the chip (rule 5).
                     leading = { IconChip { Text("＋", style = BodhaType.body, color = colors.inkMuted) } },
@@ -119,6 +122,19 @@ fun HomeScreen(
                     modifier = Modifier.padding(BodhaSpacing.m),
                 )
             }
+        }
+        if (!state.homeRoleHeld) {
+            Spacer(Modifier.height(20.dp))
+            // One factual line naming the declined state (#136, ADR 0018): a
+            // word, not a control — it carries a name a reader reads and owes
+            // no keyboard route and no touch target. The only route back to the
+            // role is the future Settings row.
+            Text(
+                text = "Bodha is an app you open — nothing meets you at unlock",
+                color = colors.inkMuted,
+                style = BodhaType.overline,
+                textAlign = TextAlign.Center,
+            )
         }
         if (state.focusActive) {
             Spacer(Modifier.height(20.dp))

@@ -53,7 +53,8 @@ import org.robolectric.annotation.Config
  */
 @OptIn(androidx.compose.ui.test.ExperimentalTestApi::class)
 @RunWith(AndroidJUnit4::class)
-@Config(sdk = [35], qualifiers = "w411dp-h4000dp", application = android.app.Application::class)
+// Raised for #136–#139's specimens (the multi-select rows and four onboarding steps).
+@Config(sdk = [35], qualifiers = "w411dp-h7000dp", application = android.app.Application::class)
 class KeyboardOperabilityTest {
 
     @get:Rule
@@ -91,6 +92,10 @@ class KeyboardOperabilityTest {
         .filter {
             SemanticsActions.OnClick in it.config || SemanticsActions.CustomActions in it.config
         }
+        // A disabled node — a multi-select row at its cap (#138) — is not a tab
+        // stop, exactly as it is not a touch target; it re-enters both sets the
+        // moment it re-enables.
+        .filter { SemanticsProperties.Disabled !in it.config }
         .mapNotNull { it.name() }
 
     private fun focusedName(): String? = nodes()
