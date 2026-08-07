@@ -1,6 +1,5 @@
 package com.bodhalauncher.app
 
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -66,7 +65,7 @@ fun SettingsSurface(
     target: SettingsRowId? = null,
 ) {
     val colors = LocalBodhaColors.current
-    val landing = SETTINGS_ROWS.firstOrNull { it.id == target } ?: SETTINGS_ROWS.first()
+    val landing = SETTINGS_ROWS.firstOrNull { it.id == target }?.id ?: SETTINGS_ROWS.first().id
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -86,7 +85,7 @@ fun SettingsSurface(
                 if (row.section != SETTINGS_ROWS.getOrNull(index - 1)?.section) {
                     row.section?.let { SectionOverline(it.title) }
                 }
-                val arriving = if (row.id == landing.id) Modifier.arriveHere() else Modifier
+                val arriving = if (row.id == landing) Modifier.arriveHere() else Modifier
                 when (row.id) {
                     SettingsRowId.HomeRole -> CardRow(
                         title = row.label,
@@ -136,11 +135,12 @@ fun SettingsSurface(
  * scroll is that user's half, and once Settings runs past a screen it is the only
  * thing that makes "opens at that row" true for them (#191).
  *
- * The requester is foundation's experimental one because `compose.ui`'s stable
- * `bringIntoViewRequester` does not exist at this Compose version; the migration
- * when it does is an import.
+ * A choice row's card is inert (its answers are the controls), so on one of those
+ * focus reaches the first answer rather than the row. The row's own title sits
+ * directly above it, and the search result that brought you here said the same
+ * word — so the arrival is oriented without a second name on an inert node, which
+ * would only have a reader say the row twice.
  */
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun Modifier.arriveHere(): Modifier {
     val bringIntoView = remember { BringIntoViewRequester() }

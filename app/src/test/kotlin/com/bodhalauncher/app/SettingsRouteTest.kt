@@ -28,14 +28,14 @@ import com.bodhalauncher.app.home.PinStore
 import com.bodhalauncher.app.home.SearchDefaultStore
 import com.bodhalauncher.app.today.CalendarReader
 import com.bodhalauncher.app.ui.ACTIVITY_ROOT
-import com.bodhalauncher.app.ui.SEARCH_FIELD_LABEL
-import com.bodhalauncher.app.ui.SheetSlot
 import com.bodhalauncher.app.ui.BodhaTheme
 import com.bodhalauncher.app.ui.DIALOG_ROOT
 import com.bodhalauncher.app.ui.EditHomeDialog
 import com.bodhalauncher.app.ui.GestureAction
 import com.bodhalauncher.app.ui.HomeGestureAffordances
 import com.bodhalauncher.app.ui.HomeGestures
+import com.bodhalauncher.app.ui.SEARCH_FIELD_LABEL
+import com.bodhalauncher.app.ui.SheetSlot
 import com.bodhalauncher.app.ui.escapeIsBack
 import com.bodhalauncher.app.ui.focusedNameIn
 import com.bodhalauncher.app.ui.press
@@ -151,7 +151,9 @@ class SettingsRouteTest {
                         appearance = AppearanceChoices(
                             theme = ThemeChoice.System, onTheme = {},
                             clock = ClockFormat.TwentyFourHour, onClock = {},
-                            date = DateFormat.WeekdayAndMonth, onDate = {},
+                            // Not the first answer, so the assertion below says
+                            // which of the two it is that focus lands on.
+                            date = DateFormat.Numeric, onDate = {},
                         ),
                         target = target,
                     )
@@ -184,8 +186,9 @@ class SettingsRouteTest {
         compose.tabTo(ACTIVITY_ROOT, "Date format")
         compose.press(ACTIVITY_ROOT, Key.Enter)
 
-        // Arrival is the row that was searched for, not the first row of Settings:
-        // the choice row is inert, so its first answer is where focus rests.
+        // Arrival is the row that was searched for, not the first row of Settings.
+        // A choice row's card is inert, so what focus reaches is the row's first
+        // control — its first answer, whichever one currently holds.
         assertEquals("Weekday and month", compose.focusedNameIn(ACTIVITY_ROOT))
     }
 }

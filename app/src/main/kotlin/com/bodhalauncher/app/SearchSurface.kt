@@ -145,9 +145,9 @@ fun SearchSurface(
                 surfaces = surfaces,
                 // The catalogue itself (ADR 0019): Settings renders exactly these,
                 // so what is findable and what is drawn are one list rather than
-                // two agreeing. A row that becomes conditional — a Pro control, an
-                // account action — is filtered here as well as there, which is
-                // what this input exists to make possible (#191).
+                // two agreeing. The first row to render conditionally — a Pro
+                // control, an account action — owes the same condition here, which
+                // is what taking the rows as an input keeps possible (#191).
                 settingsRows = SETTINGS_ROWS,
                 hidden = hidden,
                 pinned = pinned.toSet(),

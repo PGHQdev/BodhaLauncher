@@ -396,11 +396,14 @@ private fun BodhaHost(
     // Every capability Bodha asks for, from any surface, enters here (#157).
     val education = rememberCapabilityEducation(events, sheets)
     var place by remember { mutableStateOf(Place(resolveRoot(focusRunning))) }
-    // Which Settings row this arrival is about (#191). It describes the way in
-    // rather than the surface, so every route that opens Settings says what it
-    // means: Search's row result names one, and the two routes that open Settings
-    // as a whole clear it.
+    // Which Settings row this arrival is about (#191): the one Search named, or
+    // none. It belongs to the arrival rather than to the surface, so leaving is
+    // what ends it — a route added later opens Settings on nothing in particular
+    // without having to remember to say so.
     var settingsTarget by remember { mutableStateOf<SettingsRowId?>(null) }
+    LaunchedEffect(place.surface) {
+        if (place.surface != Surface.Settings) settingsTarget = null
+    }
     // The system Home button lands on root from wherever you were, and takes the
     // education sheet the departed surface opened with it — it belongs to that ask.
     LaunchedEffect(homeIntents) {
@@ -693,7 +696,7 @@ private fun BodhaHost(
                 surfaces = BUILT_SURFACES,
                 sheets = sheets,
                 openApp = openApp,
-                openSurface = { settingsTarget = null; place = Place(it) },
+                openSurface = { place = Place(it) },
                 openSettingsRow = { settingsTarget = it; place = Place(Surface.Settings) },
             )
             return
@@ -863,7 +866,7 @@ private fun BodhaHost(
         EditHomeDialog(
             onAddPin = { pickerOpen = true },
             onContextModes = { modeManageOpen = true },
-            onSettings = { settingsTarget = null; place = Place(Surface.Settings) },
+            onSettings = { place = Place(Surface.Settings) },
             onDismiss = { editingHome = false },
         )
     }
