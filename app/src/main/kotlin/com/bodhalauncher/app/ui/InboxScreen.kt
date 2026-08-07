@@ -43,6 +43,9 @@ fun InboxScreen(
     onOpen: (InboxRow) -> Unit,
     /** Long-press and the row's Actions node both land here (#163, ADR 0022). */
     onRowActions: (InboxRow) -> Unit,
+    /** How many sources are muted; the foot row exists only while any is (#164). */
+    mutedCount: Int,
+    onMutedSources: () -> Unit,
     onBack: () -> Unit,
 ) {
     when (state) {
@@ -52,20 +55,47 @@ fun InboxScreen(
         // focuses something and Escape has a chain to travel up (ADR 0022).
         InboxState.AccessOff -> InboxNote("Notification access is off.", onBack)
         InboxState.Disconnected -> InboxNote("Not connected to notifications right now.", onBack)
-        InboxState.Empty -> InboxNote("Nothing waiting.", onBack)
-        is InboxState.Sections ->
-            InboxSections(state, titleFor, lineFor, iconFor, onOpen, onRowActions)
+        // With something muted the empty inbox keeps its list shape: the foot
+        // row is the one route back to unmuting, so it cannot vanish with the
+        // rows (#164).
+        InboxState.Empty ->
+            if (mutedCount == 0) InboxNote("Nothing waiting.", onBack)
+            else InboxList(mutedCount, onMutedSources, footFocusOnOpen = true) {
+                Text(
+                    "Nothing waiting.",
+                    color = LocalBodhaColors.current.inkMuted,
+                    style = BodhaType.body,
+                )
+            }
+        is InboxState.Sections -> InboxList(mutedCount, onMutedSources) {
+            var first = true
+            state.sections.forEach { section ->
+                SectionOverline(section.section.label)
+                section.rows.forEach { row ->
+                    NotificationRow(
+                        title = titleFor(row),
+                        line = lineFor(row),
+                        icon = iconFor(row),
+                        onOpen = { onOpen(row) },
+                        onActions = { onRowActions(row) },
+                        // Focus on arrival gives the surface a back key (ADR 0022).
+                        modifier = if (first) Modifier.focusOnOpen() else Modifier,
+                    )
+                    first = false
+                }
+                Spacer(Modifier.height(BodhaSpacing.l))
+            }
+        }
     }
 }
 
+/** The inbox's list shape: the surface title, the content, and the muted-sources foot (#164). */
 @Composable
-private fun InboxSections(
-    state: InboxState.Sections,
-    titleFor: (InboxRow) -> String,
-    lineFor: (InboxRow) -> String?,
-    iconFor: (InboxRow) -> ImageBitmap?,
-    onOpen: (InboxRow) -> Unit,
-    onRowActions: (InboxRow) -> Unit,
+private fun InboxList(
+    mutedCount: Int,
+    onMutedSources: () -> Unit,
+    footFocusOnOpen: Boolean = false,
+    content: @Composable () -> Unit,
 ) {
     val colors = LocalBodhaColors.current
     Column(
@@ -79,22 +109,59 @@ private fun InboxSections(
         // A surface name is a label, not a spoken line (ADR 0021).
         Text("Notifications", color = colors.ink, style = BodhaType.title)
         Spacer(Modifier.height(BodhaSpacing.l))
-        var first = true
-        state.sections.forEach { section ->
-            SectionOverline(section.section.label)
-            section.rows.forEach { row ->
-                NotificationRow(
-                    title = titleFor(row),
-                    line = lineFor(row),
-                    icon = iconFor(row),
-                    onOpen = { onOpen(row) },
-                    onActions = { onRowActions(row) },
-                    // Focus on arrival gives the surface a back key (ADR 0022).
-                    modifier = if (first) Modifier.focusOnOpen() else Modifier,
-                )
-                first = false
-            }
+        content()
+        if (mutedCount > 0) {
             Spacer(Modifier.height(BodhaSpacing.l))
+            ListRow(
+                title = "Muted sources",
+                subtitle = if (mutedCount == 1) "1 app" else "$mutedCount apps",
+                onClick = onMutedSources,
+                trailing = { TrailingChevron() },
+                // With nothing waiting the foot is the surface's one node, and
+                // arrival focus is what gives Escape a chain (ADR 0022).
+                modifier = if (footFocusOnOpen) Modifier.focusOnOpen() else Modifier,
+            )
+        }
+    }
+}
+
+/**
+ * The muted sources, one level inside the inbox (#164): each row unmutes its
+ * app, from which moment its notifications enter and count again. Back to the
+ * inbox root comes from the navigation model's depth rule (#132).
+ */
+@Composable
+fun MutedSourcesScreen(
+    sources: List<String>,
+    labelFor: (String) -> String,
+    iconFor: (String) -> ImageBitmap?,
+    onUnmute: (String) -> Unit,
+    onBack: () -> Unit,
+) {
+    if (sources.isEmpty()) {
+        // The last unmute empties this level; a named state, not a blank one.
+        InboxNote("Nothing muted.", onBack)
+        return
+    }
+    val colors = LocalBodhaColors.current
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(colors.ground)
+            .safeDrawingPadding()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 28.dp, vertical = BodhaSpacing.l),
+    ) {
+        Text("Muted sources", color = colors.ink, style = BodhaType.title)
+        Spacer(Modifier.height(BodhaSpacing.l))
+        sources.forEachIndexed { index, appPackage ->
+            ListRow(
+                title = labelFor(appPackage),
+                subtitle = "Unmute",
+                onClick = { onUnmute(appPackage) },
+                leading = iconFor(appPackage)?.let { { AppMark(it) } },
+                modifier = if (index == 0) Modifier.focusOnOpen() else Modifier,
+            )
         }
     }
 }

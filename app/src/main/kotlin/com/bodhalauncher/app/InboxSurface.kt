@@ -1,5 +1,7 @@
 package com.bodhalauncher.app
 
+import android.content.Intent
+import android.provider.Settings
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -10,7 +12,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.core.graphics.drawable.toBitmap
 import com.bodhalauncher.app.capability.CapabilityEducation
 import com.bodhalauncher.app.inbox.BodhaNotificationListener
+import com.bodhalauncher.app.inbox.MuteStore
 import com.bodhalauncher.app.ui.InboxScreen
+import com.bodhalauncher.app.ui.MutedSourcesScreen
 import com.bodhalauncher.app.ui.NotificationActionsSheet
 import com.bodhalauncher.app.ui.Sheet
 import com.bodhalauncher.app.ui.SheetSlot
@@ -27,23 +31,33 @@ import com.bodhalauncher.engine.resolveInbox
 fun InboxSurface(
     education: CapabilityEducation,
     sheets: SheetSlot,
+    muteStore: MuteStore,
+    /** 0 is the inbox; 1 is the muted-sources list, the surface's one level in (#164, #132). */
+    depth: Int,
+    openMutedSources: () -> Unit,
     onBack: () -> Unit,
 ) {
     val granted = education.granted(Capability.NotificationAccess)
     val connected by BodhaNotificationListener.connected
     val liveMap by BodhaNotificationListener.live
-    val state = remember(granted, connected, liveMap) {
+    val muted by MuteStore.muted
+    val state = remember(granted, connected, liveMap, muted) {
         resolveInbox(
             granted = granted,
             listenerConnected = connected,
             rows = liveMap.values.map { it.row },
+            muted = muted,
         )
     }
-    val pm = LocalContext.current.packageManager
+    val context = LocalContext.current
+    val pm = context.packageManager
     // Marks and labels come from the package manager rather than the app
     // catalog: a notification's source need not be a launchable activity.
     val icons = remember { mutableMapOf<String, ImageBitmap?>() }
     val labels = remember { mutableMapOf<String, String>() }
+    fun iconFor(appPackage: String): ImageBitmap? = icons.getOrPut(appPackage) {
+        runCatching { pm.getApplicationIcon(appPackage).toBitmap().asImageBitmap() }.getOrNull()
+    }
     fun labelFor(appPackage: String): String = labels.getOrPut(appPackage) {
         runCatching {
             pm.getApplicationLabel(pm.getApplicationInfo(appPackage, 0)).toString()
@@ -59,25 +73,33 @@ fun InboxSurface(
             sheets.showing<Sheet.SnoozeDurations>()?.let(sheets::close)
         }
     }
+    if (depth > 0) {
+        MutedSourcesScreen(
+            sources = muted.sortedBy { labelFor(it).lowercase() },
+            labelFor = { labelFor(it) },
+            iconFor = { iconFor(it) },
+            // Entering and counting again from this moment is the unmute
+            // itself: the edge stops skipping, and the resolve stops filtering.
+            onUnmute = muteStore::unmute,
+            onBack = onBack,
+        )
+        return
+    }
     InboxScreen(
         state = state,
         // A redacted notification renders what the system gave us; a row with
         // no title still carries a non-empty name — its source (ADR 0020).
         titleFor = { row -> titleFor(row.key, row.appPackage) },
         lineFor = { row -> liveMap[row.key]?.line },
-        iconFor = { row ->
-            icons.getOrPut(row.appPackage) {
-                runCatching {
-                    pm.getApplicationIcon(row.appPackage).toBitmap().asImageBitmap()
-                }.getOrNull()
-            }
-        },
+        iconFor = { row -> iconFor(row.appPackage) },
         onOpen = { row ->
             // The notification's original destination, directly; a stale intent
             // (its app just cancelled it) simply does nothing.
             runCatching { liveMap[row.key]?.contentIntent?.send() }
         },
         onRowActions = { row -> sheets.open(Sheet.NotificationActions(row.key)) },
+        mutedCount = muted.size,
+        onMutedSources = openMutedSources,
         onBack = onBack,
     )
     sheets.showing<Sheet.NotificationActions>()?.let { sheet ->
@@ -91,9 +113,21 @@ fun InboxSurface(
         val dismiss = sheets.dismissedBy(sheet) { sheets.close(sheet) }
         NotificationActionsSheet(
             title = titleFor(sheet.key, row.appPackage),
+            sourceLabel = labelFor(row.appPackage),
             onHandled = { dismiss(); BodhaNotificationListener.markHandled(sheet.key) },
             // One decision per sheet (ADR 0011): the duration replaces this one.
             onSnooze = { sheets.open(Sheet.SnoozeDurations(sheet.key)) },
+            onMute = { dismiss(); muteStore.mute(row.appPackage) },
+            onNotificationSettings = {
+                dismiss()
+                // Android's own switch for this app, reached rather than mirrored (#164).
+                runCatching {
+                    context.startActivity(
+                        Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                            .putExtra(Settings.EXTRA_APP_PACKAGE, row.appPackage)
+                    )
+                }
+            },
             onDismiss = dismiss,
         )
     }

@@ -29,6 +29,7 @@ import com.bodhalauncher.app.home.IntentionStore
 import com.bodhalauncher.app.home.LibraryStore
 import com.bodhalauncher.app.home.ModeStore
 import com.bodhalauncher.app.home.PinStore
+import com.bodhalauncher.app.inbox.MuteStore
 import com.bodhalauncher.app.home.SearchDefaultStore
 import com.bodhalauncher.app.home.UsageReader
 import com.bodhalauncher.app.capability.CapabilityEducationHost
@@ -562,6 +563,9 @@ private fun BodhaHost(
             InboxSurface(
                 education = education,
                 sheets = sheets,
+                muteStore = remember { MuteStore(context) },
+                depth = place.depth,
+                openMutedSources = { place = Place(Surface.Inbox, depth = 1) },
                 onBack = back,
             )
             return

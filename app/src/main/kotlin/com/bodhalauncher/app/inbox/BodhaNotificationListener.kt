@@ -33,6 +33,10 @@ class BodhaNotificationListener : NotificationListenerService() {
 
     override fun onListenerConnected() {
         instance = this
+        // Loads the persisted mutes into the shared set (#164): after a reboot
+        // the listener binds before any UI exists, and a muted source must not
+        // count in that window.
+        MuteStore(this)
         connected.value = true
         // The shade as it stands counts too — notifications that arrived before
         // the bind, or survived a reboot, still describe the day. The live rows
@@ -100,6 +104,10 @@ class BodhaNotificationListener : NotificationListenerService() {
             line = sbn.notification.extras.getCharSequence(Notification.EXTRA_TEXT)?.toString(),
             contentIntent = sbn.notification.contentIntent,
         ))
+        // A muted source stops being counted from that moment (#164): the live
+        // row above still exists so unmuting shows what is already waiting, the
+        // inbox filters it while the mute holds, and nothing new is stored.
+        if (sbn.packageName in MuteStore.muted.value) return
         val entity = NotificationRecordEntity(
             keyHash = keyHash(sbn.key),
             appPackage = sbn.packageName,
