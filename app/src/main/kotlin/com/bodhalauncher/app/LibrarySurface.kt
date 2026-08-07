@@ -146,7 +146,9 @@ fun LibrarySurface(
     boundary?.let { ProBoundaryDialog(boundary = it, onDismiss = { boundary = null }) }
     sheets.showing<Sheet.AppActions>()?.let { sheet ->
         val app = sheet.app
-        val dismiss = { sheets.close(sheet) }
+        // Told to the slot as well as used here, so a session ending over this
+        // sheet dismisses it the way its own footer does (ADR 0011, #134).
+        val dismiss = sheets.dismissedBy(sheet) { sheets.close(sheet) }
         val openCheckRules by openCheckStore.rules
         AppActionsSheet(
             app = app,

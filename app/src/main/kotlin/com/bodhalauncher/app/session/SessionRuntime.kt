@@ -16,9 +16,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.core.content.ContextCompat
 import com.bodhalauncher.engine.DeviceEvent
 import com.bodhalauncher.engine.SessionEngine
+import com.bodhalauncher.engine.SessionId
 import com.bodhalauncher.engine.SessionPhase
 import com.bodhalauncher.engine.Transition
 import com.bodhalauncher.engine.UsageRecord
+import com.bodhalauncher.engine.sessionOrNull
 import java.time.Duration
 import java.time.Instant
 
@@ -37,9 +39,26 @@ class SessionRuntime(private val context: Context) {
     val phase = mutableStateOf<SessionPhase>(engine.snapshot().phase)
     private val listeners = mutableListOf<(Transition) -> Unit>()
 
+    /**
+     * Which session anything scoped to one belongs to right now — the sheet slot's
+     * saved state (#134) and Search's query (#180). Backed by [sessionOrNull], so
+     * the merge window's rule that a provisional end still names its session is
+     * read from the engine rather than restated beside it.
+     *
+     * [phase] is snapshot state, so composition reading this recomposes when the
+     * session changes.
+     */
+    val currentSession: SessionId?
+        get() = phase.value.sessionOrNull
+
     /** Register before [start] — restart reconciliation and backfill also publish. */
     fun addTransitionListener(listener: (Transition) -> Unit) {
         listeners += listener
+    }
+
+    /** For a listener that outlives less than the process does, such as composition (#134). */
+    fun removeTransitionListener(listener: (Transition) -> Unit) {
+        listeners -= listener
     }
 
     fun start() {

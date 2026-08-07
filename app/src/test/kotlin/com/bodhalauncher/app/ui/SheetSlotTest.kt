@@ -1,7 +1,9 @@
 package com.bodhalauncher.app.ui
 
 import androidx.compose.runtime.saveable.SaverScope
+import androidx.compose.runtime.saveable.Saver
 import com.bodhalauncher.engine.HomeAction
+import com.bodhalauncher.engine.SessionId
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
@@ -77,6 +79,39 @@ class SheetSlotTest {
     }
 
     @Test
+    fun `a dismissal from outside runs the sheet's own`() {
+        val slot = SheetSlot()
+        var dismissed = 0
+        val sheet = Sheet.OpenCheck(maps)
+        slot.open(sheet)
+        slot.dismissedBy(sheet) { dismissed++; slot.close(sheet) }
+
+        slot.dismissCurrent()
+
+        assertEquals(1, dismissed)
+        assertNull(slot.current)
+    }
+
+    @Test
+    fun `a replaced sheet does not leave its dismissal behind`() {
+        val slot = SheetSlot()
+        var dismissed = 0
+        val replaced = Sheet.OpenCheck(maps)
+        slot.open(replaced)
+        slot.dismissedBy(replaced) { dismissed++ }
+        val current = Sheet.AppActions(notes)
+        slot.open(current)
+        // The render site it replaced recomposing one last time.
+        slot.dismissedBy(replaced) { dismissed++ }
+
+        slot.dismissCurrent()
+
+        // Nothing to run, so the rule still empties the slot — see [dismissCurrent].
+        assertEquals(0, dismissed)
+        assertNull(slot.current)
+    }
+
+    @Test
     fun `the sheet a caller asks for is the one open, or nothing`() {
         val slot = SheetSlot()
         slot.open(Sheet.AppActions(maps))
@@ -90,9 +125,20 @@ class SheetSlotTest {
         val slot = SheetSlot()
         slot.open(Sheet.OpenCheck(maps))
 
-        val restored = SheetSlot.Saver.restore(save(slot)!!)
+        val restored = saverIn(session).restore(save(slot, saverIn(session))!!)
 
         assertEquals(maps, restored?.showing<Sheet.OpenCheck>()?.app)
+    }
+
+    /** The one path a session boundary cannot reach — see [SheetSlot.saver] (#134). */
+    @Test
+    fun `an Open Check saved under a session that has since ended is not restored`() {
+        val slot = SheetSlot()
+        slot.open(Sheet.OpenCheck(maps))
+
+        val restored = saverIn(nextSession).restore(save(slot, saverIn(session))!!)
+
+        assertNull(restored?.current)
     }
 
     @Test
@@ -100,11 +146,17 @@ class SheetSlotTest {
         val slot = SheetSlot()
         slot.open(Sheet.AppActions(notes))
 
-        assertNull(save(slot))
-        assertNull(save(SheetSlot()))
+        assertNull(save(slot, saverIn(session)))
+        assertNull(save(SheetSlot(), saverIn(session)))
     }
 
-    private fun save(slot: SheetSlot): Any? = with(SheetSlot.Saver) { AllowingSave.save(slot) }
+    private val session = SessionId(7)
+    private val nextSession = SessionId(8)
+
+    private fun saverIn(session: SessionId) = SheetSlot.saver { session }
+
+    private fun save(slot: SheetSlot, saver: Saver<SheetSlot, Any>): Any? =
+        with(saver) { AllowingSave.save(slot) }
 }
 
 /** The saver only needs somewhere to say "yes, that value can be stored". */

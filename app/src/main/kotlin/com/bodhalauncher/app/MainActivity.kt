@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -31,6 +32,8 @@ import com.bodhalauncher.app.capability.rememberCapabilityEducation
 import com.bodhalauncher.app.data.EventLogger
 import com.bodhalauncher.app.intent.IntentPromptRuntime
 import com.bodhalauncher.app.intent.IntentRecordStore
+import com.bodhalauncher.app.session.SessionRuntime
+import com.bodhalauncher.app.session.applySessionBoundary
 import com.bodhalauncher.app.entitlement.EntitlementStore
 import com.bodhalauncher.app.opencheck.BypassClassifier
 import com.bodhalauncher.app.opencheck.OpenCheckRuleStore
@@ -60,9 +63,8 @@ import com.bodhalauncher.engine.EventType
 import com.bodhalauncher.engine.HomeAction
 import com.bodhalauncher.engine.HomeInputs
 import com.bodhalauncher.engine.Place
-import com.bodhalauncher.engine.SessionId
 import com.bodhalauncher.engine.Surface
-import com.bodhalauncher.engine.sessionOrNull
+import com.bodhalauncher.engine.Transition
 import com.bodhalauncher.engine.resolveBack
 import com.bodhalauncher.engine.resolveRoot
 import com.bodhalauncher.engine.IntentCategory
@@ -91,6 +93,13 @@ class MainActivity : ComponentActivity() {
      */
     private val homeIntents = mutableIntStateOf(0)
 
+    /**
+     * Whether Bodha is actually on screen. The session-end moment reads it (#75):
+     * opened behind another app the sheet would be dismissed unseen by the phone
+     * session ending under it (ADR 0011, #134), and the moment lost for good.
+     */
+    private val visible = mutableStateOf(false)
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
@@ -99,11 +108,13 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        visible.value = true
         (application as BodhaApp).intentPrompt.onLauncherVisible()
     }
 
     override fun onPause() {
         super.onPause()
+        visible.value = false
         (application as BodhaApp).intentPrompt.onLauncherHidden()
     }
 
@@ -135,7 +146,7 @@ class MainActivity : ComponentActivity() {
                     )
                 ) {
                     Box(modifier = Modifier.fillMaxSize().escapeIsBack()) {
-                        BodhaHost(pinStore, intentionStore, libraryStore, groupStore, openCheckStore, entitlementStore, catalog, app.intentPrompt, app.events, homeIntents.intValue, app.sessions.phase.value.sessionOrNull)
+                        BodhaHost(pinStore, intentionStore, libraryStore, groupStore, openCheckStore, entitlementStore, catalog, app.sessions, app.intentPrompt, app.events, homeIntents.intValue, visible.value)
                     }
                 }
             }
@@ -167,11 +178,11 @@ private fun BodhaHost(
     openCheckStore: OpenCheckRuleStore,
     entitlementStore: EntitlementStore,
     catalog: AppCatalog,
+    sessions: SessionRuntime,
     intentPrompt: IntentPromptRuntime,
     events: EventLogger,
     homeIntents: Int,
-    /** The running session, for the surfaces whose state is scoped to one. */
-    session: SessionId?,
+    launcherVisible: Boolean,
 ) {
     val pinnedIds by pinStore.pinned
     val hidden by pinStore.hidden
@@ -189,7 +200,7 @@ private fun BodhaHost(
     // reaches this, so the rule holds across surfaces rather than within each.
     // Saveable, so an in-flight Open Check survives rotation with its outcome
     // still owed; nothing else in it was durable before, and nothing else is now.
-    val sheets = rememberSheetSlot()
+    val sheets = rememberSheetSlot { sessions.currentSession }
     // Every capability Bodha asks for, from any surface, enters here (#157).
     val education = rememberCapabilityEducation(events, sheets)
     var place by remember { mutableStateOf(Place(resolveRoot(focusRunning))) }
@@ -198,6 +209,16 @@ private fun BodhaHost(
     LaunchedEffect(homeIntents) {
         place = Place(resolveRoot(focusRunning))
         education.close()
+    }
+    // The phone session's own boundary, read from the engine's transitions and
+    // nowhere else (ADR 0011, #134). Transitions arrive on the main thread, from
+    // the broadcast receiver or the merge-window callback.
+    DisposableEffect(sessions) {
+        val listener: (Transition) -> Unit = { transition ->
+            applySessionBoundary(transition, sheets) { place = Place(resolveRoot(focusRunning)) }
+        }
+        sessions.addTransitionListener(listener)
+        onDispose { sessions.removeTransitionListener(listener) }
     }
     val context = LocalContext.current
     val openCheckStateStore = remember { OpenCheckStateStore(context) }
@@ -212,8 +233,12 @@ private fun BodhaHost(
     // and the phrase (computed at render) owns the time that actually elapsed.
     // No overlay, no forcing another app away — never claimed (#75).
     val settleSessionEnd = { openCheck.onSessionEndClose(); syncOpenCheck() }
-    LaunchedEffect(Unit) {
-        while (true) {
+    // Polled only while Bodha is on screen, so the moment opens at the visibility
+    // it will be seen at. Opened behind another app it would be dismissed unseen
+    // by the phone session ending under it (#134); the engine holds the expiry
+    // until something settles it, so waiting costs nothing.
+    LaunchedEffect(launcherVisible) {
+        while (launcherVisible) {
             // The engine keeps returning the same expiry until it is settled, so
             // this both opens the moment and stops it re-opening over whatever
             // replaced it — replacement settles it, exactly as closing does.
@@ -270,9 +295,12 @@ private fun BodhaHost(
         val settle = { sheets.close(sheet); syncOpenCheck() }
         // Reopening resolves through the catalog; an uninstalled app just settles.
         val reopen = { catalog.resolve(listOf(due.timedSession.appId)).firstOrNull()?.let(openApp) }
+        // Nothing fights the user closing the moment: dismissing is closing, and
+        // a phone session ending under it closes it the same way (#134).
+        val close = sheets.dismissedBy(sheet) { openCheck.onSessionEndClose(); settle() }
         SessionEndSheet(
             phrase = sessionEndPhrase(due.timedSession.plannedMinutes, overBy),
-            onClose = { openCheck.onSessionEndClose(); settle() },
+            onClose = close,
             onAddFive = {
                 openCheck.onSessionEndAddFive(Instant.now())
                 settle()
@@ -283,13 +311,21 @@ private fun BodhaHost(
                 settle()
                 reopen()
             },
-            // Nothing fights the user closing the moment: dismissing is closing.
-            onDismiss = { openCheck.onSessionEndClose(); settle() },
+            onDismiss = close,
         )
     }
 
     sheets.showing<Sheet.OpenCheck>()?.let { sheet ->
         val app = sheet.app
+        // Back, Escape, the scrim, "Go back" and the phone session ending under
+        // the check all land here — dismissal is not a bypass, so the launch
+        // simply does not happen, and the turn-back is recorded once (#8, #133, #134).
+        val turnBack = sheets.dismissedBy(sheet) {
+            events.log(EventType.OpenCheckTurnedBack)
+            openCheck.onTurnedBack(app.id)
+            sheets.close(sheet)
+            syncOpenCheck()
+        }
         val usageGranted = education.granted(Capability.UsageAccess)
         // Read at check time, never stored (ADR 0009). The 4am boundary is engine
         // math. Work-profile ids read as "no data" — see AppCatalog.primaryPackage.
@@ -326,14 +362,7 @@ private fun BodhaHost(
                 sheets.close(sheet)
                 openApp(app)
             },
-            // Back, Escape, the scrim and "Go back" all land here — dismissal is
-            // not a bypass, so the launch simply does not happen (#8, #133).
-            onDismiss = {
-                events.log(EventType.OpenCheckTurnedBack)
-                openCheck.onTurnedBack(app.id)
-                sheets.close(sheet)
-                syncOpenCheck()
-            },
+            onDismiss = turnBack,
         )
     }
 
@@ -355,7 +384,7 @@ private fun BodhaHost(
                 pinStore = pinStore,
                 libraryStore = libraryStore,
                 catalog = catalog,
-                session = session,
+                session = sessions.currentSession,
                 openApp = openApp,
             )
             return
@@ -438,11 +467,20 @@ private fun BodhaHost(
         // decision stops being pending rather than suppressing later checks.
         val due by intentPrompt.promptDue
         LaunchedEffect(due) {
-            if (due == null) return@LaunchedEffect
+            val decision = due ?: return@LaunchedEffect
             events.log(EventType.IntentPromptShown)
-            sheets.open(Sheet.IntentPrompt(), onReplaced = intentPrompt::withdraw)
+            sheets.open(Sheet.IntentPrompt(decision), onReplaced = intentPrompt::withdraw)
         }
         sheets.showing<Sheet.IntentPrompt>()?.let { sheet ->
+            // A prompt the session ended under went unanswered exactly as a
+            // swipe-down leaves it, and rests on the same cooldown (#134). The
+            // decision comes from the sheet, so the record is written on that
+            // path too — by then the runtime has already dropped the pending one.
+            val dismiss = sheets.dismissedBy(sheet) {
+                events.log(EventType.IntentPromptDismissed)
+                intentPrompt.dismiss(sheet.decision)
+                sheets.close(sheet)
+            }
             IntentPromptSheet(
                 onSelect = { category, text ->
                     events.log(EventType.IntentPromptAnswered)
@@ -451,11 +489,7 @@ private fun BodhaHost(
                     // The intent flows straight into the action.
                     if (category == IntentCategory.FindSomething) place = Place(Surface.Search)
                 },
-                onDismiss = {
-                    events.log(EventType.IntentPromptDismissed)
-                    intentPrompt.dismiss()
-                    sheets.close(sheet)
-                },
+                onDismiss = dismiss,
             )
         }
     }
