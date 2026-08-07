@@ -6,13 +6,17 @@ import androidx.test.core.app.ApplicationProvider
 import com.bodhalauncher.app.data.EventLogDao
 import com.bodhalauncher.app.data.EventLogEntity
 import com.bodhalauncher.app.data.EventLogger
+import com.bodhalauncher.app.ui.Sheet
+import com.bodhalauncher.app.ui.SheetSlot
 import com.bodhalauncher.engine.Capability
 import com.bodhalauncher.engine.EducationEntry
 import com.bodhalauncher.engine.EventType
+import com.bodhalauncher.engine.HomeAction
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -31,6 +35,7 @@ class CapabilityEducationTest {
     private lateinit var context: Context
     private lateinit var store: EducationStateStore
     private lateinit var dao: RecordingDao
+    private lateinit var sheets: SheetSlot
     private lateinit var education: CapabilityEducation
 
     @Before
@@ -40,7 +45,8 @@ class CapabilityEducationTest {
             .edit().clear().commit()
         store = EducationStateStore(context)
         dao = RecordingDao()
-        education = CapabilityEducation(CapabilityEdge(context), store, EventLogger(dao))
+        sheets = SheetSlot()
+        education = CapabilityEducation(CapabilityEdge(context), store, EventLogger(dao), sheets)
         // The shadow app-ops manager allows every op by default; start ungranted.
         setUsageAccess(AppOpsManager.MODE_ERRORED)
     }
@@ -89,6 +95,31 @@ class CapabilityEducationTest {
         assertEquals(emptyList<EventType>(), dao.awaitTypes(0))
         // Closing is not an answer, but the screen was still delivered (#18).
         assertEquals(true, store.shown(Capability.Calendar))
+    }
+
+    @Test
+    fun `explaining a capability from an Open Check replaces the check`() {
+        val check = Sheet.OpenCheck(HomeAction("maps", "Maps"))
+        sheets.open(check)
+
+        education.ask(Capability.UsageAccess, EducationEntry.UserRequest)
+
+        // One sheet, and it is the explanation — so the launch the check gated
+        // never proceeds, and the return from system settings finds no stale check.
+        assertEquals(Capability.UsageAccess, sheets.showing<Sheet.Education>()?.screen?.capability)
+        assertNull(sheets.showing<Sheet.OpenCheck>())
+    }
+
+    @Test
+    fun `the sheet only ever closes its own, never one that replaced it`() {
+        education.ask(Capability.Calendar, EducationEntry.FeatureTouch)
+        val check = Sheet.OpenCheck(HomeAction("maps", "Maps"))
+        sheets.open(check)
+
+        education.onSkip()
+
+        assertSame(check, sheets.current)
+        assertEquals(emptyList<EventType>(), dao.awaitTypes(0))
     }
 
     @Test

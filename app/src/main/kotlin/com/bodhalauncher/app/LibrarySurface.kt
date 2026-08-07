@@ -1,6 +1,7 @@
 package com.bodhalauncher.app
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -19,6 +20,8 @@ import com.bodhalauncher.app.ui.GroupPickerDialog
 import com.bodhalauncher.app.ui.LibraryScreen
 import com.bodhalauncher.app.ui.OpenCheckRuleDialog
 import com.bodhalauncher.app.ui.ProBoundaryDialog
+import com.bodhalauncher.app.ui.Sheet
+import com.bodhalauncher.app.ui.SheetSlot
 import com.bodhalauncher.engine.Capability
 import com.bodhalauncher.engine.EducationEntry
 import com.bodhalauncher.engine.GateDecision
@@ -45,6 +48,7 @@ fun LibrarySurface(
     usage: UsageReader,
     bypass: BypassClassifier,
     education: CapabilityEducation,
+    sheets: SheetSlot,
     openApp: (HomeAction) -> Unit,
     onPause: () -> Unit,
     onBack: () -> Unit,
@@ -53,7 +57,6 @@ fun LibrarySurface(
     val hidden by pinStore.hidden
     val allApps by catalog.apps
     var query by remember { mutableStateOf("") }
-    var actionsFor by remember { mutableStateOf<HomeAction?>(null) }
     var groupsFor by remember { mutableStateOf<HomeAction?>(null) }
     var openCheckFor by remember { mutableStateOf<HomeAction?>(null) }
     var boundary by remember { mutableStateOf<ProBoundary?>(null) }
@@ -64,6 +67,12 @@ fun LibrarySurface(
     // Re-read on every resume, so granting access in settings shows up on return;
     // read on demand and never stored (ADR 0009).
     val lastUsed = remember(allApps, education.resumeTick) { usage.lastUsed() }
+    // The actions sheet is about an app on this surface, so it leaves with the
+    // surface — the system Home button landing on root (#132) must not leave one
+    // parked in the app-wide slot to reappear the next time the Library opens.
+    DisposableEffect(Unit) {
+        onDispose { sheets.showing<Sheet.AppActions>()?.let(sheets::close) }
+    }
     LibraryScreen(
         state = resolveLibrary(
             LibraryInputs(
@@ -86,7 +95,7 @@ fun LibrarySurface(
         iconFor = { catalog.icon(it.id) },
         iconKey = catalog.version.intValue,
         onOpen = openApp,
-        onLongPress = { actionsFor = it },
+        onLongPress = { sheets.open(Sheet.AppActions(it)) },
         onPin = { pinStore.pin(it.id) },
         onHide = { pinStore.hide(it.id) },
         onUnhide = { pinStore.unhide(it.id) },
@@ -135,8 +144,9 @@ fun LibrarySurface(
         )
     }
     boundary?.let { ProBoundaryDialog(boundary = it, onDismiss = { boundary = null }) }
-    actionsFor?.let { app ->
-        val dismiss = { actionsFor = null }
+    sheets.showing<Sheet.AppActions>()?.let { sheet ->
+        val app = sheet.app
+        val dismiss = { sheets.close(sheet) }
         val openCheckRules by openCheckStore.rules
         AppActionsSheet(
             app = app,

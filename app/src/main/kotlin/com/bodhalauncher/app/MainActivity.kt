@@ -17,8 +17,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.SideEffect
-import androidx.compose.runtime.saveable.listSaver
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.bodhalauncher.app.home.ActionsKeyStore
@@ -54,6 +52,8 @@ import com.bodhalauncher.app.ui.escapeIsBack
 import com.bodhalauncher.app.ui.OpenCheckSheet
 import com.bodhalauncher.app.ui.PlaceholderSurface
 import com.bodhalauncher.app.ui.SessionEndSheet
+import com.bodhalauncher.app.ui.Sheet
+import com.bodhalauncher.app.ui.rememberSheetSlot
 import com.bodhalauncher.engine.Capability
 import com.bodhalauncher.engine.EducationEntry
 import com.bodhalauncher.engine.EventType
@@ -68,7 +68,6 @@ import com.bodhalauncher.engine.OpenCheckContext
 import com.bodhalauncher.engine.OpenCheckDecision
 import com.bodhalauncher.engine.OpenCheckEngine
 import com.bodhalauncher.engine.OpenCheckMode
-import com.bodhalauncher.engine.TimedSessionEnd
 import com.bodhalauncher.engine.dayStart
 import com.bodhalauncher.engine.sessionEndPhrase
 import com.bodhalauncher.engine.resolveOpenCheckLines
@@ -151,11 +150,6 @@ class MainActivity : ComponentActivity() {
 private fun openSurface(target: Surface, go: (Surface) -> Unit) =
     GestureAction("Open ${target.title}") { go(target) }
 
-private val homeActionSaver = listSaver<HomeAction?, String>(
-    save = { it?.let { action -> listOf(action.id, action.label) } ?: emptyList() },
-    restore = { if (it.isEmpty()) null else HomeAction(it[0], it[1]) },
-)
-
 /**
  * The one host every surface hangs off. It owns where you are, the single opening
  * path, and the sheets that may appear over any surface; each surface owns its own
@@ -187,8 +181,13 @@ private fun BodhaHost(
     var editingHome by remember { mutableStateOf(false) }
     // Focus has no producer yet; #9's slice supplies it rather than re-deciding the rule.
     val focusRunning = false
+    // The one sheet in the app (ADR 0011, #133). Every surface that opens one
+    // reaches this, so the rule holds across surfaces rather than within each.
+    // Saveable, so an in-flight Open Check survives rotation with its outcome
+    // still owed; nothing else in it was durable before, and nothing else is now.
+    val sheets = rememberSheetSlot()
     // Every capability Bodha asks for, from any surface, enters here (#157).
-    val education = rememberCapabilityEducation(events)
+    val education = rememberCapabilityEducation(events, sheets)
     var place by remember { mutableStateOf(Place(resolveRoot(focusRunning))) }
     // The system Home button lands on root from wherever you were, and takes the
     // education sheet the departed surface opened with it — it belongs to that ask.
@@ -204,23 +203,30 @@ private fun BodhaHost(
     val usage = remember { UsageReader(context) }
     val bypass = remember { BypassClassifier(context) }
     val records = remember { IntentRecordStore(context) }
-    // Saveable so an in-flight check survives rotation; otherwise a displayed
-    // check would vanish with no outcome logged, skewing the return rate (#25).
-    var checkFor by rememberSaveable(stateSaver = homeActionSaver) { mutableStateOf<HomeAction?>(null) }
-    var sessionEndDue by remember { mutableStateOf<TimedSessionEnd?>(null) }
     // The session-end moment appears only where policy allows Bodha on screen:
     // if the launcher was elsewhere at expiry, it shows on the next visibility,
     // and the phrase (computed at render) owns the time that actually elapsed.
     // No overlay, no forcing another app away — never claimed (#75).
+    val settleSessionEnd = { openCheck.onSessionEndClose(); syncOpenCheck() }
     LaunchedEffect(Unit) {
         while (true) {
-            if (sessionEndDue == null) openCheck.advanceTo(Instant.now())?.let { sessionEndDue = it }
+            // The engine keeps returning the same expiry until it is settled, so
+            // this both opens the moment and stops it re-opening over whatever
+            // replaced it — replacement settles it, exactly as closing does.
+            if (sheets.showing<Sheet.SessionEnd>() == null) {
+                openCheck.advanceTo(Instant.now())?.let {
+                    sheets.open(Sheet.SessionEnd(it), onReplaced = settleSessionEnd)
+                }
+            }
             delay(1_000)
         }
     }
     // At most one pause per opening (#77): the prompt engine is told while a
     // check is on screen, and a launch while the prompt shows skips the check.
-    SideEffect { intentPrompt.openCheckShowing = checkFor != null || sessionEndDue != null }
+    SideEffect {
+        intentPrompt.openCheckShowing =
+            sheets.current is Sheet.OpenCheck || sheets.current is Sheet.SessionEnd
+    }
     // The single opening path (#8): every surface's launch flows through here.
     val openApp: (HomeAction) -> Unit = { action ->
         val rule = openCheckStore.ruleFor(action.id)
@@ -247,16 +253,17 @@ private fun BodhaHost(
                 // Type and timestamp only — the event never carries the app (#25).
                 if (decision.repeatedOpen) events.log(EventType.RepeatedOpenDetected)
                 events.log(EventType.OpenCheckDisplayed)
-                checkFor = action
+                sheets.open(Sheet.OpenCheck(action))
             }
         }
         syncOpenCheck()
     }
 
-    sessionEndDue?.let { due ->
+    sheets.showing<Sheet.SessionEnd>()?.let { sheet ->
+        val due = sheet.end
         // Phrased at render time so a moment shown late owns the elapsed truth.
         val overBy = (System.currentTimeMillis() - due.timedSession.endsAt.toEpochMilli()).coerceAtLeast(0)
-        val settle = { sessionEndDue = null; syncOpenCheck() }
+        val settle = { sheets.close(sheet); syncOpenCheck() }
         // Reopening resolves through the catalog; an uninstalled app just settles.
         val reopen = { catalog.resolve(listOf(due.timedSession.appId)).firstOrNull()?.let(openApp) }
         SessionEndSheet(
@@ -277,7 +284,8 @@ private fun BodhaHost(
         )
     }
 
-    checkFor?.let { app ->
+    sheets.showing<Sheet.OpenCheck>()?.let { sheet ->
+        val app = sheet.app
         val usageGranted = education.granted(Capability.UsageAccess)
         // Read at check time, never stored (ADR 0009). The 4am boundary is engine
         // math. Work-profile ids read as "no data" — see AppCatalog.primaryPackage.
@@ -303,7 +311,7 @@ private fun BodhaHost(
                 typed?.let(records::appendOpenCheckIntention)
                 events.log(EventType.OpenCheckProceeded)
                 openCheck.onProceeded(app.id, Instant.now())
-                checkFor = null
+                sheets.close(sheet)
                 // Back through the same path; the grant it holds covers this launch.
                 openApp(app)
             },
@@ -311,13 +319,15 @@ private fun BodhaHost(
                 typed?.let(records::appendOpenCheckIntention)
                 events.log(EventType.OpenCheckProceeded)
                 openCheck.onProceededFor(app.id, Instant.now(), minutes)
-                checkFor = null
+                sheets.close(sheet)
                 openApp(app)
             },
+            // Back, Escape, the scrim and "Go back" all land here — dismissal is
+            // not a bypass, so the launch simply does not happen (#8, #133).
             onDismiss = {
                 events.log(EventType.OpenCheckTurnedBack)
                 openCheck.onTurnedBack(app.id)
-                checkFor = null
+                sheets.close(sheet)
                 syncOpenCheck()
             },
         )
@@ -347,6 +357,7 @@ private fun BodhaHost(
                 usage = usage,
                 bypass = bypass,
                 education = education,
+                sheets = sheets,
                 openApp = openApp,
                 onPause = { place = Place(Surface.Focus) },
                 onBack = back,
@@ -408,19 +419,28 @@ private fun BodhaHost(
             onSearch = { place = Place(Surface.Search) },
         )
 
+        // The prompt is due from the runtime and shows through the one slot; if
+        // something else takes the slot, the runtime is told it is gone, so the
+        // decision stops being pending rather than suppressing later checks.
         val due by intentPrompt.promptDue
-        if (due != null) {
-            LaunchedEffect(due) { events.log(EventType.IntentPromptShown) }
+        LaunchedEffect(due) {
+            if (due == null) return@LaunchedEffect
+            events.log(EventType.IntentPromptShown)
+            sheets.open(Sheet.IntentPrompt(), onReplaced = intentPrompt::withdraw)
+        }
+        sheets.showing<Sheet.IntentPrompt>()?.let { sheet ->
             IntentPromptSheet(
                 onSelect = { category, text ->
                     events.log(EventType.IntentPromptAnswered)
                     intentPrompt.select(category, text)
+                    sheets.close(sheet)
                     // The intent flows straight into the action.
                     if (category == IntentCategory.FindSomething) place = Place(Surface.Search)
                 },
                 onDismiss = {
                     events.log(EventType.IntentPromptDismissed)
                     intentPrompt.dismiss()
+                    sheets.close(sheet)
                 },
             )
         }
