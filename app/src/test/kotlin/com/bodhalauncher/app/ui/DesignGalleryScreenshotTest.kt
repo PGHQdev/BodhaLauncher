@@ -29,7 +29,9 @@ import org.robolectric.annotation.GraphicsMode
 // Raised again for ADR 0022's revealed affordances, which took the large-type
 // fixture to 3975 — inside 4200, but a component away from clipping again.
 // Raised for #135/#155's specimens (the promise step, the tinted list row).
-@Config(sdk = [35], qualifiers = "w320dp-h6500dp", application = android.app.Application::class)
+// Raised for #136–#139's specimens: the multi-select rows and the four
+// onboarding steps took the large-type fixture past 6500.
+@Config(sdk = [35], qualifiers = "w320dp-h9500dp", application = android.app.Application::class)
 class DesignGalleryScreenshotTest {
 
     @get:Rule

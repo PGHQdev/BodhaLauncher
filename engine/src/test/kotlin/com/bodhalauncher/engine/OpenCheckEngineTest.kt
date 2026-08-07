@@ -29,6 +29,16 @@ class OpenCheckEngineTest {
     }
 
     @Test
+    fun `the home role is not an input - a ruled launch from Bodha checks without it`() {
+        // #136: with the home role declined, launches made from Bodha still
+        // fire Open Check. Neither OpenCheckContext nor this call carries the
+        // role, so the decision cannot vary by it — asserted, not assumed.
+        assertIs<OpenCheckDecision.ShowCheck>(
+            OpenCheckEngine().onLaunchAttempt("app", always, t0, OpenCheckContext())
+        )
+    }
+
+    @Test
     fun `always mode shows the check`() {
         val decision = OpenCheckEngine().onLaunchAttempt("app", always, t0)
         val check = assertIs<OpenCheckDecision.ShowCheck>(decision)

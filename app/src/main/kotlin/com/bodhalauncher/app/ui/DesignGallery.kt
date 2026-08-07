@@ -108,6 +108,12 @@ fun DesignGallery() {
             onClick = {},
             tinted = true,
         )
+        // The multi-select row (#137): picked is the accent check in the
+        // trailing slot, with no fill or outline change; unavailable is a cap
+        // reached, spoken as disabled.
+        MultiSelectRow(title = "Multi-select row, picked", picked = true, onToggle = {})
+        MultiSelectRow(title = "Multi-select row, unpicked", picked = false, onToggle = {})
+        MultiSelectRow(title = "Multi-select row, unavailable — the cap reached", picked = false, onToggle = {}, enabled = false)
         Spacer(Modifier.height(BodhaSpacing.xl))
 
         // Focus (ADR 0026), forced rather than requested: only one node can hold
@@ -133,6 +139,9 @@ fun DesignGallery() {
             }
             ListRow(title = "List row, focused", onClick = {})
             ListRow(title = "Mode row, tinted, focused", onClick = {}, tinted = true)
+            // The deliberately focused picked specimen (#137, ADR 0026): without
+            // it no golden ever contains the ring on a multi-select row.
+            MultiSelectRow(title = "Multi-select row, picked, focused", picked = true, onToggle = {})
             // The two rows that carry per-item actions, so the hint and the
             // actions node are inside both guards rather than only on a screen.
             CardRow(title = "Pin row, focused", onClick = {}, onLongClick = {})
@@ -152,6 +161,30 @@ fun DesignGallery() {
         // above, and repeating it here would only inflate the walk's count.
         Text("Actionable components", style = BodhaType.overline, color = colors.inkMuted)
         OnboardingPromiseStep(onContinue = {})
+        // The pickers at a fixed height: the flow gives them the screen's
+        // leftover; a fixture has none to give.
+        OnboardingPickerStep(
+            headline = "Pick your essentials",
+            support = "Four to eight is plenty.",
+            apps = GALLERY_PICKER_APPS,
+            onContinue = {},
+            onSkip = {},
+            initialPicked = listOf("gallery.one"),
+            modifier = Modifier.height(300.dp),
+        )
+        // The capped variant (#138): with the cap met, the unpicked row is unavailable.
+        OnboardingPickerStep(
+            headline = "Which apps deserve a pause?",
+            support = "Three to start.",
+            apps = GALLERY_PICKER_APPS,
+            cap = 2,
+            onContinue = {},
+            onSkip = {},
+            initialPicked = listOf("gallery.one", "gallery.two"),
+            modifier = Modifier.height(300.dp),
+        )
+        OnboardingIntentionStep(onContinue = {}, onSkip = {})
+        OnboardingBecomeHomeStep(onRequestRole = {}, onSkip = {})
         IntentionCard(text = "Today's intention, tinted", muted = false, onEdit = {})
         AppRow(app = GALLERY_APP, iconKey = Unit, iconFor = { null }, onOpen = {}, onLongPress = {})
         AppRow(
@@ -176,6 +209,12 @@ fun DesignGallery() {
 
 /** Fixed fixture content: no clock, no package manager, so the diff is the identity. */
 private val GALLERY_APP = HomeAction(id = "gallery.app", label = "Gallery app")
+
+private val GALLERY_PICKER_APPS = listOf(
+    HomeAction(id = "gallery.one", label = "Atlas"),
+    HomeAction(id = "gallery.two", label = "Ledger"),
+    HomeAction(id = "gallery.three", label = "Signalbox"),
+)
 
 private val GALLERY_INDEX = listOf('A', 'F', 'M', 'S', 'W')
     .mapIndexed { i, letter -> LibraryIndexEntry(letter = letter, firstRow = i) }

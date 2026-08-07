@@ -37,6 +37,17 @@ class DailyIntentionTest {
     }
 
     @Test
+    fun `finishing onboarding at 2am files the intention under the previous day key`() {
+        // #139: the first intention uses the same 4am boundary as any other —
+        // written at 2am it belongs to yesterday and expires at the coming 4am.
+        val intention = DailyIntention(text = "Sleep more", dayKey = dayKey(at("2026-08-05T02:00:00")))
+
+        assertEquals(LocalDate.parse("2026-08-04"), intention.dayKey)
+        assertEquals("Sleep more", intention.textOn(at("2026-08-05T03:45:00")))
+        assertNull(intention.textOn(at("2026-08-05T04:00:00")))
+    }
+
+    @Test
     fun `an intention set during the day expires at the next 4am`() {
         val intention = DailyIntention(text = "Call Mom", dayKey = dayKey(at("2026-08-04T10:00:00")))
 

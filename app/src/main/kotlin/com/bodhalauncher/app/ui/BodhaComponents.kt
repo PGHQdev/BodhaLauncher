@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,6 +28,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
@@ -258,6 +260,69 @@ fun ListRow(
             }
             ActionsSlot(actions, onLongClick, focused)
             trailing?.invoke()
+        }
+    }
+}
+
+/**
+ * The multi-select variant of [ListRow]: one entry in a scrolling list that is
+ * picked rather than opened — onboarding's essentials and friction pickers.
+ *
+ * The picked state is **a check glyph in the accent, in the trailing slot**
+ * (#137): ADR 0025 has spent both fills and ADR 0026 the accent outline, so a
+ * picked row can take none of them — and the trailing slot is free because
+ * these rows act in place and draw no chevron. Nothing about the row's fill or
+ * outline changes. The toggle semantics are what a screen reader speaks the
+ * state through; [enabled] false is a cap reached, spoken as unavailable.
+ */
+@Composable
+fun MultiSelectRow(
+    title: String,
+    picked: Boolean,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    leading: (@Composable () -> Unit)? = null,
+) {
+    val colors = LocalBodhaColors.current
+    var focused by remember { mutableStateOf(false) }
+    val ring = focusRingShown(focused)
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .then(if (ring) Modifier.focusRing(RectangleShape) else Modifier),
+    ) {
+        Box(
+            Modifier.fillMaxWidth().height(1.dp)
+                .background(if (ring) Color.Transparent else colors.hairline)
+        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(BodhaSpacing.m),
+            modifier = Modifier
+                .fillMaxWidth()
+                .touchTargetFloor()
+                .onFocusChanged { focused = it.isFocused }
+                .toggleable(value = picked, enabled = enabled, onValueChange = { onToggle() })
+                .padding(vertical = BodhaSpacing.m),
+        ) {
+            leading?.invoke()
+            Text(
+                text = title,
+                style = BodhaType.body,
+                color = if (enabled || picked) colors.ink else colors.inkMuted,
+                modifier = Modifier.weight(1f),
+            )
+            if (picked) {
+                // The toggle semantics already speak the state; a literal
+                // "check mark" on top would say it twice (ADR 0020).
+                Text(
+                    "✓",
+                    style = BodhaType.title,
+                    color = colors.accent,
+                    modifier = Modifier.clearAndSetSemantics {},
+                )
+            }
         }
     }
 }

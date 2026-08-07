@@ -53,7 +53,8 @@ import org.robolectric.annotation.GraphicsMode
 // the window's height measures 0 tall and the touch-target clause fails for a reason
 // that is not the floor. If this suite reports 0-height nodes, the fixtures outgrew
 // the display — raise this, don't relax the assertion.
-@Config(sdk = [35], qualifiers = "w411dp-h4000dp", application = android.app.Application::class)
+// Raised for #136–#139's specimens (the multi-select rows and four onboarding steps).
+@Config(sdk = [35], qualifiers = "w411dp-h7000dp", application = android.app.Application::class)
 class AccessibilityFloorTest {
 
     @get:Rule

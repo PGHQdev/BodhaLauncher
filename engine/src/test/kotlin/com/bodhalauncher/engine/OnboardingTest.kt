@@ -32,6 +32,30 @@ class OnboardingTest {
     }
 
     @Test
+    fun `the five steps stand in ADR 0018's order and become home is last`() {
+        // BecomeHome last is what makes it the step the completion flag
+        // resolves on: the reducer returns null only once its ordinal passes.
+        assertEquals(
+            listOf(
+                OnboardingStep.Promise,
+                OnboardingStep.Essentials,
+                OnboardingStep.Friction,
+                OnboardingStep.FirstIntention,
+                OnboardingStep.BecomeHome,
+            ),
+            OnboardingStep.entries.toList(),
+        )
+    }
+
+    @Test
+    fun `only passing become home resolves the flow`() {
+        // The flag is never written earlier: every marker short of the last
+        // step still opens a step, including a run that skipped everything.
+        assertEquals(OnboardingStep.BecomeHome, resolveOnboardingStep(complete = false, furthestPassed = 4))
+        assertNull(resolveOnboardingStep(complete = false, furthestPassed = 5))
+    }
+
+    @Test
     fun `a corrupt negative marker still opens the first step rather than crashing`() {
         assertEquals(OnboardingStep.Promise, resolveOnboardingStep(complete = false, furthestPassed = -1))
     }

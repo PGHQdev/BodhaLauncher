@@ -27,6 +27,8 @@ data class HomeInputs(
     val inboxDigest: String? = null,
     val focusActive: Boolean = false,
     val sessionIntent: IntentCategory? = null,
+    /** Whether Bodha holds the home role; re-read on resume (#136, ADR 0018). */
+    val homeRoleHeld: Boolean = true,
 )
 
 /** Resolved Home content; the UI renders exactly this, in this order. */
@@ -38,6 +40,7 @@ data class HomeState(
     val inboxDigest: String?,
     val focusActive: Boolean,
     val sessionIntent: IntentCategory?,
+    val homeRoleHeld: Boolean = true,
 )
 
 const val MAX_ACTIONS = 4
@@ -60,5 +63,6 @@ fun resolveHome(inputs: HomeInputs): HomeState {
         inboxDigest = inputs.inboxDigest,
         focusActive = inputs.focusActive,
         sessionIntent = inputs.sessionIntent,
+        homeRoleHeld = inputs.homeRoleHeld,
     )
 }
