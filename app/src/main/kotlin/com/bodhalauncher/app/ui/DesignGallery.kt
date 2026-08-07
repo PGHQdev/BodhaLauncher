@@ -148,6 +148,18 @@ fun DesignGallery() {
         )
         Spacer(Modifier.height(BodhaSpacing.xl))
 
+        // The inbox row (#162): a live notification under its section, the
+        // source's mark bare — the gallery has none to give, so the specimen
+        // shows the row a package manager could not answer for.
+        SectionOverline("Inbox")
+        NotificationRow(
+            title = "Gallery notification",
+            line = "The latest state, from the system",
+            icon = null,
+            onOpen = {},
+        )
+        Spacer(Modifier.height(BodhaSpacing.xl))
+
         // Focus (ADR 0026), forced rather than requested: only one node can hold
         // real focus, and the fixture has to show the ring on all four shapes.
         // Screenshots capture at rest, so without these specimens no golden ever

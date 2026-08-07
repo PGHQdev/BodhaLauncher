@@ -283,7 +283,7 @@ class MainActivity : ComponentActivity() {
  * placeholder arms of the `when` are replaced.
  */
 private val BUILT_SURFACES =
-    listOf(Surface.Home, Surface.Library, Surface.Today)
+    listOf(Surface.Home, Surface.Library, Surface.Today, Surface.Inbox)
 
 private fun openSurface(target: Surface, go: (Surface) -> Unit) =
     GestureAction("Open ${target.title}") { go(target) }
@@ -553,9 +553,15 @@ private fun BodhaHost(
                 sheets = sheets,
                 education = education,
                 // The inbox lives inside Today and opens as its own surface;
-                // back from there returns Home (ADR 0011). A placeholder until
-                // inbox-02.
+                // back from there returns Home (ADR 0011).
                 openInbox = { place = Place(Surface.Inbox) },
+            )
+            return
+        }
+        Surface.Inbox -> {
+            InboxSurface(
+                education = education,
+                onBack = back,
             )
             return
         }
