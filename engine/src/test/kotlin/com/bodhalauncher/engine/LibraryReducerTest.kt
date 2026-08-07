@@ -35,15 +35,27 @@ class LibraryReducerTest {
     }
 
     @Test
-    fun `query filters to labels containing it anywhere`() {
-        val library = resolveLibrary(
-            LibraryInputs(
-                apps = listOf(app("Instagram"), app("Telegram"), app("Camera")),
-                query = "gram",
-            )
+    fun `query filters to word-boundary prefixes, not substrings`() {
+        val apps = listOf(app("Instagram"), app("Telegram"), app("Camera"))
+
+        val midWord = resolveLibrary(LibraryInputs(apps = apps, query = "gram"))
+        val prefix = resolveLibrary(LibraryInputs(apps = apps, query = "insta"))
+
+        assertTrue(midWord.rows.isEmpty())
+        assertEquals(listOf("Instagram"), prefix.rows.map { it.label })
+    }
+
+    @Test
+    fun `a query holding no words leaves the whole library as it browses`() {
+        val browsing = LibraryInputs(
+            apps = listOf(app("Chess"), app("Signal")),
+            layout = LibraryLayout.Groups,
+            groups = listOf(LibraryGroup("Play", emptyList())),
+            hidden = setOf("signal"),
         )
 
-        assertEquals(listOf("Instagram", "Telegram"), library.rows.map { it.label })
+        assertEquals(resolveLibrary(browsing), resolveLibrary(browsing.copy(query = "   ")))
+        assertEquals(resolveLibrary(browsing), resolveLibrary(browsing.copy(query = "...")))
     }
 
     @Test

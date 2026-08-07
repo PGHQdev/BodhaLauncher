@@ -26,7 +26,7 @@ data class LibraryInputs(
     val categories: Map<String, String> = emptyMap(),
     /** User-created groups, in the user's order; what the Groups layout sections by. */
     val groups: List<LibraryGroup> = emptyList(),
-    /** Search text; blank means no filtering. Matches anywhere in the label, ignoring case. */
+    /** Search text; [isBlankQuery] text filters nothing. Matched by [matchesQuery] against the label. */
     val query: String = "",
     /** App ids the user has hidden; they collect in [LibraryState.hiddenRows]. */
     val hidden: Set<String> = emptySet(),
@@ -60,8 +60,8 @@ data class LibraryState(
 
 /** Resolves what the App Library shows: every launchable app, alphabetical ignoring case. */
 fun resolveLibrary(inputs: LibraryInputs): LibraryState {
-    val query = inputs.query.trim()
-    fun matches(app: HomeAction) = query.isEmpty() || app.label.contains(query, ignoreCase = true)
+    val searching = !isBlankQuery(inputs.query)
+    fun matches(app: HomeAction) = matchesQuery(app.label, inputs.query)
     // Locale-independent so ordering can't shift under a Turkish-ı style locale.
     val alphabetical = compareBy(String.CASE_INSENSITIVE_ORDER, HomeAction::label)
     val (hiddenApps, visible) = inputs.apps.partition { it.id in inputs.hidden }
@@ -72,7 +72,7 @@ fun resolveLibrary(inputs: LibraryInputs): LibraryState {
         else alphabetical
     val rows = visible.filter(::matches).sortedWith(ordering)
     val hiddenRows = hiddenApps
-        .filter { (query.isEmpty() || inputs.hiddenSearchable) && matches(it) }
+        .filter { (!searching || inputs.hiddenSearchable) && matches(it) }
         .sortedWith(alphabetical)
     val categorised = inputs.layout == LibraryLayout.Categories
     val grouped = inputs.layout == LibraryLayout.Groups
@@ -86,7 +86,7 @@ fun resolveLibrary(inputs: LibraryInputs): LibraryState {
             .groupBy { inputs.categories[it.id] ?: OTHER_CATEGORY }
             .map { (title, apps) -> LibrarySection(title, apps) }
             .sortedWith(compareBy({ it.title == OTHER_CATEGORY }, { it.title }))
-        grouped -> groupSections(inputs.groups, rows, searching = query.isNotEmpty())
+        grouped -> groupSections(inputs.groups, rows, searching)
         else -> emptyList()
     }
     return LibraryState(
