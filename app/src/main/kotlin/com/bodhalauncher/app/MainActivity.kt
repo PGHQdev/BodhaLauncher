@@ -128,13 +128,26 @@ class MainActivity : ComponentActivity() {
      * The one grant Bodha asks for (ADR 0018). Granted or declined — including
      * an OEM that routes to a settings screen instead of a dialog — the result
      * lands here and the flow completes. Declining is an answer: no retry, no
-     * re-prompt, and the only route back is the future Settings row.
+     * re-prompt, and the route back is Settings' home-role row (#140).
      */
     private val roleRequest =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
-            homeRoleHeld.value = readHomeRole()
-            advanceStep(OnboardingStep.BecomeHome)
+            settleRoleRequest()
         }
+
+    /**
+     * Granted, declined, or nothing left to ask: the role is re-read, and the
+     * flow advances only if the flow is what asked.
+     *
+     * Which asked is read from [shownStep] rather than remembered in a field,
+     * because a field would be gone by the time the result arrives after a
+     * process death mid-dialog, while `onCreate` re-resolves the step from the
+     * store — so the flow still advances and Settings still does not.
+     */
+    private fun settleRoleRequest() {
+        homeRoleHeld.value = readHomeRole()
+        if (shownStep.value == OnboardingStep.BecomeHome) advanceStep(OnboardingStep.BecomeHome)
+    }
 
     /** Every advance — answer or skip — passes through here, from any step. */
     private fun advanceStep(step: OnboardingStep) {
@@ -153,8 +166,8 @@ class MainActivity : ComponentActivity() {
         if (roles != null && roles.isRoleAvailable(RoleManager.ROLE_HOME) && !roles.isRoleHeld(RoleManager.ROLE_HOME)) {
             roleRequest.launch(roles.createRequestRoleIntent(RoleManager.ROLE_HOME))
         } else {
-            // Already held, or no request to make: either way the flow completes.
-            advanceStep(OnboardingStep.BecomeHome)
+            // Already held, or no request to make: settled without a dialog.
+            settleRoleRequest()
         }
     }
 
@@ -272,7 +285,7 @@ class MainActivity : ComponentActivity() {
                     )
                 ) {
                     Box(modifier = Modifier.fillMaxSize().escapeIsBack()) {
-                        BodhaHost(pinStore, modeStore, intentionStore, libraryStore, defaultStore, groupStore, openCheckStore, entitlementStore, catalog, app.sessions, app.intentPrompt, app.events, homeIntents.intValue, visible.value, homeRoleHeld.value)
+                        BodhaHost(pinStore, modeStore, intentionStore, libraryStore, defaultStore, groupStore, openCheckStore, entitlementStore, catalog, app.sessions, app.intentPrompt, app.events, homeIntents.intValue, visible.value, homeRoleHeld.value, ::requestHomeRole)
                     }
                 }
             }
@@ -292,8 +305,10 @@ class MainActivity : ComponentActivity() {
  * that navigates to where you already stand goes nowhere. Grows as the
  * placeholder arms of the `when` are replaced.
  */
-private val BUILT_SURFACES =
-    listOf(Surface.Home, Surface.Library, Surface.Awareness, Surface.Today, Surface.Inbox, Surface.Focus)
+private val BUILT_SURFACES = listOf(
+    Surface.Home, Surface.Library, Surface.Awareness, Surface.Today, Surface.Inbox,
+    Surface.Focus, Surface.Settings,
+)
 
 private fun openSurface(target: Surface, go: (Surface) -> Unit) =
     GestureAction("Open ${target.title}") { go(target) }
@@ -321,6 +336,7 @@ private fun BodhaHost(
     homeIntents: Int,
     launcherVisible: Boolean,
     homeRoleHeld: Boolean,
+    requestHomeRole: () -> Unit,
 ) {
     val pinnedIds by pinStore.pinned
     val hidden by pinStore.hidden
@@ -700,6 +716,10 @@ private fun BodhaHost(
             )
             return
         }
+        Surface.Settings -> {
+            SettingsSurface(homeRoleHeld = homeRoleHeld, onRequestHomeRole = requestHomeRole)
+            return
+        }
         else -> {
             PlaceholderSurface(title = place.surface.title, onBack = back)
             return
@@ -797,6 +817,7 @@ private fun BodhaHost(
         EditHomeDialog(
             onAddPin = { pickerOpen = true },
             onContextModes = { modeManageOpen = true },
+            onSettings = { place = Place(Surface.Settings) },
             onDismiss = { editingHome = false },
         )
     }
