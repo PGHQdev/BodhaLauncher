@@ -16,6 +16,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.core.content.ContextCompat
 import com.bodhalauncher.engine.DeviceEvent
 import com.bodhalauncher.engine.SessionEngine
+import com.bodhalauncher.engine.SessionId
 import com.bodhalauncher.engine.SessionPhase
 import com.bodhalauncher.engine.Transition
 import com.bodhalauncher.engine.UsageRecord
@@ -37,9 +38,26 @@ class SessionRuntime(private val context: Context) {
     val phase = mutableStateOf<SessionPhase>(engine.snapshot().phase)
     private val listeners = mutableListOf<(Transition) -> Unit>()
 
+    /**
+     * Which session anything saved right now belongs to (#134). A provisional
+     * end still counts: the merge window may yet resume it, so state saved under
+     * it is not stale — that is the same reading [applySessionBoundary] takes.
+     */
+    val currentSession: SessionId?
+        get() = when (val current = phase.value) {
+            is SessionPhase.Active -> current.session
+            is SessionPhase.ProvisionalEnd -> current.session
+            SessionPhase.Idle -> null
+        }
+
     /** Register before [start] — restart reconciliation and backfill also publish. */
     fun addTransitionListener(listener: (Transition) -> Unit) {
         listeners += listener
+    }
+
+    /** For a listener that outlives less than the process does, such as composition (#134). */
+    fun removeTransitionListener(listener: (Transition) -> Unit) {
+        listeners -= listener
     }
 
     fun start() {

@@ -122,11 +122,19 @@ class IntentPromptRuntime(context: Context, private val sessions: SessionRuntime
         promptDue.value = null
     }
 
-    /** Swiped down or tapped outside — recorded, and the cooldown stands. */
-    fun dismiss() {
-        val decision = promptDue.value ?: return
+    /**
+     * Swiped down, tapped outside, or the phone session ended under the sheet —
+     * recorded, and the cooldown stands (#134).
+     *
+     * The decision comes from the caller rather than [promptDue] because the
+     * session end reaches both: this class's listener is registered before
+     * composition, so it has already dropped the pending decision by the time
+     * the sheet's dismissal arrives. Reading it here would write the event and
+     * no record, leaving the two stores disagreeing about the same prompt.
+     */
+    fun dismiss(decision: PromptDecision) {
         records.appendDismissal(decision)
-        promptDue.value = null
+        if (promptDue.value === decision) promptDue.value = null
     }
 
     private companion object {
