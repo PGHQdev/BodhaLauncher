@@ -58,6 +58,10 @@ class IntentRecordStore(context: Context) {
      * session it was asked under; an Open Check intention carries none, which is
      * what leaves it to be attributed by the span it fell inside.
      *
+     * The text rides along where the record has any (#173), because the Session
+     * view reads back what was stated and this file is the only place the words
+     * exist — the event log carries none by construction.
+     *
      * An unreadable line is skipped rather than failing the read: a session
      * classifies as unclassified, which is the honest answer when the signal
      * cannot be found.
@@ -73,6 +77,7 @@ class IntentRecordStore(context: Context) {
                 IntentSignal(
                     at = LocalDateTime.ofInstant(Instant.ofEpochMilli(at), ZoneId.systemDefault()),
                     session = if (record.isNull("session")) null else record.getLong("session"),
+                    text = if (record.isNull("text")) null else record.getString("text"),
                 )
             }.getOrNull()
         }

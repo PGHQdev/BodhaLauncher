@@ -170,6 +170,142 @@ class AwarenessTest {
         }
     }
 
+    // Awareness's Session view (#173): one session opened up.
+
+    private val session = AwarenessSession(
+        record(1, now.minusMinutes(30), now.minusMinutes(20)),
+        intentional = true,
+    )
+
+    private fun launch(appId: String, minutesAgo: Long, session: Long?) =
+        LaunchRecord(appId = appId, at = now.minusMinutes(minutesAgo), session = session)
+
+    @Test
+    fun `a launch belongs to the session it named, and to no other`() {
+        val detail = resolveSessionDetail(
+            session = session,
+            launches = listOf(launch("mine", 25, session = 1), launch("theirs", 24, session = 2)),
+            events = emptyList(),
+            signals = emptyList(),
+        )
+        assertEquals(listOf("mine"), detail.launches.map { it.appId })
+    }
+
+    /** A launch made with no session open is recorded, and attributed to none. */
+    @Test
+    fun `a launch naming no session joins no session, whatever span it fell in`() {
+        val detail = resolveSessionDetail(
+            session = session,
+            launches = listOf(launch("orphan", 25, session = null)),
+            events = emptyList(),
+            signals = emptyList(),
+        )
+        assertEquals(emptyList<String>(), detail.launches.map { it.appId })
+    }
+
+    @Test
+    fun `launches come out in the order they happened`() {
+        val detail = resolveSessionDetail(
+            session = session,
+            launches = listOf(launch("second", 22, 1), launch("first", 28, 1)),
+            events = emptyList(),
+            signals = emptyList(),
+        )
+        assertEquals(listOf("first", "second"), detail.launches.map { it.appId })
+    }
+
+    /** Events carry no session, so the span they fell inside is what attributes them. */
+    @Test
+    fun `the checks and the repeated open are the ones inside the session's span`() {
+        val detail = resolveSessionDetail(
+            session = session,
+            launches = emptyList(),
+            events = listOf(
+                LoggedEvent(EventType.OpenCheckDisplayed, now.minusMinutes(25)),
+                LoggedEvent(EventType.OpenCheckDisplayed, now.minusMinutes(22)),
+                LoggedEvent(EventType.RepeatedOpenDetected, now.minusMinutes(22)),
+                // After the session ended: another session's, not this one's.
+                LoggedEvent(EventType.OpenCheckDisplayed, now.minusMinutes(5)),
+                LoggedEvent(EventType.RepeatedOpenDetected, now.minusMinutes(5)),
+            ),
+            signals = emptyList(),
+        )
+        assertEquals(2, detail.checks)
+        assertEquals(true, detail.repeatedOpen)
+
+        val quiet = resolveSessionDetail(session, emptyList(), emptyList(), emptyList())
+        assertEquals(0, quiet.checks)
+        assertEquals(false, quiet.repeatedOpen)
+    }
+
+    @Test
+    fun `the statement is the words the session's own signal carried`() {
+        val detail = resolveSessionDetail(
+            session = session,
+            launches = emptyList(),
+            events = emptyList(),
+            signals = listOf(
+                // Stated in another session, and stated in this one.
+                IntentSignal(at = now.minusMinutes(5), text = "somewhere else"),
+                IntentSignal(at = now.minusMinutes(25), text = "finish the reading"),
+            ),
+        )
+        assertEquals("finish the reading", detail.statement)
+    }
+
+    /** A category picked from the prompt states an intent and spells out nothing. */
+    @Test
+    fun `a signal stated without words leaves the session with no statement`() {
+        val detail = resolveSessionDetail(
+            session = session,
+            launches = emptyList(),
+            events = emptyList(),
+            signals = listOf(IntentSignal(at = now.minusMinutes(25))),
+        )
+        assertEquals(null, detail.statement)
+    }
+
+    @Test
+    fun `a session that opened nothing says so, and never invents a row`() {
+        val detail = resolveSessionDetail(
+            session = session,
+            launches = emptyList(),
+            events = listOf(LoggedEvent(EventType.OpenCheckDisplayed, now.minusMinutes(25))),
+            signals = emptyList(),
+        )
+        assertEquals(emptyList<LaunchRecord>(), detail.launches)
+        assertEquals(
+            listOf("Nothing was opened in this session", "1 Open Check fired"),
+            sessionDetailNotes(detail),
+        )
+    }
+
+    @Test
+    fun `the notes count only what happened`() {
+        fun notes(checks: Int, repeated: Boolean) = sessionDetailNotes(
+            SessionDetail(
+                session = session,
+                launches = listOf(launch("app", 25, 1)),
+                checks = checks,
+                repeatedOpen = repeated,
+                statement = null,
+            )
+        )
+        assertEquals(emptyList<String>(), notes(checks = 0, repeated = false))
+        assertEquals(listOf("1 Open Check fired"), notes(checks = 1, repeated = false))
+        assertEquals(
+            listOf("3 Open Checks fired", "A repeated open was noticed"),
+            notes(checks = 3, repeated = true),
+        )
+    }
+
+    @Test
+    fun `a launch's line is the time it happened, spelled by the chosen clock`() {
+        val opened = LaunchRecord("app", LocalDateTime.of(2026, 8, 7, 9, 42))
+        assertEquals("9:42", launchTimeLine(opened))
+        assertEquals("0942", launchTimeLine(opened, ClockFormat.Nato))
+    }
+
     @Test
     fun `no rendered line carries a delta, a direction word or a ranking`() {
         val start = LocalDateTime.of(2026, 8, 7, 9, 41)
@@ -181,6 +317,8 @@ class AwarenessTest {
             awarenessSessionLine(AwarenessSession(record(2, start, null), false)),
             awarenessIntentWord(intentional = true),
             awarenessIntentWord(intentional = false),
+        ) + sessionDetailNotes(
+            SessionDetail(session, emptyList(), checks = 3, repeatedOpen = true, statement = null)
         )
         val forbidden = listOf("+", "-", "more", "less", "up", "down", "better", "worse", "most", "least")
         for (line in lines) {

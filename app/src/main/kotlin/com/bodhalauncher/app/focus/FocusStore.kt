@@ -79,11 +79,15 @@ interface FocusRecordDao {
  * Focus session is stating something, and the moment it was stated is the moment
  * it started. It carries no phone session — the span it fell inside attributes it.
  *
+ * The label is what was stated (#173): a Focus session's activity is the user's
+ * own words, so it is the statement the Session view reads back.
+ *
  * Beside the entity, as `SessionRecordEntity.toRecord` is: the mapping from a row
  * to what the engine reads belongs with the row.
  */
 fun FocusRecordEntity.toIntentSignal(): IntentSignal = IntentSignal(
     at = LocalDateTime.ofInstant(Instant.ofEpochMilli(startMillis), ZoneId.systemDefault()),
+    text = label,
 )
 
 /** The store's row for the privacy dashboard's local-data section (#24, ADR 0029). */

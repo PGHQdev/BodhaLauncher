@@ -33,9 +33,13 @@ class RetentionWorker(context: Context, params: WorkerParameters) : CoroutineWor
         }
         // Session records (#171) prune with raw usage (ADR 0028); no rollup
         // exists for them yet, so the cut is a plain delete at the boundary the
-        // resolver already aligned to 4am.
+        // resolver already aligned to 4am. The launch log (#173) takes the same
+        // cut: two stores one view reads against each other age out together, or
+        // the view lies about one of them.
         plan.cutoffs[RetentionCategory.RawUsageEvents]?.let { cutoff ->
-            BodhaDatabase.get(applicationContext).sessionRecords().deleteBefore(cutoff.toEpochMillis())
+            val database = BodhaDatabase.get(applicationContext)
+            database.sessionRecords().deleteBefore(cutoff.toEpochMillis())
+            database.launchRecords().deleteBefore(cutoff.toEpochMillis())
         }
         // Intent records (prompt selections and Open Check intentions, #76) are
         // reflective text — pruned under Reflections, whose window is

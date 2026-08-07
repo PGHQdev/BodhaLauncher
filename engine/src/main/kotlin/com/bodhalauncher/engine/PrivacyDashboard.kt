@@ -53,8 +53,16 @@ fun resolvePrivacyDashboard(inputs: DashboardInputs): PrivacyDashboard {
         DashboardRow.Permission(status.capability, enables = educationScreen(status.capability).feature)
     }
 
+    // A category is one row however many stores fill it: session records and the
+    // launch log both age out under RawUsageEvents (ADR 0013, ADR 0028), and two
+    // rows carrying the same name and window would read as two retention answers.
+    // The window is the category's, so the first summary's is every summary's.
+    val data = inputs.dataCategories.groupBy { it.category }.map { (category, summaries) ->
+        DashboardRow.Data(category, summaries.sumOf { it.count }, summaries.first().retentionDays)
+    }
+
     return PrivacyDashboard(
-        localData = orNone(inputs.dataCategories.map { DashboardRow.Data(it.category, it.count, it.retentionDays) }),
+        localData = orNone(data),
         permissions = orNone(granted),
         connectors = orNone(inputs.connectors.map { DashboardRow.Named(it) }),
         cloudFeatures = orNone(inputs.cloudFeatures.map { DashboardRow.Named(it) }),

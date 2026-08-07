@@ -31,6 +31,7 @@ import com.bodhalauncher.app.home.ModeStore
 import com.bodhalauncher.app.home.PinStore
 import com.bodhalauncher.app.home.SearchDefaultStore
 import com.bodhalauncher.app.home.UsageReader
+import com.bodhalauncher.app.awareness.LaunchLog
 import com.bodhalauncher.app.capability.CapabilityEducationHost
 import com.bodhalauncher.app.capability.rememberCapabilityEducation
 import com.bodhalauncher.app.data.EventLogger
@@ -387,6 +388,9 @@ private fun BodhaHost(
         FocusStore(context, BodhaDatabase.get(context).focusRecords(), events)
             .also { it.resolveEnd(Instant.now()) }
     }
+    // Bodha's launch log (#173), written from the single opening path below and
+    // read by Awareness's Session view.
+    val launchLog = remember { LaunchLog(BodhaDatabase.get(context).launchRecords()) }
     val focusRunning = focusStore.active.value != null
     // The one sheet in the app (ADR 0011, #133). Every surface that opens one
     // reaches this, so the rule holds across surfaces rather than within each.
@@ -529,6 +533,12 @@ private fun BodhaHost(
         when (decision) {
             is OpenCheckDecision.Proceed -> {
                 events.log(EventType.AppLaunched)
+                // Bodha's own record of what it opened (#173): the app, the
+                // moment, and the session it happened in — none where no session
+                // is open, which is recorded rather than dropped. Every launch
+                // passes here, including the one a check just let through, so
+                // one opening is one record.
+                launchLog.record(action.id, Instant.now(), sessions.currentSession)
                 catalog.launch(action)
             }
             is OpenCheckDecision.ShowCheck -> {
@@ -731,7 +741,14 @@ private fun BodhaHost(
             return
         }
         Surface.Awareness -> {
-            AwarenessSurface(sessions = sessions, onBack = back)
+            AwarenessSurface(
+                sessions = sessions,
+                // The Session view reads the checks a session raised from the
+                // same log the surfaces write to (#173).
+                events = events,
+                catalog = catalog,
+                onBack = back,
+            )
             return
         }
         Surface.Focus -> {

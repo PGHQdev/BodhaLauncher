@@ -210,11 +210,11 @@ fun CardRow(
  * The rule is the hairline above rather than a card, so a hundred of these read
  * as one list instead of a hundred blocks.
  *
- * A null [onClick] is a row that is **read rather than activated** — Awareness's
- * sessions, until #173 gives one somewhere to open. It publishes no click, so it
- * is not an actionable node and neither ADR 0020's floor nor ADR 0022's
- * traversal applies to it; a screen reader reads its text where it stands. The
- * parameter has no default, so an inert row is always a call site's decision.
+ * A null [onClick] is a row that is **read rather than activated** — the Session
+ * view's launches, which are history and not a way to relaunch. It publishes no
+ * click, so it is not an actionable node and neither ADR 0020's floor nor ADR
+ * 0022's traversal applies to it; a screen reader reads its text where it stands.
+ * The parameter has no default, so an inert row is always a call site's decision.
  */
 @Composable
 fun ListRow(

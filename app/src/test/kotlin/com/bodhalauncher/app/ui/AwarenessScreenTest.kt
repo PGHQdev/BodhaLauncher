@@ -3,6 +3,10 @@ package com.bodhalauncher.app.ui
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsActions
@@ -10,7 +14,9 @@ import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -73,10 +79,17 @@ class AwarenessScreenTest {
         session(3, 58, null, intentional = false),
     )
 
+    private val opened = mutableListOf<Long>()
+
     private fun setScreen(sessions: List<AwarenessSession>, today: AwarenessToday?) =
         compose.setContent {
             BodhaTheme {
-                AwarenessScreen(today = today, sessions = sessions, onBack = {})
+                AwarenessScreen(
+                    today = today,
+                    sessions = sessions,
+                    onOpenSession = { opened += it.record.id },
+                    onBack = {},
+                )
             }
         }
 
@@ -110,47 +123,75 @@ class AwarenessScreenTest {
         assertEquals(listOf("Awareness"), drawnText())
     }
 
-    /**
-     * The rows are read, not activated: nothing opens a session until #173, and a
-     * named action that only reports its own absence is worse than none. So the
-     * list contributes no actionable node, and neither ADR 0020's floor nor ADR
-     * 0022's traversal has anything to measure here.
-     */
+    /** Every row opens its own session (#173) — one actionable node each, no more. */
     @Test
-    fun `a session row carries no action`() {
+    fun `each session row opens that session`() {
         setScreen(day, AwarenessToday.Sessions(finished = 2, running = true))
 
-        assertEquals(emptyList<String>(), actionableNames())
+        assertEquals(3, actionableNames().size)
+        compose.onNodeWithText("9:41 · 12 minutes").performClick()
+        assertEquals(listOf(2L), opened)
     }
 
-    /** It is still one named node, so a reader hears a row rather than two loose strings. */
+    /**
+     * One node, so a reader hears a row rather than two loose strings: the click
+     * merges the span and the word, which is what the inert row of #172 needed a
+     * hand-written description for.
+     */
     @Test
     fun `a session row is named by its span and its word together`() {
         setScreen(day, AwarenessToday.Sessions(finished = 2, running = true))
 
-        val named = nodes().mapNotNull { node ->
-            node.config.getOrNull(SemanticsProperties.ContentDescription)?.firstOrNull()
-        }
-        assertTrue("9:41 · 12 minutes. Intentional." in named)
-        assertTrue("9:58 · running now. Unclassified." in named)
+        val rows = nodes()
+            .filter { SemanticsActions.OnClick in it.config }
+            .map { node -> node.config.getOrNull(SemanticsProperties.Text).orEmpty().map { it.text } }
+        assertTrue(rows.any { it.take(2) == listOf("9:41 · 12 minutes", "Intentional") })
+        assertTrue(rows.any { it.take(2) == listOf("9:58 · running now", "Unclassified") })
     }
 
-    /** Which is why the surface takes focus itself — Escape travels up from it. */
+    /** Rule 3: the chevron is on the row because the row navigates (ADR 0025). */
     @Test
-    fun `the surface takes focus on arrival, which gives the list a back key`() {
+    fun `every session row wears the navigate marker`() {
+        setScreen(day, AwarenessToday.Sessions(finished = 2, running = true))
+
+        assertEquals(3, drawnText().count { it == "›" })
+    }
+
+    /**
+     * The first row takes focus on arrival, which is what gives Escape a chain to
+     * travel up (ADR 0022). Arrived at by key rather than composed already-open,
+     * because that is the only sequence in which arrival focus can happen at all:
+     * a row is `clickable`, so it is focusable in non-touch mode only.
+     */
+    @Test
+    fun `the first row takes focus on arrival, which gives the list a back key`() {
         var backs = 0
         compose.setContent {
             BodhaTheme {
                 BackHandler { backs++ }
+                var open by remember { mutableStateOf(false) }
                 Box(Modifier.fillMaxSize().escapeIsBack()) {
-                    AwarenessScreen(
-                        today = AwarenessToday.Sessions(finished = 2, running = true),
-                        sessions = day,
-                        onBack = {},
-                    )
+                    if (open) {
+                        AwarenessScreen(
+                            today = AwarenessToday.Sessions(finished = 2, running = true),
+                            sessions = day,
+                            onOpenSession = {},
+                            onBack = {},
+                        )
+                    } else {
+                        ListRow("Open Awareness", onClick = { open = true })
+                    }
                 }
             }
         }
+
+        compose.onRoot().performKeyInput { pressKey(Key.Tab) }
+        compose.onRoot().performKeyInput { pressKey(Key.Enter) }
+        assertEquals(
+            "9:12 · 2 minutes",
+            nodes().firstOrNull { it.config.getOrNull(SemanticsProperties.Focused) == true }
+                ?.config?.getOrNull(SemanticsProperties.Text)?.firstOrNull()?.text,
+        )
 
         compose.onRoot().performKeyInput { pressKey(Key.Escape) }
         assertEquals(1, backs)

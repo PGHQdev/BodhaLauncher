@@ -169,14 +169,19 @@ fun DesignGallery() {
         WindowEditor(current = GALLERY_WINDOW, prompt = "Switch to Evening between these times") {}
         Spacer(Modifier.height(BodhaSpacing.xl))
 
-        // Awareness's session rows (#172): the two classifications and the
-        // running session, with fixed spans so the golden never drifts. Inert by
+        // Awareness's session rows (#172, #173): the two classifications and the
+        // running session, with fixed spans so the golden never drifts. Each
+        // navigates, so each draws the chevron and each is a node both guards
+        // measure.
+        SectionOverline("Awareness sessions")
+        SessionRow(GALLERY_UNCLASSIFIED_SESSION, onOpen = {})
+        SessionRow(GALLERY_INTENTIONAL_SESSION, onOpen = {})
+        SessionRow(GALLERY_RUNNING_SESSION, onOpen = {})
+        Spacer(Modifier.height(BodhaSpacing.s))
+        // The Session view's own row (#173): what was opened and when. Inert by
         // construction — the row is read, not activated — which is the state no
         // other specimen here shows.
-        SectionOverline("Awareness sessions")
-        SessionRow(GALLERY_UNCLASSIFIED_SESSION)
-        SessionRow(GALLERY_INTENTIONAL_SESSION)
-        SessionRow(GALLERY_RUNNING_SESSION)
+        LaunchRow(label = "Gallery app", time = "9:42", icon = null)
         Spacer(Modifier.height(BodhaSpacing.xl))
 
         // The inbox row (#162): a live notification under its section, the
