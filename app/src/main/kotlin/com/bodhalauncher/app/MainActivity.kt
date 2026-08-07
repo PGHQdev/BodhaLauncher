@@ -31,6 +31,7 @@ import com.bodhalauncher.app.home.ModeStore
 import com.bodhalauncher.app.home.PinStore
 import com.bodhalauncher.app.home.SearchDefaultStore
 import com.bodhalauncher.app.home.UsageReader
+import com.bodhalauncher.app.inbox.MuteStore
 import com.bodhalauncher.app.capability.CapabilityEducationHost
 import com.bodhalauncher.app.capability.rememberCapabilityEducation
 import com.bodhalauncher.app.data.EventLogger
@@ -283,7 +284,7 @@ class MainActivity : ComponentActivity() {
  * placeholder arms of the `when` are replaced.
  */
 private val BUILT_SURFACES =
-    listOf(Surface.Home, Surface.Library, Surface.Today)
+    listOf(Surface.Home, Surface.Library, Surface.Today, Surface.Inbox)
 
 private fun openSurface(target: Surface, go: (Surface) -> Unit) =
     GestureAction("Open ${target.title}") { go(target) }
@@ -553,9 +554,19 @@ private fun BodhaHost(
                 sheets = sheets,
                 education = education,
                 // The inbox lives inside Today and opens as its own surface;
-                // back from there returns Home (ADR 0011). A placeholder until
-                // inbox-02.
+                // back from there returns Home (ADR 0011).
                 openInbox = { place = Place(Surface.Inbox) },
+            )
+            return
+        }
+        Surface.Inbox -> {
+            InboxSurface(
+                education = education,
+                sheets = sheets,
+                muteStore = remember { MuteStore(context) },
+                depth = place.depth,
+                openMutedSources = { place = Place(Surface.Inbox, depth = 1) },
+                onBack = back,
             )
             return
         }

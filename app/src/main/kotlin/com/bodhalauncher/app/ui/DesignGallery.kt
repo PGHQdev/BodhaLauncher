@@ -148,6 +148,18 @@ fun DesignGallery() {
         )
         Spacer(Modifier.height(BodhaSpacing.xl))
 
+        // The inbox row (#162): a live notification under its section, the
+        // source's mark bare — the gallery has none to give, so the specimen
+        // shows the row a package manager could not answer for.
+        SectionOverline("Inbox")
+        NotificationRow(
+            title = "Gallery notification",
+            line = "The latest state, from the system",
+            icon = null,
+            onOpen = {},
+        )
+        Spacer(Modifier.height(BodhaSpacing.xl))
+
         // Focus (ADR 0026), forced rather than requested: only one node can hold
         // real focus, and the fixture has to show the ring on all four shapes.
         // Screenshots capture at rest, so without these specimens no golden ever
@@ -174,10 +186,19 @@ fun DesignGallery() {
             // The deliberately focused picked specimen (#137, ADR 0026): without
             // it no golden ever contains the ring on a multi-select row.
             MultiSelectRow(title = "Multi-select row, picked, focused", picked = true, onToggle = {})
-            // The two rows that carry per-item actions, so the hint and the
+            // The rows that carry per-item actions, so the hint and the
             // actions node are inside both guards rather than only on a screen.
             CardRow(title = "Pin row, focused", onClick = {}, onLongClick = {})
             ListRow(title = "App row, focused", onClick = {}, onLongClick = {})
+            // The inbox row's actions (#163): handled and snooze hang off this
+            // node, so the tree-walk and the Tab traversal both see the route.
+            NotificationRow(
+                title = "Notification row, focused",
+                line = "Carries handled and snooze",
+                icon = null,
+                onOpen = {},
+                onActions = {},
+            )
             // Home's gestures, lifted here for the traversal to see them — the
             // same move ADR 0020 made for AppRow, IconCell and the rail. The
             // forced ring is what puts them in the tree at all here: on Home

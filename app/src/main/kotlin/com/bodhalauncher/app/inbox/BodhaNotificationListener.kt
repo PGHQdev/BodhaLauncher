@@ -7,8 +7,10 @@ import android.telecom.TelecomManager
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import androidx.compose.runtime.mutableStateOf
+import android.app.PendingIntent
 import com.bodhalauncher.app.data.BodhaDatabase
 import com.bodhalauncher.engine.IMPORTANCE_DEFAULT
+import com.bodhalauncher.engine.InboxRow
 import com.bodhalauncher.engine.NotificationSignals
 import com.bodhalauncher.engine.classifyNotification
 import kotlinx.coroutines.CoroutineScope
@@ -30,9 +32,17 @@ class BodhaNotificationListener : NotificationListenerService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onListenerConnected() {
+        instance = this
+        // Loads the persisted mutes into the shared set (#164): after a reboot
+        // the listener binds before any UI exists, and a muted source must not
+        // count in that window.
+        MuteStore.load(this)
         connected.value = true
         // The shade as it stands counts too — notifications that arrived before
-        // the bind, or survived a reboot, still describe the day.
+        // the bind, or survived a reboot, still describe the day. The live rows
+        // rebuild from the same walk, so after a reboot the inbox holds exactly
+        // what the shade holds: nothing until notifications re-arrive.
+        live.value = emptyMap()
         activeNotifications?.forEach { record(it) }
     }
 
@@ -56,9 +66,15 @@ class BodhaNotificationListener : NotificationListenerService() {
             val hash = keyHash(sbn.key)
             scope.launch { BodhaDatabase.get(applicationContext).notificationLog().deleteByKey(hash) }
         }
+        // The row goes however the notification went — rows describe now, and
+        // only the count keeps describing the day (ADR 0015).
+        live.value = live.value - sbn.key
     }
 
     override fun onDestroy() {
+        if (instance === this) instance = null
+        // In-memory only, so the rows go with the process that held them.
+        live.value = emptyMap()
         scope.cancel()
         super.onDestroy()
     }
@@ -73,6 +89,25 @@ class BodhaNotificationListener : NotificationListenerService() {
             (rankingMap ?: currentRanking).getRanking(sbn.key, it)
         }
         val placement = classifyNotification(signals(sbn.notification, ranking))
+        // The live row the inbox renders (#162): keyed by the system's own key,
+        // so a conversation updating in place stays one row showing the latest
+        // state. What the system gave — a redacted notification included — is
+        // held in memory only and never written anywhere.
+        live.value = live.value + (sbn.key to LiveNotification(
+            row = InboxRow(
+                key = sbn.key,
+                appPackage = sbn.packageName,
+                section = placement.section,
+                postedAtMillis = sbn.postTime,
+            ),
+            title = sbn.notification.extras.getCharSequence(Notification.EXTRA_TITLE)?.toString(),
+            line = sbn.notification.extras.getCharSequence(Notification.EXTRA_TEXT)?.toString(),
+            contentIntent = sbn.notification.contentIntent,
+        ))
+        // A muted source stops being counted from that moment (#164): the live
+        // row above still exists so unmuting shows what is already waiting, the
+        // inbox filters it while the mute holds, and nothing new is stored.
+        if (sbn.packageName in MuteStore.muted.value) return
         val entity = NotificationRecordEntity(
             keyHash = keyHash(sbn.key),
             appPackage = sbn.packageName,
@@ -107,8 +142,46 @@ class BodhaNotificationListener : NotificationListenerService() {
         /** Whether the system currently holds the listener bound; the slot names a drop (#161). */
         val connected = mutableStateOf(false)
 
+        /**
+         * The live shade, keyed by the system's notification key (#162): what
+         * the inbox renders, in memory only. Rebuilt on every bind, emptied
+         * with the process — a reboot leaves it empty until notifications
+         * re-arrive, which reads as nothing waiting rather than an error.
+         */
+        val live = mutableStateOf<Map<String, LiveNotification>>(emptyMap())
+
+        private var instance: BodhaNotificationListener? = null
+
+        /**
+         * Handled cancels the real notification (#163, ADR 0015): the shade
+         * and the inbox never disagree, because both watch the same removal.
+         * The day's count stands — the notification did arrive.
+         */
+        fun markHandled(key: String) {
+            runCatching { instance?.cancelNotification(key) }
+        }
+
+        /** The platform's own snooze (#163): the notification returns by itself. */
+        fun snooze(key: String, durationMillis: Long) {
+            runCatching { instance?.snoozeNotification(key, durationMillis) }
+        }
+
         fun keyHash(key: String): String =
             MessageDigest.getInstance("SHA-256").digest(key.toByteArray())
                 .joinToString("") { "%02x".format(it) }
     }
 }
+
+/**
+ * One live notification as the inbox shows it (#162): the engine's placement,
+ * plus what the system gave us to display — a redacted notification carries
+ * whatever the system left in — and the notification's own content intent, so
+ * opening a row goes straight to its destination with no trampoline through
+ * Bodha. Never persisted; a field of this class is not a field of any entity.
+ */
+class LiveNotification(
+    val row: InboxRow,
+    val title: String?,
+    val line: String?,
+    val contentIntent: PendingIntent?,
+)
