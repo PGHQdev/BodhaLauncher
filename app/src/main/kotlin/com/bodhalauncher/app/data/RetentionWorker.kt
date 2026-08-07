@@ -31,6 +31,12 @@ class RetentionWorker(context: Context, params: WorkerParameters) : CoroutineWor
         plan.cutoffs[RetentionCategory.NotificationContent]?.let { cutoff ->
             BodhaDatabase.get(applicationContext).notificationLog().deleteBefore(cutoff.toEpochMillis())
         }
+        // Session records (#171) prune with raw usage (ADR 0028); no rollup
+        // exists for them yet, so the cut is a plain delete at the boundary the
+        // resolver already aligned to 4am.
+        plan.cutoffs[RetentionCategory.RawUsageEvents]?.let { cutoff ->
+            BodhaDatabase.get(applicationContext).sessionRecords().deleteBefore(cutoff.toEpochMillis())
+        }
         // Intent records (prompt selections and Open Check intentions, #76) are
         // reflective text — pruned under Reflections, whose window is
         // user-controlled and unlimited by default.

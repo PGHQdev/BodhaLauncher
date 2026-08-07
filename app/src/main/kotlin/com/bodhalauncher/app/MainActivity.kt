@@ -284,7 +284,7 @@ class MainActivity : ComponentActivity() {
  * placeholder arms of the `when` are replaced.
  */
 private val BUILT_SURFACES =
-    listOf(Surface.Home, Surface.Library, Surface.Today, Surface.Inbox)
+    listOf(Surface.Home, Surface.Library, Surface.Awareness, Surface.Today, Surface.Inbox)
 
 private fun openSurface(target: Surface, go: (Surface) -> Unit) =
     GestureAction("Open ${target.title}") { go(target) }
@@ -557,6 +557,10 @@ private fun BodhaHost(
                 // back from there returns Home (ADR 0011).
                 openInbox = { place = Place(Surface.Inbox) },
             )
+            return
+        }
+        Surface.Awareness -> {
+            AwarenessSurface(sessions = sessions, onBack = back)
             return
         }
         Surface.Inbox -> {
