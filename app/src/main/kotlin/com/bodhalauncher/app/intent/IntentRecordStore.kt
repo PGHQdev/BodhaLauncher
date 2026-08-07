@@ -2,10 +2,13 @@ package com.bodhalauncher.app.intent
 
 import android.content.Context
 import com.bodhalauncher.engine.IntentCategory
+import com.bodhalauncher.engine.IntentSignal
 import com.bodhalauncher.engine.PromptDecision
 import org.json.JSONObject
 import java.io.File
 import java.time.Instant
+import java.time.LocalDateTime
+import java.time.ZoneId
 
 /**
  * One line per prompt outcome, appended to a local file (ADR 0009): the spec's
@@ -45,6 +48,34 @@ class IntentRecordStore(context: Context) {
             .put("trigger", trigger)
             .putOpt("session", session)
         file.appendText(record.toString() + "\n")
+    }
+
+    /**
+     * The intents stated at or after [from] (#172): two of ADR 0013's three
+     * signals, since both are written here.
+     *
+     * A dismissal states nothing, so it is not one. A prompt answer carries the
+     * session it was asked under; an Open Check intention carries none, which is
+     * what leaves it to be attributed by the span it fell inside.
+     *
+     * An unreadable line is skipped rather than failing the read: a session
+     * classifies as unclassified, which is the honest answer when the signal
+     * cannot be found.
+     */
+    fun signalsSince(from: Instant): List<IntentSignal> {
+        if (!file.exists()) return emptyList()
+        return file.readLines().mapNotNull { line ->
+            runCatching {
+                val record = JSONObject(line)
+                val at = record.getLong("at")
+                if (at < from.toEpochMilli()) return@runCatching null
+                if (record.getString("category") == CATEGORY_DISMISSED) return@runCatching null
+                IntentSignal(
+                    at = LocalDateTime.ofInstant(Instant.ofEpochMilli(at), ZoneId.systemDefault()),
+                    session = if (record.isNull("session")) null else record.getLong("session"),
+                )
+            }.getOrNull()
+        }
     }
 
     /** Drops records older than [epochMillis] — the retention worker's arm here (#19). */

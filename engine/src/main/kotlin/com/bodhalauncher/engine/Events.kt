@@ -24,6 +24,13 @@ enum class EventType {
     OpenCheckDisplayed,
     OpenCheckTurnedBack,
     OpenCheckProceeded,
+    /**
+     * A check was passed with an intention typed into it (#76) — the second of
+     * ADR 0013's three intent signals. Distinct from [OpenCheckProceeded], which
+     * fires whether or not anything was written. Type and timestamp only: the
+     * text itself lives in the intent records and could not reach here.
+     */
+    OpenCheckIntentionWritten,
     FocusStarted,
     FocusPaused,
     FocusCompleted,
@@ -71,7 +78,7 @@ fun computeMetrics(events: List<LoggedEvent>, from: LocalDateTime, to: LocalDate
     val launches = window.filter { it.type == EventType.AppLaunched }
 
     return ProductMetrics(
-        intentionalSessionRatio = ratio(count(EventType.IntentPromptAnswered), sessions),
+        intentionalSessionRatio = intentionalRatio(window, sessions),
         repeatedOpensPerDay = count(EventType.RepeatedOpenDetected)
             .takeIf { it > 0 }?.let { it / days },
         medianUsefulActionMillis = medianUsefulAction(window),
@@ -82,6 +89,39 @@ fun computeMetrics(events: List<LoggedEvent>, from: LocalDateTime, to: LocalDate
 }
 
 private fun ratio(part: Int, whole: Int): Double? = if (whole == 0) null else part.toDouble() / whole
+
+/**
+ * Sessions in which the user stated something, over sessions — all three of
+ * ADR 0013's signals, which is the same definition Awareness's Today view
+ * classifies by (#172). Counting prompt answers alone made this metric and that
+ * view disagree about the same word.
+ *
+ * The window is walked rather than counted, because a signal only counts for the
+ * session it landed inside: a session start closes the one before it, and a
+ * signal outside any open session is credited to nothing.
+ */
+private fun intentionalRatio(window: List<LoggedEvent>, sessions: Int): Double? {
+    var intentional = 0
+    var open = false
+    var stated = false
+    for (event in window) {
+        when {
+            event.type == EventType.SessionStarted -> {
+                if (open && stated) intentional++
+                open = true
+                stated = false
+            }
+            event.type == EventType.SessionEnded -> {
+                if (open && stated) intentional++
+                open = false
+                stated = false
+            }
+            open && event.type in INTENT_SIGNAL_EVENTS -> stated = true
+        }
+    }
+    if (open && stated) intentional++
+    return ratio(intentional, sessions)
+}
 
 /** Median gap from each session start to its first app launch. */
 private fun medianUsefulAction(window: List<LoggedEvent>): Long? {

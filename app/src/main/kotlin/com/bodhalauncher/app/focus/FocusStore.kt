@@ -54,6 +54,14 @@ interface FocusRecordDao {
     @Query("DELETE FROM focus_record WHERE id = :id")
     suspend fun deleteById(id: Long)
 
+    /**
+     * The sessions that started in a span — Awareness's third intent signal
+     * (#172). A running session has no record yet, so it contributes when it
+     * ends, which is what "Focus contributes the moment the record exists" means.
+     */
+    @Query("SELECT * FROM focus_record WHERE startMillis >= :fromMillis ORDER BY startMillis")
+    suspend fun startedSince(fromMillis: Long): List<FocusRecordEntity>
+
     /** The retention worker's cut, under Reflections (#19, ADR 0029). */
     @Query("DELETE FROM focus_record WHERE endMillis < :cutoffMillis")
     suspend fun deleteBefore(cutoffMillis: Long)

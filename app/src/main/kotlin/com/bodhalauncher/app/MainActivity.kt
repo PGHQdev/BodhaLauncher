@@ -574,6 +574,10 @@ private fun BodhaHost(
             },
             onOpen = { typed ->
                 typed?.let(records::appendOpenCheckIntention)
+                // The second of ADR 0013's three intent signals, and only when
+                // something was actually written (#172) — proceeding alone
+                // states nothing.
+                if (typed != null) events.log(EventType.OpenCheckIntentionWritten)
                 events.log(EventType.OpenCheckProceeded)
                 // The session's count, only for the check it raised (#168).
                 if (sheet.raisedByFocus) focusStore.countProceed()
@@ -584,6 +588,7 @@ private fun BodhaHost(
             },
             onOpenFor = { minutes, typed ->
                 typed?.let(records::appendOpenCheckIntention)
+                if (typed != null) events.log(EventType.OpenCheckIntentionWritten)
                 events.log(EventType.OpenCheckProceeded)
                 if (sheet.raisedByFocus) focusStore.countProceed()
                 openCheck.onProceededFor(app.id, Instant.now(), minutes)
