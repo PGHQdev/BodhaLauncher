@@ -39,8 +39,11 @@ class OnboardingTest {
     @Test
     fun `onboarding is absent from the surface set`() {
         // The flow is unreachable by swipe, Search or Home control because no
-        // surface exists for them to resolve — asserted here, not by inspection.
-        assertTrue(Surface.entries.none { it.name.contains("Onboarding", ignoreCase = true) })
-        assertTrue(Surface.entries.none { it.title.contains("Onboarding", ignoreCase = true) })
+        // surface exists for them to resolve. The whole set is pinned, so any
+        // future addition — under whatever name — re-answers this deliberately.
+        assertEquals(
+            listOf("Home", "Search", "App Library", "Awareness", "Today", "Focus", "Settings"),
+            Surface.entries.map { it.title },
+        )
     }
 }

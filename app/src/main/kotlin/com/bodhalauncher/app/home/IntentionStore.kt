@@ -35,7 +35,13 @@ class IntentionStore(context: Context) {
 
     private fun load(): DailyIntention? {
         val text = prefs.getString(KEY_TEXT, null) ?: return null
-        return DailyIntention(text = text, dayKey = LocalDate.ofEpochDay(prefs.getLong(KEY_DAY, 0)))
+        val record = DailyIntention(text = text, dayKey = LocalDate.ofEpochDay(prefs.getLong(KEY_DAY, 0)))
+        // Yesterday's text feeds Today's suggestion; nothing older is retained (#158).
+        if (record.dayKey < dayKey(LocalDateTime.now()).minusDays(1)) {
+            prefs.edit { clear() }
+            return null
+        }
+        return record
     }
 
     private companion object {

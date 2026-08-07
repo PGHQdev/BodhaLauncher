@@ -1,7 +1,6 @@
 package com.bodhalauncher.app.ui
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -204,25 +203,21 @@ private fun ModeNameDialog(
                 Text(text = modeNameMessage(it), color = colors.error, style = BodhaType.caption)
             }
             Spacer(Modifier.height(20.dp))
+            // Pills, so the floor and the focus ring come from the shared
+            // component rather than a local outline (ADR 0025, 0026).
             Row {
                 if (onDelete != null) {
-                    Text(
-                        text = "Delete",
-                        color = colors.error,
-                        style = BodhaType.action,
-                        modifier = Modifier.touchTargetFloor().clickable(onClick = onDelete),
-                    )
+                    BodhaPill(label = "Delete", onClick = onDelete, destructive = true)
                     Spacer(Modifier.width(28.dp))
                 }
                 Spacer(Modifier.weight(1f))
-                Text(
-                    text = "Save",
-                    color = colors.accent,
-                    style = BodhaType.action,
-                    modifier = Modifier.touchTargetFloor().clickable {
+                BodhaPill(
+                    label = "Save",
+                    onClick = {
                         val refusal = onSubmit(text)
                         if (refusal == null) onDismiss() else error = refusal
                     },
+                    emphasis = Emphasis.Solid,
                 )
             }
         }

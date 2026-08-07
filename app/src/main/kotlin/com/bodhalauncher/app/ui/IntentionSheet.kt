@@ -1,7 +1,6 @@
 package com.bodhalauncher.app.ui
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -94,23 +93,19 @@ internal fun IntentionSheetContent(
             )
         }
         Spacer(Modifier.height(20.dp))
+        // The two footer actions are pills, so the floor and the focus ring come
+        // from the shared component rather than a local outline (ADR 0025, 0026).
         Row(modifier = Modifier.fillMaxWidth()) {
             if (current != null) {
-                Text(
-                    text = "Clear",
-                    color = colors.inkMuted,
-                    style = BodhaType.action,
-                    modifier = Modifier.touchTargetFloor().clickable(onClick = onClear),
-                )
+                BodhaPill(label = "Clear", onClick = onClear, destructive = true)
                 Spacer(Modifier.width(28.dp))
             }
             Spacer(Modifier.weight(1f))
-            Text(
-                text = "Save",
-                color = colors.accent,
-                style = BodhaType.action,
-                modifier = Modifier.touchTargetFloor()
-                    .clickable(enabled = text.isNotBlank()) { onSave(text.trim()) },
+            BodhaPill(
+                label = "Save",
+                onClick = { onSave(text.trim()) },
+                emphasis = Emphasis.Solid,
+                enabled = text.isNotBlank(),
             )
         }
         Spacer(Modifier.height(24.dp))

@@ -132,6 +132,7 @@ fun DesignGallery() {
                 Text("Field, focused", style = BodhaType.body, color = colors.inkMuted)
             }
             ListRow(title = "List row, focused", onClick = {})
+            ListRow(title = "Mode row, tinted, focused", onClick = {}, tinted = true)
             // The two rows that carry per-item actions, so the hint and the
             // actions node are inside both guards rather than only on a screen.
             CardRow(title = "Pin row, focused", onClick = {}, onLongClick = {})
