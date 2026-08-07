@@ -128,13 +128,26 @@ class MainActivity : ComponentActivity() {
      * The one grant Bodha asks for (ADR 0018). Granted or declined — including
      * an OEM that routes to a settings screen instead of a dialog — the result
      * lands here and the flow completes. Declining is an answer: no retry, no
-     * re-prompt, and the only route back is the future Settings row.
+     * re-prompt, and the route back is Settings' home-role row (#140).
      */
     private val roleRequest =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
-            homeRoleHeld.value = readHomeRole()
-            advanceStep(OnboardingStep.BecomeHome)
+            settleRoleRequest()
         }
+
+    /**
+     * Granted, declined, or nothing left to ask: the role is re-read, and the
+     * flow advances only if the flow is what asked.
+     *
+     * Which asked is read from [shownStep] rather than remembered in a field,
+     * because a field would be gone by the time the result arrives after a
+     * process death mid-dialog, while `onCreate` re-resolves the step from the
+     * store — so the flow still advances and Settings still does not.
+     */
+    private fun settleRoleRequest() {
+        homeRoleHeld.value = readHomeRole()
+        if (shownStep.value == OnboardingStep.BecomeHome) advanceStep(OnboardingStep.BecomeHome)
+    }
 
     /** Every advance — answer or skip — passes through here, from any step. */
     private fun advanceStep(step: OnboardingStep) {
@@ -153,8 +166,8 @@ class MainActivity : ComponentActivity() {
         if (roles != null && roles.isRoleAvailable(RoleManager.ROLE_HOME) && !roles.isRoleHeld(RoleManager.ROLE_HOME)) {
             roleRequest.launch(roles.createRequestRoleIntent(RoleManager.ROLE_HOME))
         } else {
-            // Already held, or no request to make: either way the flow completes.
-            advanceStep(OnboardingStep.BecomeHome)
+            // Already held, or no request to make: settled without a dialog.
+            settleRoleRequest()
         }
     }
 
@@ -199,9 +212,11 @@ class MainActivity : ComponentActivity() {
         val app = application as BodhaApp
         val pinStore = PinStore(this)
         val modeStore = ModeStore(this, pinStore)
-        // The choice survives process death: resolved before anything composes.
+        // The switch and the schedules both survive process death: resolved
+        // before anything composes, against the clock as it is now.
         pinStore.setActive(
-            resolveArrangement(modeStore.modes.value, modeStore.choice.value) ?: PinStore.DEFAULT_ARRANGEMENT
+            resolveArrangement(modeStore.modes.value, modeStore.switch.value, LocalDateTime.now())
+                ?: PinStore.DEFAULT_ARRANGEMENT
         )
         val intentionStore = IntentionStore(this)
         val libraryStore = LibraryStore(this)
@@ -272,7 +287,7 @@ class MainActivity : ComponentActivity() {
                     )
                 ) {
                     Box(modifier = Modifier.fillMaxSize().escapeIsBack()) {
-                        BodhaHost(pinStore, modeStore, intentionStore, libraryStore, defaultStore, groupStore, openCheckStore, entitlementStore, catalog, app.sessions, app.intentPrompt, app.events, homeIntents.intValue, visible.value, homeRoleHeld.value)
+                        BodhaHost(pinStore, modeStore, intentionStore, libraryStore, defaultStore, groupStore, openCheckStore, entitlementStore, catalog, app.sessions, app.intentPrompt, app.events, homeIntents.intValue, visible.value, homeRoleHeld.value, ::requestHomeRole)
                     }
                 }
             }
@@ -292,8 +307,10 @@ class MainActivity : ComponentActivity() {
  * that navigates to where you already stand goes nowhere. Grows as the
  * placeholder arms of the `when` are replaced.
  */
-private val BUILT_SURFACES =
-    listOf(Surface.Home, Surface.Library, Surface.Awareness, Surface.Today, Surface.Inbox, Surface.Focus)
+private val BUILT_SURFACES = listOf(
+    Surface.Home, Surface.Library, Surface.Awareness, Surface.Today, Surface.Inbox,
+    Surface.Focus, Surface.Settings,
+)
 
 private fun openSurface(target: Surface, go: (Surface) -> Unit) =
     GestureAction("Open ${target.title}") { go(target) }
@@ -321,6 +338,7 @@ private fun BodhaHost(
     homeIntents: Int,
     launcherVisible: Boolean,
     homeRoleHeld: Boolean,
+    requestHomeRole: () -> Unit,
 ) {
     val pinnedIds by pinStore.pinned
     val hidden by pinStore.hidden
@@ -333,13 +351,20 @@ private fun BodhaHost(
     var editingHome by remember { mutableStateOf(false) }
     var modeSelectorOpen by remember { mutableStateOf(false) }
     var modeManageOpen by remember { mutableStateOf(false) }
-    // The active arrangement is a pure resolution over the mode list and the
-    // manual choice (#155); the UI holds none of it. A deleted active mode
-    // resolves to the default here, with no intermediate empty state.
-    val modeNames by modeStore.modes
-    val modeChoice by modeStore.choice
-    val activeMode = resolveArrangement(modeNames, modeChoice)
+    // Ticks each minute, so the intention drops at the 4am boundary (ADR 0003)
+    // and a mode's window opens (#156) without a relaunch — one producer, above
+    // the surfaces, because a schedule turns over wherever the user is standing.
+    val now = minuteNow()
+    // The active arrangement is a pure resolution over the mode list, the manual
+    // switch and the clock (#155, #156); the UI holds none of it. A deleted
+    // active mode resolves to the default here, with no intermediate empty state.
+    val modes by modeStore.modes
+    val modeSwitch by modeStore.switch
+    val activeMode = resolveArrangement(modes, modeSwitch, now)
     LaunchedEffect(activeMode) { pinStore.setActive(activeMode ?: PinStore.DEFAULT_ARRANGEMENT) }
+    // The resolve above already ignores a lapsed switch; this is what stops it
+    // coming back to life when the window it lapsed against is edited away.
+    LaunchedEffect(now, modes, modeSwitch) { modeStore.expireSwitch(now) }
     val context = LocalContext.current
     // The Focus session's home (#166); a duration that elapsed while the process
     // was dead is detected before root is first resolved, so a cold start after
@@ -557,7 +582,13 @@ private fun BodhaHost(
                 { education.ask(Capability.UsageAccess, EducationEntry.UserRequest) }
             },
             onOpen = { typed ->
-                typed?.let(records::appendOpenCheckIntention)
+                // The second of ADR 0013's three intent signals, and only when
+                // something was actually written (#172) — proceeding alone
+                // states nothing.
+                typed?.let {
+                    records.appendOpenCheckIntention(it)
+                    events.log(EventType.OpenCheckIntentionWritten)
+                }
                 events.log(EventType.OpenCheckProceeded)
                 // The session's count, only for the check it raised (#168).
                 if (sheet.raisedByFocus) focusStore.countProceed()
@@ -567,7 +598,10 @@ private fun BodhaHost(
                 openApp(app)
             },
             onOpenFor = { minutes, typed ->
-                typed?.let(records::appendOpenCheckIntention)
+                typed?.let {
+                    records.appendOpenCheckIntention(it)
+                    events.log(EventType.OpenCheckIntentionWritten)
+                }
                 events.log(EventType.OpenCheckProceeded)
                 if (sheet.raisedByFocus) focusStore.countProceed()
                 openCheck.onProceededFor(app.id, Instant.now(), minutes)
@@ -700,6 +734,10 @@ private fun BodhaHost(
             )
             return
         }
+        Surface.Settings -> {
+            SettingsSurface(homeRoleHeld = homeRoleHeld, onRequestHomeRole = requestHomeRole)
+            return
+        }
         else -> {
             PlaceholderSurface(title = place.surface.title, onBack = back)
             return
@@ -708,10 +746,6 @@ private fun BodhaHost(
 
     // Once per arrival on Home, not per recomposition (#25).
     LaunchedEffect(Unit) { events.log(EventType.HomeRendered) }
-
-    // Ticks each minute so the intention drops at the 4am boundary (ADR 0003)
-    // even when Home sits on screen with nothing else changing.
-    val now = minuteNow()
 
     // Remaining inputs fill in as their features ship (suggestions #6, digest #10, …).
     val state = resolveHome(
@@ -797,24 +831,29 @@ private fun BodhaHost(
         EditHomeDialog(
             onAddPin = { pickerOpen = true },
             onContextModes = { modeManageOpen = true },
+            onSettings = { place = Place(Surface.Settings) },
             onDismiss = { editingHome = false },
         )
     }
     if (modeSelectorOpen) {
         ModeSelectorDialog(
-            modes = modeNames,
+            modes = modes,
             current = activeMode,
-            onPick = modeStore::select,
+            // Stamped at the moment of the choice, which is what the expiry at
+            // the next window boundary is measured from (#156).
+            onPick = { modeStore.select(it, LocalDateTime.now()) },
             onManage = { modeManageOpen = true; modeSelectorOpen = false },
             onDismiss = { modeSelectorOpen = false },
         )
     }
     if (modeManageOpen) {
         ModeManageDialog(
-            modes = modeNames,
+            modes = modes,
             onCreate = modeStore::create,
             onRename = modeStore::rename,
             onDelete = modeStore::delete,
+            onSetWindow = modeStore::setWindow,
+            onMove = modeStore::move,
             onDismiss = { modeManageOpen = false },
         )
     }

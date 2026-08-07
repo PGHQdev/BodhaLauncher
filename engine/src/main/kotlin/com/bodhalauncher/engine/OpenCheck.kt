@@ -87,7 +87,8 @@ internal fun agoPhrase(elapsedMillis: Long): String {
     }
 }
 
-private fun spanPhrase(millis: Long): String {
+/** Shared with Awareness's session rows (#172), which phrase the same kind of span. */
+internal fun spanPhrase(millis: Long): String {
     val minutes = millis / 60_000
     val hours = minutes / 60
     val rest = minutes % 60

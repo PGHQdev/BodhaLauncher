@@ -25,7 +25,7 @@ class ProductMetricsTest {
     }
 
     @Test
-    fun `intentional-session ratio is answered prompts over sessions`() {
+    fun `intentional-session ratio is sessions something was stated in, over sessions`() {
         val events = listOf(
             event(EventType.SessionStarted, 0),
             event(EventType.IntentPromptAnswered, 1),
@@ -38,6 +38,54 @@ class ProductMetricsTest {
         val metrics = computeMetrics(events, dayStart, weekLater)
 
         assertEquals(0.5, metrics.intentionalSessionRatio)
+    }
+
+    /**
+     * The metric and Awareness's Today view classify by the same three signals
+     * (#172, ADR 0013); counting prompt answers alone had them disagree about
+     * the same word.
+     */
+    @Test
+    fun `all three signals make a session intentional, and a bare proceed makes none`() {
+        val events = listOf(
+            event(EventType.SessionStarted, 0),
+            event(EventType.OpenCheckIntentionWritten, 1),
+            event(EventType.SessionStarted, 60),
+            event(EventType.FocusStarted, 61),
+            event(EventType.SessionStarted, 120),
+            event(EventType.IntentPromptAnswered, 121),
+            event(EventType.SessionStarted, 180),
+            // Proceeding states nothing: this session stays unclassified.
+            event(EventType.OpenCheckProceeded, 181),
+        )
+
+        val metrics = computeMetrics(events, dayStart, weekLater)
+
+        assertEquals(0.75, metrics.intentionalSessionRatio)
+    }
+
+    @Test
+    fun `two signals in one session still count it once`() {
+        val events = listOf(
+            event(EventType.SessionStarted, 0),
+            event(EventType.IntentPromptAnswered, 1),
+            event(EventType.FocusStarted, 2),
+            event(EventType.SessionStarted, 60),
+        )
+
+        assertEquals(0.5, computeMetrics(events, dayStart, weekLater).intentionalSessionRatio)
+    }
+
+    /** A signal with no session open is credited to nothing, not to the one before it. */
+    @Test
+    fun `a signal after a session ended counts for no session`() {
+        val events = listOf(
+            event(EventType.SessionStarted, 0),
+            event(EventType.SessionEnded, 10),
+            event(EventType.IntentPromptAnswered, 11),
+        )
+
+        assertEquals(0.0, computeMetrics(events, dayStart, weekLater).intentionalSessionRatio)
     }
 
     @Test

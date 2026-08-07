@@ -201,15 +201,21 @@ fun CardRow(
 
 /**
  * Rule 1's second idiom: a **hairline row** — one entry in a list that scrolls.
- * Search results, Library apps, Context modes.
+ * Search results, Library apps, Context modes, Awareness's sessions.
  *
  * The rule is the hairline above rather than a card, so a hundred of these read
  * as one list instead of a hundred blocks.
+ *
+ * A null [onClick] is a row that is **read rather than activated** — Awareness's
+ * sessions, until #173 gives one somewhere to open. It publishes no click, so it
+ * is not an actionable node and neither ADR 0020's floor nor ADR 0022's
+ * traversal applies to it; a screen reader reads its text where it stands. The
+ * parameter has no default, so an inert row is always a call site's decision.
  */
 @Composable
 fun ListRow(
     title: String,
-    onClick: () -> Unit,
+    onClick: (() -> Unit)?,
     modifier: Modifier = Modifier,
     subtitle: String? = null,
     /** Rule 2's tinted fill on a row that scrolls: the current choice — the selected context mode. */
@@ -245,9 +251,16 @@ fun ListRow(
                 .onFocusChanged { focused = it.isFocused }
                 .actionsKeys(actions, onLongClick)
                 .then(
-                    if (onLongClick != null) Modifier.combinedClickable(
-                        onClick = onClick, onLongClick = onLongClick
-                    ) else Modifier.clickable(onClick = onClick)
+                    when {
+                        // An inert tap beside real actions, as SectionOverline
+                        // already does: parity is over outcomes, and the outcome
+                        // here is what Right and long-press reach.
+                        onLongClick != null -> Modifier.combinedClickable(
+                            onClick = onClick ?: {}, onLongClick = onLongClick
+                        )
+                        onClick != null -> Modifier.clickable(onClick = onClick)
+                        else -> Modifier
+                    }
                 )
                 .padding(vertical = BodhaSpacing.m),
         ) {

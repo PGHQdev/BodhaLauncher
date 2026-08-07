@@ -16,10 +16,13 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.bodhalauncher.engine.AwarenessSession
 import com.bodhalauncher.engine.DayEvent
 import com.bodhalauncher.engine.HomeAction
 import com.bodhalauncher.engine.LibraryIndexEntry
 import com.bodhalauncher.engine.LibraryLayout
+import com.bodhalauncher.engine.ScheduleWindow
+import com.bodhalauncher.engine.SessionRecord
 
 /**
  * The design system's living spec (#26): every token rendered once, with fixed
@@ -146,6 +149,23 @@ fun DesignGallery() {
             subtitle = "Turn on notification access",
             onClick = {},
         )
+        Spacer(Modifier.height(BodhaSpacing.xl))
+
+        // The daily-window editor (#74, #156): shared the moment context modes
+        // became its second caller, so both guards see it rather than only the
+        // Open Check rule dialog that used to own it privately.
+        SectionOverline("Time window")
+        WindowEditor(current = GALLERY_WINDOW, prompt = "Switch to Evening between these times") {}
+        Spacer(Modifier.height(BodhaSpacing.xl))
+
+        // Awareness's session rows (#172): the two classifications and the
+        // running session, with fixed spans so the golden never drifts. Inert by
+        // construction — the row is read, not activated — which is the state no
+        // other specimen here shows.
+        SectionOverline("Awareness sessions")
+        SessionRow(GALLERY_UNCLASSIFIED_SESSION)
+        SessionRow(GALLERY_INTENTIONAL_SESSION)
+        SessionRow(GALLERY_RUNNING_SESSION)
         Spacer(Modifier.height(BodhaSpacing.xl))
 
         // The inbox row (#162): a live notification under its section, the
@@ -302,6 +322,22 @@ private val GALLERY_TIMED_EVENT = DayEvent(
     begin = java.time.LocalDateTime.of(2026, 8, 5, 9, 30),
     end = java.time.LocalDateTime.of(2026, 8, 5, 10, 0),
 )
+
+/** Fixed times, so the fields photograph the same span every run. */
+private val GALLERY_WINDOW = ScheduleWindow(startMinute = 21 * 60, endMinute = 23 * 60 + 30)
+
+private fun gallerySession(id: Long, from: Int, to: Int?, intentional: Boolean) = AwarenessSession(
+    record = SessionRecord(
+        id = id,
+        start = java.time.LocalDateTime.of(2026, 8, 5, 9, from),
+        end = to?.let { java.time.LocalDateTime.of(2026, 8, 5, 9, it) },
+    ),
+    intentional = intentional,
+)
+
+private val GALLERY_INTENTIONAL_SESSION = gallerySession(1, 41, 53, intentional = true)
+private val GALLERY_UNCLASSIFIED_SESSION = gallerySession(2, 12, 14, intentional = false)
+private val GALLERY_RUNNING_SESSION = gallerySession(3, 58, null, intentional = false)
 
 private val GALLERY_PICKER_APPS = listOf(
     HomeAction(id = "gallery.one", label = "Atlas"),

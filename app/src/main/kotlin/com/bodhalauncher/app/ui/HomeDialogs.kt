@@ -101,9 +101,14 @@ fun ActionOptionsDialog(
     }
 }
 
-/** Edit-mode entry point (#54); Context modes joined it in #155. */
+/** Edit-mode entry point (#54); Context modes joined it in #155, Settings in #140. */
 @Composable
-fun EditHomeDialog(onAddPin: () -> Unit, onContextModes: () -> Unit, onDismiss: () -> Unit) {
+fun EditHomeDialog(
+    onAddPin: () -> Unit,
+    onContextModes: () -> Unit,
+    onSettings: () -> Unit,
+    onDismiss: () -> Unit,
+) {
     val colors = LocalBodhaColors.current
     Dialog(onDismissRequest = onDismiss) {
         Column(
@@ -123,6 +128,10 @@ fun EditHomeDialog(onAddPin: () -> Unit, onContextModes: () -> Unit, onDismiss: 
             )
             OptionRow("Add pin") { onAddPin(); onDismiss() }
             OptionRow("Context modes") { onContextModes(); onDismiss() }
+            // Settings hangs off edit mode and nowhere else (ADR 0011, ADR 0019):
+            // Home's arrangement is already edited here, and Settings is the only
+            // route back to the home role after a decline (ADR 0018).
+            OptionRow("Settings") { onSettings(); onDismiss() }
             Text(
                 text = "More editing — coming",
                 color = colors.inkMuted,

@@ -89,7 +89,10 @@ fun OpenCheckRuleDialog(
                     onSave(OpenCheckRule(OpenCheckMode.DailyThreshold, dailyThreshold = threshold))
                     onDismiss()
                 }
-                OpenCheckMode.Schedule -> WindowEditor(current?.window) { window ->
+                OpenCheckMode.Schedule -> WindowEditor(
+                    current = current?.window,
+                    prompt = "Check between these times",
+                ) { window ->
                     onSave(OpenCheckRule(OpenCheckMode.Schedule, window = window))
                     onDismiss()
                 }
@@ -137,76 +140,6 @@ private fun ThresholdChoices(onPick: (Duration) -> Unit) {
     THRESHOLD_CHOICES.forEach { (threshold, label) ->
         DialogRow(label, muted = false) { onPick(threshold) }
     }
-}
-
-/** One daily window, "21:00" to "23:30"; end before start crosses midnight (#74). */
-@Composable
-private fun WindowEditor(current: ScheduleWindow?, onSave: (ScheduleWindow) -> Unit) {
-    val colors = LocalBodhaColors.current
-    var start by remember { mutableStateOf(current?.startMinute?.let(::clock).orEmpty()) }
-    var end by remember { mutableStateOf(current?.endMinute?.let(::clock).orEmpty()) }
-    val startMinute = parseClock(start)
-    val endMinute = parseClock(end)
-    Text(
-        text = "Check between these times",
-        color = colors.inkMuted,
-        style = BodhaType.caption,
-        modifier = Modifier.padding(bottom = 12.dp),
-    )
-    Row {
-        TimeField(start, "Start time", "21:00", { start = it }, Modifier.weight(1f))
-        Spacer(Modifier.width(20.dp))
-        TimeField(end, "End time", "23:30", { end = it }, Modifier.weight(1f))
-    }
-    Spacer(Modifier.height(8.dp))
-    Box(Modifier.fillMaxWidth().height(1.dp).background(colors.hairline))
-    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp)) {
-        Spacer(Modifier.weight(1f))
-        Text(
-            text = "Save",
-            color = colors.accent,
-            style = BodhaType.action,
-            // Equal times would be an empty window — a silently inert rule; Always is the mode for that.
-            modifier = Modifier.touchTargetFloor().clickable(enabled = startMinute != null && endMinute != null && startMinute != endMinute) {
-                onSave(ScheduleWindow(startMinute!!, endMinute!!))
-            },
-        )
-    }
-}
-
-@Composable
-private fun TimeField(
-    value: String,
-    /** What this field edits, for a reader that cannot see which of the two it is. */
-    label: String,
-    placeholder: String,
-    onChange: (String) -> Unit,
-    modifier: Modifier,
-) {
-    val colors = LocalBodhaColors.current
-    BasicTextField(
-        value = value,
-        onValueChange = onChange,
-        singleLine = true,
-        textStyle = BodhaType.body.copy(color = colors.ink),
-        cursorBrush = SolidColor(colors.accent),
-        decorationBox = { field ->
-            if (value.isEmpty()) Text(placeholder, color = colors.inkMuted, style = BodhaType.body)
-            field()
-        },
-        modifier = modifier
-            .semantics { contentDescription = label }
-            .touchTargetFloor(),
-    )
-}
-
-private fun clock(minuteOfDay: Int): String = "%d:%02d".format(minuteOfDay / 60, minuteOfDay % 60)
-
-private fun parseClock(text: String): Int? {
-    val (h, m) = text.trim().split(':').takeIf { it.size == 2 } ?: return null
-    val hour = h.toIntOrNull()?.takeIf { it in 0..23 } ?: return null
-    val minute = m.toIntOrNull()?.takeIf { it in 0..59 } ?: return null
-    return hour * 60 + minute
 }
 
 @Composable

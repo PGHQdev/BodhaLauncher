@@ -27,12 +27,15 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import com.bodhalauncher.engine.ContextMode
 import com.bodhalauncher.engine.ModeNameError
+import com.bodhalauncher.engine.ScheduleWindow
 
 /**
- * Context modes (#155, ADR 0016). Management follows the built edit-mode idiom
- * — a plain Dialog, like Edit Home and the Open Check rule editor — because a
- * list with create, rename and delete is not ADR 0011's one-decision sheet.
+ * Context modes (#155, #156, ADR 0016). Management follows the built edit-mode
+ * idiom — a plain Dialog, like Edit Home and the Open Check rule editor —
+ * because a list with create, rename, reorder and delete is not ADR 0011's
+ * one-decision sheet.
  */
 
 /** Why a name was refused, named on the spot. */
@@ -42,14 +45,22 @@ internal fun modeNameMessage(error: ModeNameError): String = when (error) {
     ModeNameError.Duplicate -> "That name is taken"
 }
 
+/** A mode's window as its row's second line, or what its absence means (#156). */
+internal fun modeWindowLine(window: ScheduleWindow?): String =
+    window?.let(::scheduleWindowLine) ?: "No time window"
+
 /**
  * The selector, from Home's mode label: the default arrangement, every mode,
  * and manage. The current choice takes the tinted fill; modes are hairline
  * rows (ADR 0025 rules 1 and 2).
+ *
+ * The rows say nothing about how the current mode became current: a manual
+ * switch and a scheduled one look the same, and nothing announces when a switch
+ * will lapse (#156).
  */
 @Composable
 fun ModeSelectorDialog(
-    modes: List<String>,
+    modes: List<ContextMode>,
     /** Null while the default arrangement is the choice. */
     current: String?,
     onPick: (String?) -> Unit,
@@ -81,11 +92,11 @@ fun ModeSelectorDialog(
                     tinted = current == null,
                 )
             }
-            items(modes, key = { it }) { mode ->
+            items(modes, key = { it.name }) { mode ->
                 ListRow(
-                    title = mode,
-                    onClick = { onPick(mode); onDismiss() },
-                    tinted = mode == current,
+                    title = mode.name,
+                    onClick = { onPick(mode.name); onDismiss() },
+                    tinted = mode.name == current,
                 )
             }
             item {
@@ -96,19 +107,23 @@ fun ModeSelectorDialog(
 }
 
 /**
- * Manage: the mode list with rename and delete a tap away, and create beneath.
+ * Manage: the mode list in the order that breaks window ties, each row opening
+ * its own editor, and create beneath.
  */
 @Composable
 fun ModeManageDialog(
-    modes: List<String>,
+    modes: List<ContextMode>,
     onCreate: (String) -> ModeNameError?,
     onRename: (String, String) -> ModeNameError?,
     onDelete: (String) -> Unit,
+    onSetWindow: (String, ScheduleWindow?) -> Unit,
+    /** Negative moves the mode earlier, and earlier is what wins an overlap (#156). */
+    onMove: (String, Int) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val colors = LocalBodhaColors.current
     var creating by remember { mutableStateOf(false) }
-    var renaming by remember { mutableStateOf<String?>(null) }
+    var editing by remember { mutableStateOf<String?>(null) }
     Dialog(onDismissRequest = onDismiss) {
         LazyColumn(
             modifier = Modifier
@@ -128,10 +143,11 @@ fun ModeManageDialog(
                     modifier = Modifier.padding(vertical = 12.dp),
                 )
             }
-            items(modes, key = { it }) { mode ->
+            items(modes, key = { it.name }) { mode ->
                 ListRow(
-                    title = mode,
-                    onClick = { renaming = mode },
+                    title = mode.name,
+                    subtitle = modeWindowLine(mode.window),
+                    onClick = { editing = mode.name },
                     trailing = { TrailingChevron() },
                 )
             }
@@ -148,34 +164,175 @@ fun ModeManageDialog(
             onDismiss = { creating = false },
         )
     }
-    renaming?.let { mode ->
-        ModeNameDialog(
-            title = "Rename mode",
-            initial = mode,
-            onSubmit = { onRename(mode, it) },
-            onDelete = { onDelete(mode); renaming = null },
-            onDismiss = { renaming = null },
+    editing?.let { name ->
+        // Read from the list rather than captured, so a rename or a move made
+        // inside the editor is what the editor goes on showing.
+        val mode = modes.firstOrNull { it.name == name }
+        if (mode == null) {
+            editing = null
+            return@let
+        }
+        ModeEditorDialog(
+            mode = mode,
+            canMoveUp = modes.first().name != name,
+            canMoveDown = modes.last().name != name,
+            onRename = { onRename(name, it) },
+            onSetWindow = { onSetWindow(name, it) },
+            onMove = { by -> onMove(name, by); editing = null },
+            onDelete = { onDelete(name); editing = null },
+            onDismiss = { editing = null },
         )
     }
 }
 
 /**
- * One name, asked for at create and rename. [onSubmit] returns the refusal, if
- * any, and it is named in place rather than the dialog closing over it.
+ * One mode, whole: its name, the window it takes over in, where it sits in the
+ * order, and delete.
+ *
+ * The content is separated from the dialog for the reason `OpenCheckSheetContent`
+ * and `FocusSetupSheetContent` are: a fixture or a test can render it. Here the
+ * split is load-bearing rather than tidy — a `BasicTextField` inside a `Dialog`
+ * never lets Compose reach idle under Robolectric, so the keys can only be
+ * injected into the content standing on its own.
  */
+@Composable
+private fun ModeEditorDialog(
+    mode: ContextMode,
+    canMoveUp: Boolean,
+    canMoveDown: Boolean,
+    onRename: (String) -> ModeNameError?,
+    onSetWindow: (ScheduleWindow?) -> Unit,
+    onMove: (Int) -> Unit,
+    onDelete: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ModeDialog(onDismiss) {
+        ModeEditorContent(
+            mode, canMoveUp, canMoveDown, onRename, onSetWindow, onMove, onDelete, onDismiss,
+        )
+    }
+}
+
+/**
+ * Reordering is **move up and move down**, each a named row of its own — a drag
+ * handle has no keyboard route (ADR 0022) and would owe a `// reachable:` marker
+ * under ADR 0024's guard. A move closes the editor, because the row it was
+ * opened from has moved beneath it.
+ */
+@Composable
+internal fun ModeEditorContent(
+    mode: ContextMode,
+    canMoveUp: Boolean,
+    canMoveDown: Boolean,
+    onRename: (String) -> ModeNameError?,
+    onSetWindow: (ScheduleWindow?) -> Unit,
+    onMove: (Int) -> Unit,
+    onDelete: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var editingWindow by remember { mutableStateOf(false) }
+    if (editingWindow) {
+        WindowEditor(
+            current = mode.window,
+            // Its own words: the same window means "check here" for a rule and
+            // "switch Home here" for a mode.
+            prompt = "Switch to ${mode.name} between these times",
+        ) { window ->
+            onSetWindow(window)
+            editingWindow = false
+        }
+        return
+    }
+    ModeNameForm(
+        title = "Edit mode",
+        initial = mode.name,
+        onSubmit = onRename,
+        onDismiss = onDismiss,
+        onDelete = onDelete,
+    ) {
+        ListRow(
+            title = "Time window",
+            subtitle = modeWindowLine(mode.window),
+            onClick = { editingWindow = true },
+            trailing = { TrailingChevron() },
+        )
+        if (mode.window != null) {
+            ListRow(title = "Remove time window", onClick = { onSetWindow(null) })
+        }
+        // Named for the mode, so a reader hears which one is moving; the row is
+        // absent at the end it cannot move towards, rather than present and inert.
+        if (canMoveUp) ListRow(title = "Move ${mode.name} up", onClick = { onMove(-1) })
+        if (canMoveDown) ListRow(title = "Move ${mode.name} down", onClick = { onMove(1) })
+    }
+}
+
+/** One name, asked for at create; the editor above adds the rest through [between]. */
 @Composable
 private fun ModeNameDialog(
     title: String,
     initial: String,
     onSubmit: (String) -> ModeNameError?,
     onDismiss: () -> Unit,
+) {
+    ModeDialog(onDismiss) {
+        ModeNameForm(title = title, initial = initial, onSubmit = onSubmit, onDismiss = onDismiss)
+    }
+}
+
+/**
+ * The name, its refusal and the footer — what create and edit both are. [between]
+ * takes whatever else an editor holds: create has nothing, edit has the mode's
+ * window and its place in the order.
+ *
+ * [onSubmit] returns the refusal, if any, and it is named in place rather than
+ * the dialog closing over it.
+ */
+@Composable
+private fun ModeNameForm(
+    title: String,
+    initial: String,
+    onSubmit: (String) -> ModeNameError?,
+    onDismiss: () -> Unit,
     onDelete: (() -> Unit)? = null,
+    between: @Composable () -> Unit = {},
 ) {
     val colors = LocalBodhaColors.current
     var text by remember { mutableStateOf(initial) }
     var error by remember { mutableStateOf<ModeNameError?>(null) }
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(text = title, color = colors.inkMuted, style = BodhaType.overline)
+        Spacer(Modifier.height(16.dp))
+        NameField(text, onChange = { text = it; error = null })
+        error?.let {
+            Spacer(Modifier.height(8.dp))
+            Text(text = modeNameMessage(it), color = colors.error, style = BodhaType.caption)
+        }
+        Spacer(Modifier.height(8.dp))
+        between()
+        Spacer(Modifier.height(20.dp))
+        // Pills, so the floor and the focus ring come from the shared component
+        // rather than a local outline (ADR 0025, 0026).
+        Row {
+            if (onDelete != null) BodhaPill(label = "Delete", onClick = onDelete, destructive = true)
+            Spacer(Modifier.weight(1f))
+            BodhaPill(
+                label = "Save",
+                onClick = {
+                    val refusal = onSubmit(text)
+                    if (refusal == null) onDismiss() else error = refusal
+                },
+                emphasis = Emphasis.Solid,
+            )
+        }
+    }
+}
+
+/** The frame both editors sit in: dismissal, arrival focus, and the card. */
+@Composable
+private fun ModeDialog(onDismiss: () -> Unit, content: @Composable () -> Unit) {
+    val colors = LocalBodhaColors.current
     Dialog(onDismissRequest = onDismiss) {
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .escapeDismisses(onDismiss)
@@ -183,43 +340,30 @@ private fun ModeNameDialog(
                 .clip(RoundedCornerShape(4.dp))
                 .background(colors.ground)
                 .padding(24.dp),
-        ) {
-            Text(text = title, color = colors.inkMuted, style = BodhaType.overline)
-            Spacer(Modifier.height(16.dp))
-            BasicTextField(
-                value = text,
-                onValueChange = { text = it; error = null },
-                textStyle = BodhaType.body.copy(color = colors.ink),
-                cursorBrush = SolidColor(colors.accent),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .semantics { contentDescription = "Mode name" }
-                    .touchTargetFloor(),
-            )
-            Spacer(Modifier.height(8.dp))
-            Box(Modifier.fillMaxWidth().height(1.dp).background(colors.hairline))
-            error?.let {
-                Spacer(Modifier.height(8.dp))
-                Text(text = modeNameMessage(it), color = colors.error, style = BodhaType.caption)
-            }
-            Spacer(Modifier.height(20.dp))
-            // Pills, so the floor and the focus ring come from the shared
-            // component rather than a local outline (ADR 0025, 0026).
-            Row {
-                if (onDelete != null) {
-                    BodhaPill(label = "Delete", onClick = onDelete, destructive = true)
-                    Spacer(Modifier.width(28.dp))
-                }
-                Spacer(Modifier.weight(1f))
-                BodhaPill(
-                    label = "Save",
-                    onClick = {
-                        val refusal = onSubmit(text)
-                        if (refusal == null) onDismiss() else error = refusal
-                    },
-                    emphasis = Emphasis.Solid,
-                )
-            }
-        }
+        ) { content() }
+    }
+}
+
+@Composable
+private fun NameField(value: String, onChange: (String) -> Unit) {
+    val colors = LocalBodhaColors.current
+    Column {
+        BasicTextField(
+            value = value,
+            onValueChange = onChange,
+            // A multi-line field takes Tab as a tab character, which traps a
+            // docked user in it and leaves every control below unreachable
+            // (ADR 0022). A mode name is one line and capped at 24 anyway.
+            singleLine = true,
+            textStyle = BodhaType.body.copy(color = colors.ink),
+            cursorBrush = SolidColor(colors.accent),
+            modifier = Modifier
+                .fillMaxWidth()
+                .semantics { contentDescription = "Mode name" }
+                // Stays last: ADR 0020's caveat in BodhaTheme.kt.
+                .touchTargetFloor(),
+        )
+        Spacer(Modifier.height(8.dp))
+        Box(Modifier.fillMaxWidth().height(1.dp).background(colors.hairline))
     }
 }
