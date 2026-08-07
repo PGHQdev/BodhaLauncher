@@ -21,7 +21,6 @@ import com.bodhalauncher.engine.AwarenessView
 import com.bodhalauncher.engine.AwarenessWeek
 import com.bodhalauncher.engine.EntitlementSnapshot
 import com.bodhalauncher.engine.Exclusions
-import com.bodhalauncher.engine.FREE_AWARENESS_DAYS
 import com.bodhalauncher.engine.GateDecision
 import com.bodhalauncher.engine.GatedRequest
 import com.bodhalauncher.engine.LaunchRecord
@@ -31,7 +30,6 @@ import com.bodhalauncher.engine.SessionDetail
 import com.bodhalauncher.engine.SessionRecord
 import com.bodhalauncher.engine.Surface
 import com.bodhalauncher.engine.UnavailableReason
-import com.bodhalauncher.engine.awarenessWindowTerminusLine
 import com.bodhalauncher.engine.resolveAppOpens
 import com.bodhalauncher.engine.resolveBack
 import com.bodhalauncher.engine.resolveEntitlement
@@ -103,14 +101,13 @@ class AwarenessRouteTest {
      * to walk down. Two levels of drill-down and a switch, still no stack.
      */
     /**
-     * The gate's own copy, and the terminus that opens the dialog stating it
-     * (#177). A free tier, so the Today branch below is standing on a day whose
-     * older records the window withheld.
+     * The gate's own copy, which is what the edge of the window states (#177). A
+     * free tier, so the Today branch below is standing on a day whose older
+     * records the window withheld.
      */
     private val boundary = (
         resolveEntitlement(EntitlementSnapshot(), GatedRequest.AwarenessHistory) as GateDecision.Capped
         ).boundary
-    private val terminus = awarenessWindowTerminusLine(FREE_AWARENESS_DAYS)
 
     @Composable
     private fun AwarenessBranch() {
@@ -157,7 +154,6 @@ class AwarenessRouteTest {
                 onSessionActions = {},
                 onOpenExclusions = {},
                 boundary = boundary,
-                boundaryTitle = terminus,
                 onBoundary = { boundaryShown = boundary },
                 onBack = {},
             )
@@ -252,21 +248,21 @@ class AwarenessRouteTest {
 
     /**
      * The boundary is a control like any other (#177, ADR 0020, ADR 0022): Tab
-     * reaches it and Enter states it. What it states is the authored sentence, in
-     * the dialog — the row above carried only the machinery naming what happened.
+     * reaches it and Enter opens the shared Pro site behind it. It is named by
+     * the gate's own sentence, because that sentence is what the edge of the
+     * window renders.
      */
     @Test
-    fun `Tab reaches the boundary and Enter states it`() {
+    fun `Tab reaches the boundary and Enter opens the gate behind it`() {
         setHost()
 
-        compose.tabTo(ACTIVITY_ROOT, terminus)
+        compose.tabTo(ACTIVITY_ROOT, boundary.explanation)
         compose.press(ACTIVITY_ROOT, Key.Enter)
 
         assertEquals(listOf(boundary.explanation), compose.drawnTextIn(DIALOG_ROOT))
-        assertFalse(boundary.explanation in compose.drawnTextIn(ACTIVITY_ROOT))
 
         compose.press(DIALOG_ROOT, Key.Escape)
-        assertTrue(terminus in compose.drawnTextIn(ACTIVITY_ROOT))
+        assertTrue(boundary.explanation in compose.drawnTextIn(ACTIVITY_ROOT))
     }
 
     /** ADR 0022: focus, then Enter, for every one of the seven. */

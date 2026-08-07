@@ -494,8 +494,15 @@ internal fun resolveForegroundOpens(entries: List<ForegroundEntry>): List<Foregr
  *    leaves exactly one entry no matter how many openings there were;
  * 3. drop any survivor falling inside [SAME_LAUNCH_WINDOW] after a launch
  *    already logged for this app — the two sources describing one opening;
- * 4. carry the rest over as launches with **no session**, and union with what
- *    was logged, oldest first.
+ * 4. carry the rest over as launches with **no session**, and union with this
+ *    app's logged launches, oldest first.
+ *
+ * Both halves of that union are one app's, which is the same totality
+ * [resolveAppOpens] promises: handing this the whole log and handing it one
+ * app's records give the same answer. It matters beyond tidiness because the App
+ * view's boundary is decided by comparing list *sizes* over this output, so a
+ * foreign record carried through would have the window state a boundary out of
+ * another app's history.
  *
  * A launch Bodha did not mediate names no session and joins none. That is not a
  * gap to be filled in later: no session id was read at the moment it happened,
@@ -522,7 +529,7 @@ fun mergeLaunches(
             }
         }
         .map { LaunchRecord(appId = it.appId, at = it.at, session = null) }
-    return (logged + unmediated).sortedBy { it.at }
+    return (mine + unmediated).sortedBy { it.at }
 }
 
 /**
@@ -686,6 +693,29 @@ fun appOpensSourceLine(usage: AwarenessUsage): String? = when (usage) {
 const val AWARENESS_TURN_ON_USAGE = "Turn on usage access"
 
 /**
+ * The exclusion's own three words (#178, ADR 0013). Labels, not sentences: each
+ * names an outcome the reader can choose, the way [AWARENESS_TURN_ON_USAGE]
+ * does.
+ *
+ * They are here rather than at their call sites for the reason every rendered
+ * string is: `:engine` is where the vocabulary lives, and the sweep that holds
+ * Awareness's copy to ADR 0013's four prohibitions can only reach what this
+ * module can name. Copy for the one feature whose whole subject is *removing*
+ * something is the last copy that should sit outside that sweep.
+ *
+ * None of the three says what excluding costs or what including restores. The
+ * row that carries them already names the thing; these name only the direction
+ * the press moves it.
+ */
+const val AWARENESS_EXCLUDE = "Exclude"
+
+/** The state, on the row that opens the list of what is in it. */
+const val AWARENESS_EXCLUDED = "Excluded"
+
+/** The undo, on each row of that list — the press is the whole interaction. */
+const val AWARENESS_INCLUDE = "Include"
+
+/**
  * The two positions of Awareness's own switch (#176, ADR 0013).
  *
  * Four views are named in ADR 0013 and only two of them are positions on a
@@ -790,15 +820,40 @@ fun totalForegroundMillis(reading: Map<String, Long>?, excluded: Set<String>): L
  * partial" is understated by the fraction of today that has not happened yet,
  * and the alternative — a divisor that grows through the day — makes the figure
  * move while the reader watches it, which is worse than being a little low.
+ *
+ * **That understatement is only tolerable because both periods carry it.** The
+ * two rates are printed side by side and one flat divisor over two differently
+ * measured spans is a comparison with a thumb on it — a signed number by other
+ * means, which is the thing ADR 0013 spent its prohibitions on. So the caller
+ * owes this function what [resolveAwarenessWeek] states: two readings taken over
+ * spans of the same length, one shifted a week back from the other.
+ *
+ * [AwarenessDuration.None] also covers a rate that would *render* as zero, not
+ * only a total that is zero. The line spells a rate to one decimal place, so a
+ * period under about three minutes a day prints "0.0h/day" — the rendered 0 this
+ * whole vocabulary exists to refuse, and reachable on a phone whose usage
+ * history is short: a new device, a restore, a period before the records begin.
  */
 fun resolveWeekRate(usage: AwarenessUsage, totalMillis: Long?): AwarenessDuration = when {
     usage !is AwarenessUsage.Live || totalMillis == null -> AwarenessDuration.Unavailable(
         if (usage is AwarenessUsage.Live) UnavailableReason.NoReading
         else UnavailableReason.NoUsageAccess
     )
-    totalMillis <= 0 -> AwarenessDuration.None
+    totalMillis / AWARENESS_WEEK_DAYS < RATE_RENDERS_AS_ZERO_MILLIS -> AwarenessDuration.None
     else -> AwarenessDuration.Span(totalMillis / AWARENESS_WEEK_DAYS)
 }
+
+/**
+ * The rate below which [hoursPerDayPhrase] prints "0.0h/day" — three minutes a
+ * day, which is 0.05 hours rounded down by a single decimal place.
+ *
+ * It is derived from the format rather than chosen, and the two must move
+ * together: a rate line spelled to two decimals would put this at eighteen
+ * seconds. Anything under it is a period that was measured and found to hold
+ * effectively nothing, which is what [AwarenessDuration.None] already says in
+ * words.
+ */
+private const val RATE_RENDERS_AS_ZERO_MILLIS = 180_000L
 
 /**
  * Resolves the Week view from records the caller has already read (#176), by the
@@ -822,6 +877,13 @@ fun resolveWeekRate(usage: AwarenessUsage, totalMillis: Long?): AwarenessDuratio
  * one before it — because reading Android's usage statistics is not something
  * this module does. Both go through [totalForegroundMillis] first, so a null
  * reading arrives here as a null rather than as a sum of nothing.
+ *
+ * **The caller owes those two totals one promise this function cannot check:
+ * they must be read over spans of the same length, the second shifted a week
+ * back from the first.** Both are divided by [AWARENESS_WEEK_DAYS] and printed
+ * adjacent, so a current period measured to *now* against a previous one
+ * measured to a midnight would read low every hour of every day — a direction
+ * delivered without an arrow, which is exactly what ADR 0013 forbids.
  */
 fun resolveAwarenessWeek(
     records: List<SessionRecord>,
@@ -968,8 +1030,6 @@ data class AwarenessWindow(
     val from: LocalDate?,
     /** The gate's own copy, stated only where [AwarenessRender] found a cut. */
     val boundary: ProBoundary?,
-    /** How many days the tier renders, for the terminus line. Null on Pro. */
-    val cap: Int?,
 ) {
 
     /** The Week's days (#176), each kept or dropped whole — never drawn as empty. */
@@ -1009,36 +1069,15 @@ fun resolveAwarenessWindow(
     snapshot: EntitlementSnapshot,
     now: LocalDateTime,
 ): AwarenessWindow = when (val decision = resolveEntitlement(snapshot, GatedRequest.AwarenessHistory)) {
-    GateDecision.Allowed -> AwarenessWindow(from = null, boundary = null, cap = null)
+    GateDecision.Allowed -> AwarenessWindow(from = null, boundary = null)
     is GateDecision.Capped -> AwarenessWindow(
         from = dayKey(now).minusDays(decision.limit - 1L),
         boundary = decision.boundary,
-        cap = decision.limit,
     )
     is GateDecision.Locked -> AwarenessWindow(
         from = dayKey(now),
         boundary = decision.boundary,
-        cap = 0,
     )
-}
-
-/**
- * What the terminus at the foot of a clamped view says (#177).
- *
- * **Machinery, not voice.** It names what happened to the list above it, in the
- * sans every row title takes (ADR 0021, CONTEXT.md **Machinery**). The authored
- * sentence — [ProBoundary.explanation], which Bodha wrote and means — stays in
- * the dialog the terminus opens, where it is already set in the serif. Two
- * registers for one fact, and each in the face its authorship earns.
- *
- * It states what renders rather than what does not. "Seven days render free" is
- * the same fact as "you cannot see older than seven days" and is not a loss
- * (#11): the records are all still there, and Pro is what draws them.
- */
-fun awarenessWindowTerminusLine(cap: Int?): String = when (cap) {
-    null, 0 -> "Today renders free"
-    1 -> "1 day renders free"
-    else -> "${plural(cap.toLong(), "day")} render free"
 }
 
 /**
@@ -1051,11 +1090,23 @@ fun awarenessWindowTerminusLine(cap: Int?): String = when (cap) {
  * dashboard counts rows, and no row moves. Deleting stays a separate deliberate
  * act belonging to retention and the dashboard (#24).
  *
- * The one figure an exclusion cannot reach is anything derived from the **event
- * log** — a session's Open Check count, its repeated-open flag. `LoggedEvent`
- * carries neither an app id nor a session id by construction (ADR 0009, #25), so
- * there is nothing on those records to filter on. That is a property of the
- * store rather than an omission here, and it is the only such gap.
+ * **Two figures an exclusion cannot reach, and both are properties of the store
+ * rather than omissions here.**
+ *
+ * The first is anything derived from the **event log** — a session's Open Check
+ * count, its repeated-open flag. `LoggedEvent` carries neither an app id nor a
+ * session id by construction (ADR 0009, #25), so there is nothing on those
+ * records to filter on.
+ *
+ * The second is a **foreground duration under a session exclusion**. Android
+ * reports foreground time as a total per package over a range and carries no
+ * session identity at all, so an *app* exclusion subtracts from those figures
+ * exactly (the package drops out of the fold) and a *session* exclusion cannot
+ * touch them: the Week's rate and the App view's span still hold the time spent
+ * inside a session the reader took out. Reaching it would mean re-reading the
+ * range in pieces around every excluded span, which buys a second-order
+ * correction with a per-render cost, and the figure it corrects is already
+ * bucket-approximate at both edges (see `UsageReader.usedBetween`).
  *
  * Held as ids rather than as records: the record is the store's and may be gone
  * to retention while the exclusion outlives it, which is why the exclusions list

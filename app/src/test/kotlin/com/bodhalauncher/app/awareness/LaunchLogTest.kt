@@ -257,8 +257,13 @@ class LaunchLogTest {
      * Excluding an app from Awareness must not quietly make it harder to find
      * (#178, CONTEXT.md **Excluded**) — the control for keeping an app out of
      * Search is the App Library's hide, and it is a different control on purpose.
-     * The two stores never meet: the tier reads `all()` and the fold consults
-     * nothing, so the exclusion moves no row and changes no order.
+     *
+     * **This holds the boundary, not a behaviour.** `ExclusionStore` is an
+     * `:app` class and both `resolveLaunchTallies` and `resolveSearch` are
+     * `:engine`, so the before-and-after below cannot differ — the modules make
+     * it so. What it is worth is the demonstration that the tier's read path
+     * takes the whole log and consults nothing else; a future exclusion-aware
+     * read would have to live in `SearchSurface`, which this never touches.
      */
     @Test
     fun `an app excluded from Awareness ranks exactly as before`() = runBlocking {

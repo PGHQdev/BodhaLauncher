@@ -17,13 +17,11 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.bodhalauncher.engine.AwarenessDuration
 import com.bodhalauncher.engine.AwarenessUsage
 import com.bodhalauncher.engine.EntitlementSnapshot
-import com.bodhalauncher.engine.FREE_AWARENESS_DAYS
 import com.bodhalauncher.engine.ForegroundEntry
 import com.bodhalauncher.engine.LaunchRecord
 import com.bodhalauncher.engine.ProBoundary
 import com.bodhalauncher.engine.UnavailableReason
 import com.bodhalauncher.engine.appOpensSourceLine
-import com.bodhalauncher.engine.awarenessWindowTerminusLine
 import com.bodhalauncher.engine.mergeLaunches
 import com.bodhalauncher.engine.resolveAppOpens
 import com.bodhalauncher.engine.resolveAwarenessWindow
@@ -103,7 +101,6 @@ class AppOpensScreenTest {
                 usage = usage,
                 onTurnOn = { turnedOn++ },
                 boundary = boundary,
-                boundaryTitle = awarenessWindowTerminusLine(FREE_AWARENESS_DAYS),
                 onBoundary = {},
             )
         }
@@ -123,10 +120,10 @@ class AppOpensScreenTest {
         setScreen(launches = render.records, boundary = render.boundary)
 
         val drawn = drawnText()
-        val terminus = awarenessWindowTerminusLine(FREE_AWARENESS_DAYS)
+        // The gate's own sentence, once, and last of everything drawn (#177).
+        val terminus = requireNotNull(render.boundary).explanation
         assertEquals(1, drawn.count { it == terminus })
         assertEquals(terminus, drawn.last())
-        assertTrue(drawn.none { it == render.boundary?.explanation })
         // The old open is gone from the rows, and the counts are of what renders.
         assertTrue("3 opens · 3 sessions" in drawn)
     }

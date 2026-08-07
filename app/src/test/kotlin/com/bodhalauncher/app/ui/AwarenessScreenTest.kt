@@ -21,17 +21,16 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.bodhalauncher.engine.AWARENESS_EXCLUDED
 import com.bodhalauncher.engine.AwarenessSession
 import com.bodhalauncher.engine.AwarenessToday
 import com.bodhalauncher.engine.AwarenessView
 import com.bodhalauncher.engine.EntitlementSnapshot
 import com.bodhalauncher.engine.Exclusions
-import com.bodhalauncher.engine.FREE_AWARENESS_DAYS
 import com.bodhalauncher.engine.GateDecision
 import com.bodhalauncher.engine.GatedRequest
 import com.bodhalauncher.engine.ProBoundary
 import com.bodhalauncher.engine.SessionRecord
-import com.bodhalauncher.engine.awarenessWindowTerminusLine
 import com.bodhalauncher.engine.resolveAwarenessSessions
 import com.bodhalauncher.engine.resolveAwarenessWindow
 import com.bodhalauncher.engine.resolveEntitlement
@@ -102,7 +101,7 @@ class AwarenessScreenTest {
     private val gateCopy = (
         resolveEntitlement(EntitlementSnapshot(), GatedRequest.AwarenessHistory) as GateDecision.Capped
         ).boundary
-    private val terminus = awarenessWindowTerminusLine(FREE_AWARENESS_DAYS)
+    private val terminus = gateCopy.explanation
 
     private fun setScreen(
         sessions: List<AwarenessSession>,
@@ -124,7 +123,6 @@ class AwarenessScreenTest {
                 onSessionActions = { actioned += it.record.id },
                 onOpenExclusions = { exclusionsOpened += 1 },
                 boundary = boundary,
-                boundaryTitle = awarenessWindowTerminusLine(FREE_AWARENESS_DAYS),
                 onBoundary = { stated += 1 },
                 onBack = {},
             )
@@ -288,6 +286,53 @@ class AwarenessScreenTest {
     }
 
     /**
+     * The other half of the same rule (#178): a quiet day with something excluded
+     * still has one row, so arrival lands on **it** rather than on the switch.
+     * The condition it holds is the one the Excluded row made load-bearing —
+     * without it the switch takes arrival and the row below is the only thing on
+     * the screen nobody is standing on.
+     */
+    @Test
+    fun `a quiet day arrives on the Excluded row, which gives the list a back key`() {
+        var backs = 0
+        compose.setContent {
+            BodhaTheme {
+                BackHandler { backs++ }
+                var open by remember { mutableStateOf(false) }
+                Box(Modifier.fillMaxSize().escapeIsBack()) {
+                    if (open) {
+                        AwarenessScreen(
+                            today = AwarenessToday.None,
+                            sessions = emptyList(),
+                            day = LocalDate.of(2026, 8, 7),
+                            isToday = true,
+                            exclusions = Exclusions(sessions = setOf(9)),
+                            onPickView = {},
+                            onOpenSession = {},
+                            onSessionActions = {},
+                            onOpenExclusions = {},
+                            onBack = {},
+                        )
+                    } else {
+                        ListRow("Open Awareness", onClick = { open = true })
+                    }
+                }
+            }
+        }
+
+        compose.onRoot().performKeyInput { pressKey(Key.Tab) }
+        compose.onRoot().performKeyInput { pressKey(Key.Enter) }
+        assertEquals(
+            AWARENESS_EXCLUDED,
+            nodes().firstOrNull { it.config.getOrNull(SemanticsProperties.Focused) == true }
+                ?.config?.getOrNull(SemanticsProperties.Text)?.firstOrNull()?.text,
+        )
+
+        compose.onRoot().performKeyInput { pressKey(Key.Escape) }
+        assertEquals(1, backs)
+    }
+
+    /**
      * At the edge of the window, once, and beneath everything it clamped (#177).
      * Not on a row, because the reader crossed the edge once and marking every
      * row would be the same sentence repeated down the screen.
@@ -316,23 +361,24 @@ class AwarenessScreenTest {
         setScreen(day, AwarenessToday.Sessions(finished = 2, running = true))
 
         assertTrue(drawnText().none { it == terminus })
-        assertTrue(drawnText().none { it == gateCopy.explanation })
     }
 
     /**
-     * Face is decided by authorship (ADR 0021, CONTEXT.md **Voice**). The row
-     * names what happened to the list — machinery, in the sans a `CardRow` title
-     * takes — and the sentence Bodha wrote stays in the dialog, where it is
-     * already faced as voice.
+     * AC 4: what stands at the edge of the window is the gate's own sentence and
+     * nothing Awareness wrote itself. An earlier pass put a machinery summary
+     * there — "Seven days render free" — and kept the authored copy for the
+     * dialog behind it, so a reader who never pressed the row never met it.
+     * Face follows authorship (ADR 0021, CONTEXT.md **Voice**), which is why the
+     * sentence is drawn as voice rather than as a row title.
      */
     @Test
-    fun `the terminus row is machinery and the authored sentence stays in the dialog`() {
+    fun `the edge of the window states the gate's own sentence`() {
         setScreen(day, AwarenessToday.Sessions(finished = 2, running = true), boundary = gateCopy)
 
-        assertTrue(terminus in drawnText())
-        assertTrue(drawnText().none { it == gateCopy.explanation })
-        // One actionable node, named by the terminus, and never phrased as a loss.
-        val row = nodes().single { SemanticsActions.OnClick in it.config && it.spokenName() == terminus }
+        assertTrue(gateCopy.explanation in drawnText())
+        val row = nodes().single {
+            SemanticsActions.OnClick in it.config && it.spokenName() == gateCopy.explanation
+        }
         row.config[SemanticsActions.OnClick].action?.invoke()
         assertEquals(1, stated)
     }
@@ -353,11 +399,17 @@ class AwarenessScreenTest {
     }
 
     /**
-     * A Pro flip is a recomposition over the list already in hand, and that whole
-     * claim rests on `window` being a `remember` key where the resolution happens
-     * (#177). There is no `AwarenessSurfaceTest`, so the key list is held here or
-     * by nothing: the same records, one snapshot flip, a wider render and no
-     * second read anywhere in the harness.
+     * A Pro flip is a recomposition over the list already in hand rather than a
+     * second query (#177): the same records, one snapshot flip, a wider render
+     * and no read anywhere in between.
+     *
+     * **What this does not hold** is `AwarenessSurface`'s own wiring. The
+     * composable below resolves the window and keys the `remember` itself, so it
+     * pins the shape the surface is written in and not the surface — deleting
+     * `entitlementStore` and every `window` key over there would leave this
+     * green. The surface has no harness to assert through, so AC 3's wiring is
+     * unguarded and that is worth saying here rather than leaving it looking
+     * checked.
      */
     @Test
     fun `the window is a remember key, so a flipped snapshot re-resolves`() {
@@ -392,7 +444,6 @@ class AwarenessScreenTest {
                             onSessionActions = {},
                             onOpenExclusions = {},
                             boundary = render.boundary,
-                            boundaryTitle = awarenessWindowTerminusLine(window.cap),
                             onBoundary = {},
                             onBack = {},
                         )
@@ -445,9 +496,9 @@ class AwarenessScreenTest {
     }
 
     /**
-     * A day with nothing on it and something excluded still has a row, so arrival
-     * lands on it rather than on the switch — the chain-wide rule read in order
-     * (ADR 0022, #176).
+     * A day with nothing on it and something excluded still draws a row, and the
+     * count on the line above stays the day's rather than the exclusion's. Where
+     * arrival lands on that row is the keyed test above.
      */
     @Test
     fun `a quiet day with an exclusion still renders a row, and the count is of the day`() {

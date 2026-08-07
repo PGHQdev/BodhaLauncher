@@ -273,6 +273,18 @@ fun DesignGallery() {
             // actions node are inside both guards rather than only on a screen.
             CardRow(title = "Pin row, focused", onClick = {}, onLongClick = {})
             ListRow(title = "App row, focused", onClick = {}, onLongClick = {})
+            // A row that navigates *and* carries actions, which ADR 0026 recorded
+            // as "live in principle and empty today" and Awareness's session and
+            // launch rows have since made live (#174, #178). Its trailing slot
+            // holds the hint, the actions node and rule 3's chevron at once, so
+            // this is the only specimen that puts all three in one row for the
+            // tree-walk, the traversal and the goldens to measure.
+            ListRow(
+                title = "Navigating row with actions, focused",
+                onClick = {},
+                onLongClick = {},
+                trailing = { TrailingChevron() },
+            )
             // The inbox row's actions (#163): handled and snooze hang off this
             // node, so the tree-walk and the Tab traversal both see the route.
             NotificationRow(

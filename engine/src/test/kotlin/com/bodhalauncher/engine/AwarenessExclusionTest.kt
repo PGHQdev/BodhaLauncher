@@ -201,13 +201,14 @@ class AwarenessExclusionTest {
      */
     @Test
     fun `an excluded app's foreground time leaves the week rate`() {
-        val reading = mapOf("com.bodhalauncher" to 600_000L, "atlas" to 7_000_000L, "ledger" to 400_000L)
+        val reading =
+            mapOf("com.bodhalauncher" to 600_000L, "atlas" to 70_000_000L, "ledger" to 14_000_000L)
         val mine = setOf("com.bodhalauncher")
 
-        assertEquals(7_400_000L, totalForegroundMillis(reading, mine))
-        assertEquals(400_000L, totalForegroundMillis(reading, mine + "atlas"))
+        assertEquals(84_000_000L, totalForegroundMillis(reading, mine))
+        assertEquals(14_000_000L, totalForegroundMillis(reading, mine + "atlas"))
         assertEquals(
-            AwarenessDuration.Span(400_000L / AWARENESS_WEEK_DAYS),
+            AwarenessDuration.Span(14_000_000L / AWARENESS_WEEK_DAYS),
             resolveWeekRate(AwarenessUsage.Live, totalForegroundMillis(reading, mine + "atlas")),
         )
     }

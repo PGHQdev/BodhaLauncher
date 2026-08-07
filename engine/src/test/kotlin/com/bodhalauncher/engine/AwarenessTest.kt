@@ -480,6 +480,24 @@ class AwarenessTest {
         assertEquals(day(2026, 8, 7, 9, 15).plusSeconds(11), merged.last().at)
     }
 
+    /**
+     * The same totality [resolveAppOpens] promises: handing this the whole log
+     * and handing it one app's records give the same answer. It is not tidiness
+     * — the App view's boundary is decided by comparing list sizes over this
+     * output, so a foreign record carried through would have the entitlement
+     * window state a Pro boundary out of another app's history.
+     */
+    @Test
+    fun `a whole log in gives one app's opens out`() {
+        val merged = mergeLaunches(
+            appId = "atlas",
+            logged = logged + opened("ledger", day(2026, 8, 7, 10, 0), session = 1),
+            entries = emptyList(),
+        )
+
+        assertEquals(logged, merged)
+    }
+
     /** One visit continuing — a new activity, a returning dialog, a rotation. */
     @Test
     fun `an app resuming its own next activity is one visit continuing`() {
@@ -827,6 +845,37 @@ class AwarenessTest {
         )
     }
 
+    /**
+     * A rate that would *render* as zero is the same rendered 0 the arm above
+     * refuses — reachable on a phone whose history is short, where "This week
+     * 3.1h/day · last week 0.0h/day" states as measured fact a period that was
+     * effectively not measured. The threshold is the format's: one decimal place
+     * puts it at three minutes a day.
+     */
+    @Test
+    fun `a rate that would print as zero resolves to none instead`() {
+        val perDayUnderThreeMinutes = 179_999L * AWARENESS_WEEK_DAYS
+        val perDayAtThreeMinutes = 180_000L * AWARENESS_WEEK_DAYS
+
+        assertEquals(AwarenessDuration.None, resolveWeekRate(AwarenessUsage.Live, perDayUnderThreeMinutes))
+        assertEquals(
+            AwarenessDuration.Span(180_000L),
+            resolveWeekRate(AwarenessUsage.Live, perDayAtThreeMinutes),
+        )
+        // The line the threshold is derived from: the first rate that survives is
+        // the first one that does not spell itself 0.
+        assertEquals(
+            "This week 0.1h/day",
+            awarenessWeekRateLine(
+                AwarenessWeek(
+                    days = emptyList(),
+                    rate = resolveWeekRate(AwarenessUsage.Live, perDayAtThreeMinutes),
+                    previousRate = resolveWeekRate(AwarenessUsage.Live, perDayUnderThreeMinutes),
+                )
+            ),
+        )
+    }
+
     /** Time spent reading Awareness is not time spent on the phone's other apps. */
     @Test
     fun `the fold excludes the launcher's own package`() {
@@ -1001,12 +1050,13 @@ class AwarenessTest {
             awarenessWeekRateLine(week(millis = 85_680_000, previousMillis = 78_120_000)),
             awarenessWeekRateLine(week(millis = 78_120_000)),
         ) + listOf(
-            // The entitlement terminus states what renders, never what was lost
-            // (#177) — the sweep is what holds it to that.
-            awarenessWindowTerminusLine(FREE_AWARENESS_DAYS),
-            awarenessWindowTerminusLine(1),
-            awarenessWindowTerminusLine(0),
-            awarenessWindowTerminusLine(null),
+            // The exclusion's own three words (#178). They are engine consts so
+            // that this sweep can reach them: the feature whose whole subject is
+            // removing something is the last one whose copy should sit outside a
+            // check on direction words.
+            AWARENESS_EXCLUDE,
+            AWARENESS_EXCLUDED,
+            AWARENESS_INCLUDE,
         )
         val forbidden = listOf("+", "-", "more", "less", "up", "down", "better", "worse", "most", "least")
         for (line in lines) {

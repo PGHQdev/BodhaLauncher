@@ -46,7 +46,6 @@ import com.bodhalauncher.engine.SessionDetail
 import com.bodhalauncher.engine.SessionRecord
 import com.bodhalauncher.engine.awarenessDayRecords
 import com.bodhalauncher.engine.awarenessSessionLine
-import com.bodhalauncher.engine.awarenessWindowTerminusLine
 import com.bodhalauncher.engine.dayKey
 import com.bodhalauncher.engine.dayStart
 import com.bodhalauncher.engine.mergeLaunches
@@ -100,6 +99,17 @@ private data class AppReading(
  * the line above the rows it was missing from.
  */
 private data class AwarenessDay(
+    /**
+     * The day this read was for.
+     *
+     * `produceState` keeps its value across a key change — only the effect is
+     * re-keyed — so without a stamp, picking a day on the Week would resolve the
+     * *previous* day's records against the newly shown date, filter them to
+     * nothing, and draw "Tuesday, 4 August · No sessions" over a day nobody had
+     * read yet. That is the named absence standing in for an unknown, which is
+     * the one thing this surface's reads are shaped to prevent (#171, #176).
+     */
+    val day: LocalDate,
     val records: List<SessionRecord>,
     /** Kept, because opening a session reads the same signals for its statement (#173). */
     val signals: List<IntentSignal>,
@@ -160,14 +170,19 @@ private data class AwarenessWeekReading(
  * session — a switch answers "which view", not "where was I".
  *
  * **Every branch runs the same pipeline, in this order: read unfiltered, then
- * exclude, then clamp, then resolve** (#177, #178). Nothing that reaches a DAO
- * knows about entitlement or about an exclusion, so retention, the privacy
- * dashboard and any later export are unaffected by construction rather than by
- * care — and a Pro flip or an exclusion toggle is a recomposition over a list
- * already in hand rather than a second trip to the database. That claim rests
- * entirely on `window` and `exclusions` being `remember` keys wherever the
- * resolution happens, so the key lists below are load-bearing rather than
- * incidental.
+ * exclude, then clamp, then resolve** (#177, #178). No query that produces the
+ * records a view renders is narrowed by entitlement or by an exclusion, so
+ * retention, the privacy dashboard and any later export are unaffected by
+ * construction rather than by care — and a Pro flip or an exclusion toggle is a
+ * recomposition over a list already in hand rather than a second trip to the
+ * database. That claim rests entirely on `window` and `exclusions` being
+ * `remember` keys wherever the resolution happens, so the key lists below are
+ * load-bearing rather than incidental.
+ *
+ * The one exclusion-aware read is `sessionRecords().withIds(...)`, and it is the
+ * exception that shows the rule: it fetches the excluded sessions *themselves* —
+ * for the undo list, and for the span that recognises an unmediated open as
+ * having happened inside one — rather than narrowing anything a view draws.
  *
  * **Exclusion runs before the window, and the order matters.** `AwarenessRender`
  * decides whether to state the Pro boundary by comparing sizes, so a record the
@@ -206,7 +221,7 @@ fun AwarenessSurface(
     // Null while the store is still being read — and stays null if the read
     // fails: the screen shows nothing rather than a 0 standing in for an
     // unknown (#171). Only an actual empty read resolves to the named absence.
-    val day by produceState<AwarenessDay?>(null, now, phase, shown) {
+    val read by produceState<AwarenessDay?>(null, now, phase, shown) {
         value = withContext(Dispatchers.IO) {
             runCatching {
                 val database = BodhaDatabase.get(context)
@@ -222,15 +237,23 @@ fun AwarenessSurface(
                 ).toInstant()
                 val focus = database.focusRecords().startedSince(from.toEpochMilli())
                     .map { it.toIntentSignal() }
-                AwarenessDay(records = records, signals = intents.signalsSince(from) + focus)
+                AwarenessDay(
+                    day = shown,
+                    records = records,
+                    signals = intents.signalsSince(from) + focus,
+                )
             }.getOrNull()
         } ?: value
     }
+    // A read for a different day than the one showing is not this day's read.
+    // Retaining the last good value is what carries a failed re-read of *this*
+    // day; carrying it across a day change would let one day's records answer
+    // for another's, so the stamp is checked rather than trusted (#176).
+    val day = read?.takeIf { it.day == shown }
     // How much of what was read renders (#177). Resolved from the cached
     // snapshot rather than fetched: the cache is the gate's whole truth, and a
     // billing outage must never narrow a window mid-session.
     val window = resolveAwarenessWindow(entitlementStore.snapshot.value, now)
-    val terminus = awarenessWindowTerminusLine(window.cap)
     var boundaryShown by remember { mutableStateOf<ProBoundary?>(null) }
     // Excluded, then clamped, both here rather than inside the read: what renders
     // is decided in composition over a list already in hand, which is what makes
@@ -278,13 +301,20 @@ fun AwarenessSurface(
         educationShown = education.educationShown(Capability.UsageAccess),
         grantSeen = usageGrantSeen,
     )
-    // The one window both usage reads take: the 4am-snapped floor `launch_record`
-    // is itself pruned to, so a span and the opens under it provably cover the
-    // same stretch of time. It moves once a day rather than once a minute, which
-    // is what makes it safe to key a read on.
-    val usageFrom = resolveRetention(now, RetentionConfig())
+    // The 4am-snapped floor `launch_record` is itself pruned to: as far back as
+    // any of Bodha's own opens can exist. It moves once a day rather than once a
+    // minute, which is what makes it safe to key a read on.
+    val retentionFrom = resolveRetention(now, RetentionConfig())
         .cutoffs.getValue(RetentionCategory.RawUsageEvents)
         .toInstant().toEpochMilli()
+    // What the App view's usage reads take, which is the floor its **rows**
+    // render from rather than the floor its records exist to (#177). The window
+    // clamps the launches, so a span read over the retention floor would print
+    // "18h 20m in the foreground" above seven days of opens — two answers to two
+    // different questions, which is precisely the promise `resolveAppOpens` says
+    // it cannot check and the caller owes it. On Pro `from` is null and the two
+    // floors are the same one.
+    val usageFrom = window.from?.let { dayStart(it).toInstant().toEpochMilli() } ?: retentionFrom
     // Bodha's own package, because time spent reading Awareness is not time
     // spent on the phone's other apps — and counting it would make looking at
     // the figure move the figure (#176). The excluded apps join it (#178): the
@@ -327,6 +357,15 @@ fun AwarenessSurface(
             // `if (usageGranted)`: each guards itself on the grant, so the read
             // that decides what is drawn is the freshest one rather than a
             // composition-old boolean (#175).
+            //
+            // Each also carries its **own** guard rather than sharing the outer
+            // one. The launch log is the spine and needs no permission (ADR
+            // 0013), so a usage read that throws must cost the reader the span
+            // and the unmediated opens and nothing else — under one `runCatching`
+            // it took the whole view down instead, leaving the named shell with
+            // no opens, no day headings and no sentence saying what was missing.
+            // It is also what makes `UnavailableReason.NoReading` reachable by a
+            // failed reading at all, which is the case that arm was written for.
             val reading by produceState<AppReading?>(
                 null, appId, usageFrom, usageGranted, education.resumeTick, exclusions,
             ) {
@@ -340,9 +379,10 @@ fun AwarenessSurface(
                             launches = mergeLaunches(
                                 appId = appId,
                                 logged = logged,
-                                entries = usage.foregroundEntries(usageFrom).orEmpty(),
+                                entries = runCatching { usage.foregroundEntries(usageFrom) }
+                                    .getOrNull().orEmpty(),
                             ),
-                            foreground = usage.usedSince(usageFrom),
+                            foreground = runCatching { usage.usedSince(usageFrom) }.getOrNull(),
                             // Read on the same trip rather than in a second
                             // `produceState`: it is one query against a handful
                             // of ids, and splitting it would let the launches and
@@ -386,7 +426,6 @@ fun AwarenessSurface(
                 usage = usageState,
                 onTurnOn = { education.ask(Capability.UsageAccess, EducationEntry.FeatureTouch) },
                 boundary = appRender?.boundary,
-                boundaryTitle = terminus,
                 onBoundary = { boundaryShown = appRender?.boundary },
             )
         }
@@ -491,15 +530,30 @@ fun AwarenessSurface(
                         // A single 4am day cannot be read from Android's
                         // midnight-aligned buckets at all, which is why no day
                         // row carries a duration (#176).
+                        //
+                        // **Equal spans, and that is the whole of this block.**
+                        // The two totals are divided by the same seven and
+                        // printed side by side, so they have to be measured the
+                        // same way. The current period runs from the week's first
+                        // 4am to now — six-and-a-fraction days, never seven — so
+                        // the previous one is that same length ending where this
+                        // one begins, rather than a closed seven days that also
+                        // swallows the first day's whole bucket at its far end.
+                        // Measured any other way the pair reads low every hour of
+                        // every day, which is a direction delivered without an
+                        // arrow (ADR 0013).
                         val periodStart = dayStart(first).toInstant().toEpochMilli()
+                        val periodEnd = System.currentTimeMillis()
+                        val previousStart = dayStart(
+                            first.minusDays(AWARENESS_WEEK_DAYS.toLong())
+                        ).toInstant().toEpochMilli()
                         AwarenessWeekReading(
                             records = records,
                             signals = intents.signalsSince(from) + focus,
-                            foreground = usage.usedSince(periodStart),
+                            foreground = usage.usedBetween(periodStart, periodEnd),
                             previousForeground = usage.usedBetween(
-                                dayStart(first.minusDays(AWARENESS_WEEK_DAYS.toLong()))
-                                    .toInstant().toEpochMilli(),
-                                periodStart,
+                                previousStart,
+                                previousStart + (periodEnd - periodStart),
                             ),
                         )
                     }.getOrNull()
@@ -545,7 +599,6 @@ fun AwarenessSurface(
                     education.ask(Capability.UsageAccess, EducationEntry.FeatureTouch)
                 },
                 boundary = weekRender?.boundary,
-                boundaryTitle = terminus,
                 onBoundary = { boundaryShown = weekRender?.boundary },
             )
         }
@@ -561,7 +614,6 @@ fun AwarenessSurface(
             onSessionActions = { sheets.open(Sheet.AwarenessSessionActions(it.record)) },
             onOpenExclusions = { showExclusions = true },
             boundary = dayRender?.boundary,
-            boundaryTitle = terminus,
             onBoundary = { boundaryShown = dayRender?.boundary },
             onBack = onBack,
         )

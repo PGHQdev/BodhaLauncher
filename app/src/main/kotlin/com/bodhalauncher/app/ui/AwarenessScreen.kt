@@ -18,12 +18,19 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.bodhalauncher.engine.AWARENESS_EXCLUDED
+import com.bodhalauncher.engine.AWARENESS_INCLUDE
 import com.bodhalauncher.engine.AWARENESS_TURN_ON_USAGE
 import com.bodhalauncher.engine.AppOpens
 import com.bodhalauncher.engine.AwarenessDayFigures
@@ -97,7 +104,6 @@ fun AwarenessScreen(
     onOpenExclusions: () -> Unit,
     /** Non-null only where the entitlement window withheld one of this day's records (#177). */
     boundary: ProBoundary? = null,
-    boundaryTitle: String = "",
     onBoundary: () -> Unit = {},
     onBack: () -> Unit,
 ) {
@@ -124,7 +130,6 @@ fun AwarenessScreen(
             )
         },
         boundary = boundary,
-        boundaryTitle = boundaryTitle,
         onBoundary = onBoundary,
     ) {
         sessions.forEachIndexed { index, session ->
@@ -140,7 +145,7 @@ fun AwarenessScreen(
         // the reader never excluded anything from.
         if (!exclusions.isEmpty) {
             ListRow(
-                title = "Excluded",
+                title = AWARENESS_EXCLUDED,
                 subtitle = exclusionsLine(exclusions),
                 onClick = onOpenExclusions,
                 trailing = { TrailingChevron() },
@@ -220,8 +225,6 @@ private fun AwarenessList(
      * own copy refuses to be.
      */
     boundary: ProBoundary? = null,
-    /** What the terminus says: machinery, and never the authored sentence (ADR 0021). */
-    boundaryTitle: String = "",
     onBoundary: () -> Unit = {},
     content: @Composable () -> Unit,
 ) {
@@ -254,16 +257,57 @@ private fun AwarenessList(
         Spacer(Modifier.height(BodhaSpacing.l))
         content()
         // Once, at the edge of the window, beneath everything it renders — never
-        // repeated per row, because the reader crossed the edge once. A card
-        // rather than a hairline row because it is the list's terminus rather
-        // than one more record in it (ADR 0025 rule 1), and no chevron because it
-        // opens a dialog rather than navigating (rule 3).
+        // repeated per row, because the reader crossed the edge once.
         boundary?.let {
             Spacer(Modifier.height(BodhaSpacing.l))
-            // Plain, deliberately: Awareness's primary action is reading the
-            // record, and there is nothing here to buy until billing lands (#22).
-            CardRow(title = boundaryTitle, onClick = onBoundary)
+            ProBoundaryTerminus(explanation = it.explanation, onOpen = onBoundary)
         }
+    }
+}
+
+/**
+ * The gate's own sentence, at the edge of the window (#177, ADR 0005).
+ *
+ * **What renders here is [ProBoundary.explanation] and nothing Awareness wrote
+ * itself.** An earlier pass put a machinery line here — "Seven days render free"
+ * — and kept the authored sentence for the dialog behind it, which made one fact
+ * two sentences and left the reader who never pressed the row with only the
+ * summary. One authored fact, stated once, where the list stops.
+ *
+ * Which is why it is set in [BodhaType.voicePassage] rather than in a
+ * [CardRow]'s title: the gate's copy is text Bodha wrote and means, and
+ * CONTEXT.md's **Voice** entry settles the face by authorship rather than by
+ * which container the string landed in. That is the one reason this is a call
+ * site built from [BodhaCard] instead of the row component — every other part of
+ * it, the floor, the ring and the click, is what `CardRow` would have given.
+ *
+ * A card rather than a hairline row, because it is the list's terminus rather
+ * than one more record in it, and no chevron, because it opens a dialog rather
+ * than navigating (ADR 0025 rules 1 and 3). Plain fill for the same reason every
+ * other way-in on this surface is plain: Awareness's primary action is reading
+ * the record, and solid accent here would rank a boundary above it.
+ *
+ * It stays a control because the dialog behind it is the shared Pro site every
+ * gate in the app opens (`LibrarySurface` opens the same one) and is where #22's
+ * purchase lands. Today that dialog restates this sentence and adds nothing,
+ * which is a redundancy worth naming rather than hiding.
+ */
+@Composable
+private fun ProBoundaryTerminus(explanation: String, onOpen: () -> Unit) {
+    val colors = LocalBodhaColors.current
+    var focused by remember { mutableStateOf(false) }
+    BodhaCard(focused = focusRingShown(focused)) {
+        Text(
+            text = explanation,
+            color = colors.ink,
+            style = BodhaType.voicePassage,
+            modifier = Modifier
+                .fillMaxWidth()
+                .touchTargetFloor()
+                .onFocusChanged { focused = it.isFocused }
+                .clickable(onClick = onOpen)
+                .padding(horizontal = BodhaSpacing.m, vertical = BodhaSpacing.s),
+        )
     }
 }
 
@@ -374,7 +418,6 @@ fun AwarenessWeekScreen(
      * the one clamped view with nothing to explain it.
      */
     boundary: ProBoundary? = null,
-    boundaryTitle: String = "",
     onBoundary: () -> Unit = {},
 ) {
     val colors = LocalBodhaColors.current
@@ -389,7 +432,6 @@ fun AwarenessWeekScreen(
             )
         },
         boundary = boundary,
-        boundaryTitle = boundaryTitle,
         onBoundary = onBoundary,
     ) {
         if (week == null) return@AwarenessList
@@ -497,7 +539,7 @@ fun ExclusionsScreen(
     val formats = LocalBodhaFormats.current
     val empty = apps.isEmpty() && sessions.isEmpty()
     AwarenessList(
-        title = "Excluded",
+        title = AWARENESS_EXCLUDED,
         line = exclusionsLine(exclusions),
         // Only where there is no row to take arrival: this screen exists for the
         // populated case, and that case focuses its first row (ADR 0022).
@@ -506,7 +548,7 @@ fun ExclusionsScreen(
         apps.forEachIndexed { index, id ->
             ListRow(
                 title = labelFor(id),
-                subtitle = "Include",
+                subtitle = AWARENESS_INCLUDE,
                 onClick = { onIncludeApp(id) },
                 leading = iconFor(id)?.let { { AppMark(it) } },
                 modifier = if (index == 0) Modifier.focusOnOpen() else Modifier,
@@ -515,7 +557,7 @@ fun ExclusionsScreen(
         sessions.forEachIndexed { index, record ->
             ListRow(
                 title = exclusionSessionLine(record, formats.clock, formats.date),
-                subtitle = "Include",
+                subtitle = AWARENESS_INCLUDE,
                 onClick = { onIncludeSession(record.id) },
                 modifier = if (index == 0 && apps.isEmpty()) Modifier.focusOnOpen() else Modifier,
             )
@@ -685,7 +727,6 @@ fun AppOpensScreen(
      * against and would never speak.
      */
     boundary: ProBoundary? = null,
-    boundaryTitle: String = "",
     onBoundary: () -> Unit = {},
 ) {
     val colors = LocalBodhaColors.current
@@ -699,7 +740,6 @@ fun AppOpensScreen(
         line = appOpensLine(view),
         focusSelf = true,
         boundary = boundary,
-        boundaryTitle = boundaryTitle,
         onBoundary = onBoundary,
     ) {
         val foreground = awarenessForegroundLine(view.foreground, usage)

@@ -721,14 +721,19 @@ class SearchReducerTest {
             surfaces = listOf(Surface.Library),
             query = "ne",
         )
+        // Camera rather than Telegram, and that is the whole test: "New selfie"
+        // sits below "New chat" alphabetically, so a shortcut inheriting its
+        // app's tally would lift it and this equality would break. Tallying
+        // Telegram could not fail — its shortcut already leads.
         val heavilyOpened = inputs.copy(
             launches = opened(
-                "telegram" to "2026-08-05T09:00:00",
-                "telegram" to "2026-08-06T09:00:00",
-                "telegram" to "2026-08-07T09:00:00",
+                "camera" to "2026-08-05T09:00:00",
+                "camera" to "2026-08-06T09:00:00",
+                "camera" to "2026-08-07T09:00:00",
             )
         )
 
+        assertEquals(listOf("New chat", "New selfie"), labels(resolveSearch(inputs), SearchSection.Shortcuts))
         assertEquals(resolveSearch(inputs), resolveSearch(heavilyOpened))
     }
 
@@ -741,16 +746,21 @@ class SearchReducerTest {
         )
 
         val search = resolveSearch(inputs.copy(launches = emptyMap()))
-        assertEquals(resolveSearch(inputs), search)
         assertEquals(listOf("Inbox", "iNaturalist", "Instagram"), labels(search, SearchSection.Apps))
         assertEquals(listOf(REASON_PINNED, null, null), reasons(search, SearchSection.Apps))
     }
 
     @Test
     fun `a launch of an app this query does not match moves nothing`() {
-        val inputs = SearchInputs(apps = installed, query = "insta")
+        // Two matching rows, so there is an order a leak could disturb, and the
+        // tally is on a third app that matches neither.
+        val inputs = SearchInputs(
+            apps = listOf(app("Instagram"), app("iNaturalist"), app("Camera")),
+            query = "in",
+        )
         val elsewhere = inputs.copy(launches = opened("camera" to "2026-08-07T09:00:00"))
 
+        assertEquals(listOf("iNaturalist", "Instagram"), labels(resolveSearch(inputs), SearchSection.Apps))
         assertEquals(resolveSearch(inputs), resolveSearch(elsewhere))
     }
 

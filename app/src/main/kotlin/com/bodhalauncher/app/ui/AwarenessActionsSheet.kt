@@ -13,6 +13,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.bodhalauncher.engine.AWARENESS_EXCLUDE
 
 /**
  * What an Awareness row offers beyond opening it (#178): taking the thing it
@@ -60,7 +61,7 @@ fun AwarenessActionsSheet(
             // The shared row, not a private copy: `EducationSheet`'s hand-rolled
             // one is an existing inconsistency and propagating it would make it
             // a convention.
-            SheetRow("Exclude", onExclude)
+            SheetRow(AWARENESS_EXCLUDE, onExclude)
             Box(Modifier.fillMaxWidth().height(1.dp).background(colors.hairline))
             Spacer(Modifier.height(24.dp))
         }

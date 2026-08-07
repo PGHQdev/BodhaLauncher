@@ -150,6 +150,14 @@ fun SearchSurface(
             runCatching { resolveLaunchTallies(launchRecords.all().map { it.toRecord() }) }.getOrNull()
         } ?: value
     }
+    // Observed at the query, exactly as the two grants above are, and for the
+    // reason ADR 0014 gives: nothing reorders under the finger. Backing out of an
+    // app launched from Search leaves this surface composed with the query still
+    // in the field, and the re-read keyed on [launcherVisible] lands a frame or
+    // two later carrying the launch just written — so without this snapshot the
+    // Apps section visibly re-sorts with no input from the reader. The freshly
+    // read tally takes effect on the next query instead.
+    val ranking = remember(query) { launches }
     // The sheet is about a result on this surface, so it leaves with the surface
     // — the reason the Library's does (#132).
     DisposableEffect(Unit) {
@@ -175,7 +183,7 @@ fun SearchSurface(
                 hidden = hidden,
                 pinned = pinned.toSet(),
                 defaults = defaultStore.defaults.value,
-                launches = launches,
+                launches = ranking,
                 hiddenSearchable = hiddenSearchable,
                 contactsGranted = contactsGranted,
                 contacts = allContacts,

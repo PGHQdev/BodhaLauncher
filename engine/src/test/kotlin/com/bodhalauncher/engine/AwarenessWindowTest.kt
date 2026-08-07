@@ -7,7 +7,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertSame
-import kotlin.test.assertTrue
 
 /**
  * The entitlement window (#177, ADR 0005, ADR 0013): retention governs what
@@ -40,7 +39,6 @@ class AwarenessWindowTest {
         val window = resolveAwarenessWindow(free, now)
 
         assertEquals(today.minusDays(6), window.from)
-        assertEquals(FREE_AWARENESS_DAYS, window.cap)
         assertEquals(gateCopy, window.boundary)
         // Seven day keys, the oldest of them the window's floor.
         assertEquals(7, window.days((0L..6L).map { today.minusDays(it) }).records.size)
@@ -77,7 +75,7 @@ class AwarenessWindowTest {
         // A cap narrower than the Week's seven, which today's numbers never
         // produce — the day list is dropped whole rather than kept as a row
         // saying a day held nothing when it held records this tier cannot draw.
-        val window = AwarenessWindow(from = today.minusDays(2), boundary = gateCopy, cap = 3)
+        val window = AwarenessWindow(from = today.minusDays(2), boundary = gateCopy)
 
         val render = window.days((0L..6L).map { today.minusDays(it) }.reversed())
 
@@ -131,7 +129,6 @@ class AwarenessWindowTest {
         val render = window.sessions(records)
 
         assertNull(window.from)
-        assertNull(window.cap)
         // The same list object, not a copy that happens to be equal: a Pro render
         // is this filter removed rather than a second path that agrees.
         assertSame(records, render.records)
@@ -240,13 +237,17 @@ class AwarenessWindowTest {
         assertNull(render.boundary)
     }
 
+    /**
+     * The boundary a view states is the gate's own sentence and never one this
+     * module wrote (#177). An earlier pass carried a second, machinery line
+     * beside it — "Seven days render free" — which made one fact two sentences
+     * and mapped a Pro window, whose cap is no cap at all, onto "Today renders
+     * free". The window now carries the copy and nothing else, so there is no
+     * second string to fall out of step with it.
+     */
     @Test
-    fun `the terminus says what renders rather than what is lost`() {
-        assertEquals("7 days render free", awarenessWindowTerminusLine(FREE_AWARENESS_DAYS))
-        assertEquals("1 day renders free", awarenessWindowTerminusLine(1))
-        assertEquals("Today renders free", awarenessWindowTerminusLine(null))
-        assertEquals("Today renders free", awarenessWindowTerminusLine(0))
-        // The authored sentence is the dialog's; this one names the machinery.
-        assertTrue(awarenessWindowTerminusLine(FREE_AWARENESS_DAYS) != gateCopy.explanation)
+    fun `the window carries the gate's own copy and authors none of its own`() {
+        assertEquals(gateCopy, resolveAwarenessWindow(free, now).boundary)
+        assertNull(resolveAwarenessWindow(pro, now).boundary)
     }
 }
