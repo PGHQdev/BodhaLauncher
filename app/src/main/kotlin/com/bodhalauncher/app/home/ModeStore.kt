@@ -7,6 +7,7 @@ import com.bodhalauncher.engine.ContextMode
 import com.bodhalauncher.engine.ManualSwitch
 import com.bodhalauncher.engine.ModeNameError
 import com.bodhalauncher.engine.ScheduleWindow
+import com.bodhalauncher.engine.manualSwitchExpired
 import com.bodhalauncher.engine.validateModeName
 import org.json.JSONArray
 import org.json.JSONObject
@@ -87,6 +88,18 @@ class ModeStore(context: Context, private val pins: PinStore) {
      * read here so the expiry is decided against the same clock the resolver uses.
      */
     fun select(name: String?, now: LocalDateTime) = persistSwitch(ManualSwitch(name, now))
+
+    /**
+     * Drops a switch that has reached its boundary.
+     *
+     * Expiry is **written, not merely observed**: left in place, a switch that
+     * lapsed against a window would come back to life the moment that window was
+     * edited away, since with no window left there is no boundary to have passed
+     * — and Home would jump back to an arrangement chosen hours ago.
+     */
+    fun expireSwitch(now: LocalDateTime) {
+        switch.value?.let { if (manualSwitchExpired(it, modes.value, now)) persistSwitch(null) }
+    }
 
     private fun names(): List<String> = modes.value.map { it.name }
 

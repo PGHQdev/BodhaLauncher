@@ -1,12 +1,8 @@
 package com.bodhalauncher.app.ui
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.BasicTextField
@@ -16,6 +12,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.contentDescription
@@ -45,27 +42,28 @@ fun WindowEditor(current: ScheduleWindow?, prompt: String, onSave: (ScheduleWind
         style = BodhaType.caption,
         modifier = Modifier.padding(bottom = 12.dp),
     )
-    Row {
+    Row(verticalAlignment = Alignment.CenterVertically) {
         TimeField(start, "Start time", "21:00", { start = it }, Modifier.weight(1f))
-        Spacer(Modifier.width(20.dp))
+        Spacer(Modifier.width(BodhaSpacing.m))
         TimeField(end, "End time", "23:30", { end = it }, Modifier.weight(1f))
     }
-    Spacer(Modifier.height(8.dp))
-    Box(Modifier.fillMaxWidth().height(1.dp).background(colors.hairline))
-    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp)) {
+    Row(modifier = Modifier.fillMaxWidth().padding(top = BodhaSpacing.l)) {
         Spacer(Modifier.weight(1f))
-        Text(
-            text = "Save",
-            color = colors.accent,
-            style = BodhaType.action,
+        BodhaPill(
+            label = "Save",
             // Equal times would be an empty window — a silently inert rule; Always is the mode for that.
-            modifier = Modifier.touchTargetFloor().clickable(enabled = startMinute != null && endMinute != null && startMinute != endMinute) {
-                onSave(ScheduleWindow(startMinute!!, endMinute!!))
-            },
+            enabled = startMinute != null && endMinute != null && startMinute != endMinute,
+            emphasis = Emphasis.Solid,
+            onClick = { onSave(ScheduleWindow(startMinute!!, endMinute!!)) },
         )
     }
 }
 
+/**
+ * A clock time, in the vocabulary's field (ADR 0025 rule 4) — so the floor, the
+ * hairline and the focus ring all come from the shared component rather than
+ * from an outline drawn here (ADR 0026).
+ */
 @Composable
 private fun TimeField(
     value: String,
@@ -76,21 +74,24 @@ private fun TimeField(
     modifier: Modifier,
 ) {
     val colors = LocalBodhaColors.current
-    BasicTextField(
-        value = value,
-        onValueChange = onChange,
-        singleLine = true,
-        textStyle = BodhaType.body.copy(color = colors.ink),
-        cursorBrush = SolidColor(colors.accent),
-        decorationBox = { field ->
-            if (value.isEmpty()) Text(placeholder, color = colors.inkMuted, style = BodhaType.body)
-            field()
-        },
-        modifier = modifier
-            .semantics { contentDescription = label }
-            // Stays last: ADR 0020's caveat in BodhaTheme.kt.
-            .touchTargetFloor(),
-    )
+    BodhaField(modifier = modifier) {
+        BasicTextField(
+            value = value,
+            onValueChange = onChange,
+            singleLine = true,
+            textStyle = BodhaType.body.copy(color = colors.ink),
+            cursorBrush = SolidColor(colors.accent),
+            decorationBox = { field ->
+                if (value.isEmpty()) Text(placeholder, color = colors.inkMuted, style = BodhaType.body)
+                field()
+            },
+            // The name belongs on the field's own node, not on BodhaField's Row —
+            // see BodhaField. Stays last: ADR 0020's caveat in BodhaTheme.kt.
+            modifier = Modifier
+                .semantics { contentDescription = label }
+                .touchTargetFloor(),
+        )
+    }
 }
 
 /** A window as one readable span — what a row shows when it is not being edited. */

@@ -151,6 +151,51 @@ class ModeStoreTest {
         assertEquals(listOf("One"), s.names())
     }
 
+    @Test
+    fun `a switch is dropped once it has reached its boundary`() {
+        val s = store()
+        s.create("Evening")
+        s.setWindow("Evening", ScheduleWindow(18 * 60, 22 * 60))
+        s.create("Work")
+        s.select("Work", now)
+
+        s.expireSwitch(now.withHour(17))
+        assertEquals("Work", s.switch.value?.mode)
+
+        s.expireSwitch(now.withHour(18))
+        assertNull(s.switch.value)
+    }
+
+    /**
+     * The bug the write exists for: with the switch only ignored, taking the
+     * window away would leave no boundary to have passed, and Home would jump
+     * back to an arrangement chosen hours earlier.
+     */
+    @Test
+    fun `a lapsed switch does not come back when its window is edited away`() {
+        val s = store()
+        s.create("Evening")
+        s.setWindow("Evening", ScheduleWindow(18 * 60, 22 * 60))
+        s.create("Work")
+        s.select("Work", now)
+        s.expireSwitch(now.withHour(18))
+
+        s.setWindow("Evening", null)
+
+        assertNull(store().switch.value)
+    }
+
+    @Test
+    fun `a switch with no boundary ahead of it is never expired`() {
+        val s = store()
+        s.create("Work")
+        s.select("Work", now)
+
+        s.expireSwitch(now.plusYears(10))
+
+        assertEquals("Work", store().switch.value?.mode)
+    }
+
     /**
      * The list was newline-joined names before windows existed (#155). A device
      * that already had modes keeps them, each without a window — and with no

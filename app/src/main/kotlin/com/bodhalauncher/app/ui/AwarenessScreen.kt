@@ -48,34 +48,50 @@ fun AwarenessScreen(
     sessions: List<AwarenessSession>,
     onBack: () -> Unit,
 ) {
-    val colors = LocalBodhaColors.current
     val line = today?.let(::awarenessTodayLine)
     if (sessions.isEmpty()) {
-        // A named absence filling the surface, tappable to leave — the pattern
-        // the placeholder and the inbox's empty states already use. Never a zero.
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(colors.ground)
-                .semantics {
-                    contentDescription = listOfNotNull("Awareness.", line?.plus("."), "Tap to go back.")
-                        .joinToString(" ")
-                }
-                .focusOnOpen()
-                .clickable(onClick = onBack),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-        ) {
-            Text("Awareness", color = colors.ink, style = BodhaType.title)
-            line?.let {
-                Spacer(Modifier.height(BodhaSpacing.m))
-                // A count is data, so it speaks in the operational voice (ADR 0021)
-                // with one ink and no direction (ADR 0013).
-                Text(it, color = colors.inkMuted, style = BodhaType.body)
-            }
-        }
+        AwarenessNote(line, onBack)
         return
     }
+    AwarenessList(line) {
+        sessions.forEach { session -> SessionRow(session) }
+    }
+}
+
+/**
+ * A named absence filling the surface, tappable to leave — the pattern the
+ * placeholder and the inbox's empty states already use. Never a zero.
+ */
+@Composable
+private fun AwarenessNote(line: String?, onBack: () -> Unit) {
+    val colors = LocalBodhaColors.current
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(colors.ground)
+            .semantics {
+                contentDescription = listOfNotNull("Awareness.", line?.plus("."), "Tap to go back.")
+                    .joinToString(" ")
+            }
+            .focusOnOpen()
+            .clickable(onClick = onBack),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text("Awareness", color = colors.ink, style = BodhaType.title)
+        line?.let {
+            Spacer(Modifier.height(BodhaSpacing.m))
+            // A count is data, so it speaks in the operational voice (ADR 0021)
+            // with one ink and no direction (ADR 0013).
+            Text(it, color = colors.inkMuted, style = BodhaType.body)
+        }
+    }
+}
+
+/** The surface's list shape: the name, the day's count, and the rows beneath. */
+@Composable
+private fun AwarenessList(line: String?, content: @Composable () -> Unit) {
+    val colors = LocalBodhaColors.current
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -97,9 +113,7 @@ fun AwarenessScreen(
             Text(it, color = colors.inkMuted, style = BodhaType.body)
         }
         Spacer(Modifier.height(BodhaSpacing.l))
-        sessions.forEach { session ->
-            SessionRow(session)
-        }
+        content()
     }
 }
 
@@ -107,12 +121,21 @@ fun AwarenessScreen(
  * One session, read rather than activated (#172). The span is the row's own
  * line; the classification is its second, in the muted machinery ink every
  * subtitle takes — one ink for the data, and no colour carrying a verdict.
+ *
+ * The two lines are merged into **one named node**, because a row that publishes
+ * no click does not merge on its own, and ADR 0020 asks a row to be named rather
+ * than to arrive as two loose strings.
  */
 @Composable
 fun SessionRow(session: AwarenessSession) {
+    val span = awarenessSessionLine(session)
+    val word = awarenessIntentWord(session.intentional)
     ListRow(
-        title = awarenessSessionLine(session),
-        subtitle = awarenessIntentWord(session.intentional),
+        title = span,
+        subtitle = word,
         onClick = null,
+        modifier = Modifier.semantics(mergeDescendants = true) {
+            contentDescription = "$span. $word."
+        },
     )
 }

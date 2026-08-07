@@ -42,7 +42,6 @@ fun SettingsSurface(
     /** Read on every resume, so losing the role while Settings is open shows here (#136). */
     homeRoleHeld: Boolean,
     onRequestHomeRole: () -> Unit,
-    rows: List<SettingsRow> = SETTINGS_ROWS,
 ) {
     val colors = LocalBodhaColors.current
     Column(
@@ -57,7 +56,7 @@ fun SettingsSurface(
         Text("Settings", color = colors.ink, style = BodhaType.title)
         Spacer(Modifier.height(BodhaSpacing.l))
         Column(verticalArrangement = Arrangement.spacedBy(BodhaSpacing.s)) {
-            rows.forEachIndexed { index, row ->
+            SETTINGS_ROWS.forEachIndexed { index, row ->
                 val arriving = if (index == 0) Modifier.focusOnOpen() else Modifier
                 when (row.id) {
                     SettingsRowId.HomeRole -> CardRow(

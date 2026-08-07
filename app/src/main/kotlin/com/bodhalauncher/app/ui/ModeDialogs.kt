@@ -95,7 +95,6 @@ fun ModeSelectorDialog(
             items(modes, key = { it.name }) { mode ->
                 ListRow(
                     title = mode.name,
-                    subtitle = mode.window?.let(::scheduleWindowLine),
                     onClick = { onPick(mode.name); onDismiss() },
                     tinted = mode.name == current,
                 )
@@ -175,8 +174,8 @@ fun ModeManageDialog(
         }
         ModeEditorDialog(
             mode = mode,
-            first = modes.first().name == name,
-            last = modes.last().name == name,
+            canMoveUp = modes.first().name != name,
+            canMoveDown = modes.last().name != name,
             onRename = { onRename(name, it) },
             onSetWindow = { onSetWindow(name, it) },
             onMove = { by -> onMove(name, by); editing = null },
@@ -199,27 +198,18 @@ fun ModeManageDialog(
 @Composable
 private fun ModeEditorDialog(
     mode: ContextMode,
-    first: Boolean,
-    last: Boolean,
+    canMoveUp: Boolean,
+    canMoveDown: Boolean,
     onRename: (String) -> ModeNameError?,
     onSetWindow: (ScheduleWindow?) -> Unit,
     onMove: (Int) -> Unit,
     onDelete: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val colors = LocalBodhaColors.current
-    Dialog(onDismissRequest = onDismiss) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .escapeDismisses(onDismiss)
-                .focusOnOpen()
-                .clip(RoundedCornerShape(4.dp))
-                .background(colors.ground)
-                .padding(24.dp),
-        ) {
-            ModeEditorContent(mode, first, last, onRename, onSetWindow, onMove, onDelete, onDismiss)
-        }
+    ModeDialog(onDismiss) {
+        ModeEditorContent(
+            mode, canMoveUp, canMoveDown, onRename, onSetWindow, onMove, onDelete, onDismiss,
+        )
     }
 }
 
@@ -232,39 +222,34 @@ private fun ModeEditorDialog(
 @Composable
 internal fun ModeEditorContent(
     mode: ContextMode,
-    first: Boolean,
-    last: Boolean,
+    canMoveUp: Boolean,
+    canMoveDown: Boolean,
     onRename: (String) -> ModeNameError?,
     onSetWindow: (ScheduleWindow?) -> Unit,
     onMove: (Int) -> Unit,
     onDelete: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val colors = LocalBodhaColors.current
     var editingWindow by remember { mutableStateOf(false) }
-    var text by remember { mutableStateOf(mode.name) }
-    var error by remember { mutableStateOf<ModeNameError?>(null) }
-    Column(modifier = Modifier.fillMaxWidth()) {
-        if (editingWindow) {
-            WindowEditor(
-                current = mode.window,
-                // Its own words: the same window means "check here" for a rule
-                // and "switch Home here" for a mode.
-                prompt = "Switch to ${mode.name} between these times",
-            ) { window ->
-                onSetWindow(window)
-                editingWindow = false
-            }
-            return@Column
+    if (editingWindow) {
+        WindowEditor(
+            current = mode.window,
+            // Its own words: the same window means "check here" for a rule and
+            // "switch Home here" for a mode.
+            prompt = "Switch to ${mode.name} between these times",
+        ) { window ->
+            onSetWindow(window)
+            editingWindow = false
         }
-        Text(text = "Edit mode", color = colors.inkMuted, style = BodhaType.overline)
-        Spacer(Modifier.height(16.dp))
-        NameField(text, onChange = { text = it; error = null })
-        error?.let {
-            Spacer(Modifier.height(8.dp))
-            Text(text = modeNameMessage(it), color = colors.error, style = BodhaType.caption)
-        }
-        Spacer(Modifier.height(8.dp))
+        return
+    }
+    ModeNameForm(
+        title = "Edit mode",
+        initial = mode.name,
+        onSubmit = onRename,
+        onDismiss = onDismiss,
+        onDelete = onDelete,
+    ) {
         ListRow(
             title = "Time window",
             subtitle = modeWindowLine(mode.window),
@@ -276,16 +261,64 @@ internal fun ModeEditorContent(
         }
         // Named for the mode, so a reader hears which one is moving; the row is
         // absent at the end it cannot move towards, rather than present and inert.
-        if (!first) ListRow(title = "Move ${mode.name} up", onClick = { onMove(-1) })
-        if (!last) ListRow(title = "Move ${mode.name} down", onClick = { onMove(1) })
+        if (canMoveUp) ListRow(title = "Move ${mode.name} up", onClick = { onMove(-1) })
+        if (canMoveDown) ListRow(title = "Move ${mode.name} down", onClick = { onMove(1) })
+    }
+}
+
+/** One name, asked for at create; the editor above adds the rest through [between]. */
+@Composable
+private fun ModeNameDialog(
+    title: String,
+    initial: String,
+    onSubmit: (String) -> ModeNameError?,
+    onDismiss: () -> Unit,
+) {
+    ModeDialog(onDismiss) {
+        ModeNameForm(title = title, initial = initial, onSubmit = onSubmit, onDismiss = onDismiss)
+    }
+}
+
+/**
+ * The name, its refusal and the footer — what create and edit both are. [between]
+ * takes whatever else an editor holds: create has nothing, edit has the mode's
+ * window and its place in the order.
+ *
+ * [onSubmit] returns the refusal, if any, and it is named in place rather than
+ * the dialog closing over it.
+ */
+@Composable
+private fun ModeNameForm(
+    title: String,
+    initial: String,
+    onSubmit: (String) -> ModeNameError?,
+    onDismiss: () -> Unit,
+    onDelete: (() -> Unit)? = null,
+    between: @Composable () -> Unit = {},
+) {
+    val colors = LocalBodhaColors.current
+    var text by remember { mutableStateOf(initial) }
+    var error by remember { mutableStateOf<ModeNameError?>(null) }
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(text = title, color = colors.inkMuted, style = BodhaType.overline)
+        Spacer(Modifier.height(16.dp))
+        NameField(text, onChange = { text = it; error = null })
+        error?.let {
+            Spacer(Modifier.height(8.dp))
+            Text(text = modeNameMessage(it), color = colors.error, style = BodhaType.caption)
+        }
+        Spacer(Modifier.height(8.dp))
+        between()
         Spacer(Modifier.height(20.dp))
+        // Pills, so the floor and the focus ring come from the shared component
+        // rather than a local outline (ADR 0025, 0026).
         Row {
-            BodhaPill(label = "Delete", onClick = onDelete, destructive = true)
+            if (onDelete != null) BodhaPill(label = "Delete", onClick = onDelete, destructive = true)
             Spacer(Modifier.weight(1f))
             BodhaPill(
                 label = "Save",
                 onClick = {
-                    val refusal = onRename(text)
+                    val refusal = onSubmit(text)
                     if (refusal == null) onDismiss() else error = refusal
                 },
                 emphasis = Emphasis.Solid,
@@ -294,22 +327,12 @@ internal fun ModeEditorContent(
     }
 }
 
-/**
- * One name, asked for at create. [onSubmit] returns the refusal, if any, and it
- * is named in place rather than the dialog closing over it.
- */
+/** The frame both editors sit in: dismissal, arrival focus, and the card. */
 @Composable
-private fun ModeNameDialog(
-    title: String,
-    initial: String,
-    onSubmit: (String) -> ModeNameError?,
-    onDismiss: () -> Unit,
-) {
+private fun ModeDialog(onDismiss: () -> Unit, content: @Composable () -> Unit) {
     val colors = LocalBodhaColors.current
-    var text by remember { mutableStateOf(initial) }
-    var error by remember { mutableStateOf<ModeNameError?>(null) }
     Dialog(onDismissRequest = onDismiss) {
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .escapeDismisses(onDismiss)
@@ -317,29 +340,7 @@ private fun ModeNameDialog(
                 .clip(RoundedCornerShape(4.dp))
                 .background(colors.ground)
                 .padding(24.dp),
-        ) {
-            Text(text = title, color = colors.inkMuted, style = BodhaType.overline)
-            Spacer(Modifier.height(16.dp))
-            NameField(text, onChange = { text = it; error = null })
-            error?.let {
-                Spacer(Modifier.height(8.dp))
-                Text(text = modeNameMessage(it), color = colors.error, style = BodhaType.caption)
-            }
-            Spacer(Modifier.height(20.dp))
-            // Pills, so the floor and the focus ring come from the shared
-            // component rather than a local outline (ADR 0025, 0026).
-            Row {
-                Spacer(Modifier.weight(1f))
-                BodhaPill(
-                    label = "Save",
-                    onClick = {
-                        val refusal = onSubmit(text)
-                        if (refusal == null) onDismiss() else error = refusal
-                    },
-                    emphasis = Emphasis.Solid,
-                )
-            }
-        }
+        ) { content() }
     }
 }
 

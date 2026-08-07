@@ -123,6 +123,18 @@ class AwarenessScreenTest {
         assertEquals(emptyList<String>(), actionableNames())
     }
 
+    /** It is still one named node, so a reader hears a row rather than two loose strings. */
+    @Test
+    fun `a session row is named by its span and its word together`() {
+        setScreen(day, AwarenessToday.Sessions(finished = 2, running = true))
+
+        val named = nodes().mapNotNull { node ->
+            node.config.getOrNull(SemanticsProperties.ContentDescription)?.firstOrNull()
+        }
+        assertTrue("9:41 · 12 minutes. Intentional." in named)
+        assertTrue("9:58 · running now. Unclassified." in named)
+    }
+
     /** Which is why the surface takes focus itself — Escape travels up from it. */
     @Test
     fun `the surface takes focus on arrival, which gives the list a back key`() {

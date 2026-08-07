@@ -14,6 +14,7 @@ import com.bodhalauncher.engine.EventType
 import com.bodhalauncher.engine.FocusRecord
 import com.bodhalauncher.engine.FocusSession
 import com.bodhalauncher.engine.FocusSetup
+import com.bodhalauncher.engine.IntentSignal
 import com.bodhalauncher.engine.RetentionCategory
 import com.bodhalauncher.engine.RetentionConfig
 import com.bodhalauncher.engine.endFocusSession
@@ -21,6 +22,8 @@ import com.bodhalauncher.engine.extendFocusSession
 import com.bodhalauncher.engine.focusLateBy
 import com.bodhalauncher.engine.startFocusSession
 import java.time.Instant
+import java.time.LocalDateTime
+import java.time.ZoneId
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -70,6 +73,18 @@ interface FocusRecordDao {
     @Query("SELECT COUNT(*) FROM focus_record")
     suspend fun count(): Int
 }
+
+/**
+ * A recorded session as the third of ADR 0013's intent signals (#172): running a
+ * Focus session is stating something, and the moment it was stated is the moment
+ * it started. It carries no phone session — the span it fell inside attributes it.
+ *
+ * Beside the entity, as `SessionRecordEntity.toRecord` is: the mapping from a row
+ * to what the engine reads belongs with the row.
+ */
+fun FocusRecordEntity.toIntentSignal(): IntentSignal = IntentSignal(
+    at = LocalDateTime.ofInstant(Instant.ofEpochMilli(startMillis), ZoneId.systemDefault()),
+)
 
 /** The store's row for the privacy dashboard's local-data section (#24, ADR 0029). */
 suspend fun FocusRecordDao.dashboardSummary(

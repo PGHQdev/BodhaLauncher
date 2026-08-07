@@ -362,6 +362,9 @@ private fun BodhaHost(
     val modeSwitch by modeStore.switch
     val activeMode = resolveArrangement(modes, modeSwitch, now)
     LaunchedEffect(activeMode) { pinStore.setActive(activeMode ?: PinStore.DEFAULT_ARRANGEMENT) }
+    // The resolve above already ignores a lapsed switch; this is what stops it
+    // coming back to life when the window it lapsed against is edited away.
+    LaunchedEffect(now, modes, modeSwitch) { modeStore.expireSwitch(now) }
     val context = LocalContext.current
     // The Focus session's home (#166); a duration that elapsed while the process
     // was dead is detected before root is first resolved, so a cold start after
@@ -579,11 +582,13 @@ private fun BodhaHost(
                 { education.ask(Capability.UsageAccess, EducationEntry.UserRequest) }
             },
             onOpen = { typed ->
-                typed?.let(records::appendOpenCheckIntention)
                 // The second of ADR 0013's three intent signals, and only when
                 // something was actually written (#172) — proceeding alone
                 // states nothing.
-                if (typed != null) events.log(EventType.OpenCheckIntentionWritten)
+                typed?.let {
+                    records.appendOpenCheckIntention(it)
+                    events.log(EventType.OpenCheckIntentionWritten)
+                }
                 events.log(EventType.OpenCheckProceeded)
                 // The session's count, only for the check it raised (#168).
                 if (sheet.raisedByFocus) focusStore.countProceed()
@@ -593,8 +598,10 @@ private fun BodhaHost(
                 openApp(app)
             },
             onOpenFor = { minutes, typed ->
-                typed?.let(records::appendOpenCheckIntention)
-                if (typed != null) events.log(EventType.OpenCheckIntentionWritten)
+                typed?.let {
+                    records.appendOpenCheckIntention(it)
+                    events.log(EventType.OpenCheckIntentionWritten)
+                }
                 events.log(EventType.OpenCheckProceeded)
                 if (sheet.raisedByFocus) focusStore.countProceed()
                 openCheck.onProceededFor(app.id, Instant.now(), minutes)

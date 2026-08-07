@@ -6,6 +6,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import com.bodhalauncher.app.data.BodhaDatabase
+import com.bodhalauncher.app.focus.toIntentSignal
 import com.bodhalauncher.app.intent.IntentRecordStore
 import com.bodhalauncher.app.session.SessionRuntime
 import com.bodhalauncher.app.session.toRecord
@@ -48,7 +49,7 @@ fun AwarenessSurface(sessions: SessionRuntime, onBack: () -> Unit) {
     val now = minuteNow()
     val phase by sessions.phase
     val context = LocalContext.current
-    val records = remember { IntentRecordStore(context) }
+    val intents = remember { IntentRecordStore(context) }
     // Null while the store is still being read — and stays null if the read
     // fails: the screen shows nothing rather than a 0 standing in for an
     // unknown (#171). Only an actual empty read resolves to the named absence.
@@ -56,7 +57,7 @@ fun AwarenessSurface(sessions: SessionRuntime, onBack: () -> Unit) {
         value = withContext(Dispatchers.IO) {
             runCatching {
                 val database = BodhaDatabase.get(context)
-                val today = database.sessionRecords()
+                val records = database.sessionRecords()
                     .forDay(dayKey(now).toEpochDay())
                     .map { it.toRecord() }
                 // A session still running may have started before the boundary,
@@ -64,13 +65,13 @@ fun AwarenessSurface(sessions: SessionRuntime, onBack: () -> Unit) {
                 // the earliest session the view is about to show.
                 val from = minOf(
                     dayStart(now),
-                    today.minOfOrNull { it.start } ?: dayStart(now),
+                    records.minOfOrNull { it.start } ?: dayStart(now),
                 ).toInstant()
                 val focus = database.focusRecords().startedSince(from.toEpochMilli())
-                    .map { IntentSignal(at = Instant.ofEpochMilli(it.startMillis).toLocal()) }
+                    .map { it.toIntentSignal() }
                 AwarenessDay(
-                    today = resolveAwarenessToday(today, now),
-                    sessions = resolveAwarenessSessions(today, records.signalsSince(from) + focus),
+                    today = resolveAwarenessToday(records, now),
+                    sessions = resolveAwarenessSessions(records, intents.signalsSince(from) + focus),
                 )
             }.getOrNull()
         } ?: value
@@ -83,5 +84,3 @@ fun AwarenessSurface(sessions: SessionRuntime, onBack: () -> Unit) {
 }
 
 private fun LocalDateTime.toInstant(): Instant = atZone(ZoneId.systemDefault()).toInstant()
-
-private fun Instant.toLocal(): LocalDateTime = LocalDateTime.ofInstant(this, ZoneId.systemDefault())

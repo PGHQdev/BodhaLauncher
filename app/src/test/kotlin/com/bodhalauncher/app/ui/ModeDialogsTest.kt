@@ -44,8 +44,8 @@ class ModeDialogsTest {
             BodhaTheme {
                 ModeEditorContent(
                     mode = mode,
-                    first = modes.first() == mode,
-                    last = modes.last() == mode,
+                    canMoveUp = modes.first() != mode,
+                    canMoveDown = modes.last() != mode,
                     onRename = { null },
                     onSetWindow = { windows += it },
                     onMove = { moves += mode.name to it },
