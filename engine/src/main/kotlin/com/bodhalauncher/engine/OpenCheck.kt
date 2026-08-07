@@ -40,12 +40,14 @@ data class OpenCheckContext(
     val usedTodayMillis: Long? = null,
     /** Local minute of day, for schedule windows (#74). */
     val minuteOfDay: Int = 0,
-    /**
-     * Focus active; kept for Focus (#9), which fires checks from a session's
-     * allowed list rather than a per-app mode (ADR 0012). No trigger reads it
-     * yet — the During-Focus mode it once fed is retired (#165).
-     */
+    /** A Focus session is running (#9, ADR 0012). */
     val focusActive: Boolean = false,
+    /**
+     * The session's allowed-list verdict, fed from the [focusCheckDue] seam —
+     * the adapter answers from the session alone, so no per-app rule is read to
+     * make the allowed/not-allowed decision (#168).
+     */
+    val focusCheckDue: Boolean = false,
     /** Adapter-classified emergency/utility app — always proceeds (#77). */
     val bypass: Boolean = false,
 )
@@ -73,7 +75,7 @@ fun resolveOpenCheckLines(
     usedToday = usedTodayMillis?.takeIf { it >= 60_000 }?.let { "Used ${spanPhrase(it)} today" },
 )
 
-private fun agoPhrase(elapsedMillis: Long): String {
+internal fun agoPhrase(elapsedMillis: Long): String {
     val minutes = elapsedMillis / 60_000
     val hours = minutes / 60
     val days = hours / 24
@@ -96,7 +98,7 @@ private fun spanPhrase(millis: Long): String {
     }
 }
 
-private fun plural(n: Long, unit: String): String = "$n $unit${if (n == 1L) "" else "s"}"
+internal fun plural(n: Long, unit: String): String = "$n $unit${if (n == 1L) "" else "s"}"
 
 sealed interface OpenCheckDecision {
     data object Proceed : OpenCheckDecision
@@ -109,6 +111,8 @@ sealed interface OpenCheckDecision {
         val appId: String,
         val at: Instant,
         val repeatedOpen: Boolean = false,
+        /** Raised by a Focus session's allowed list (#168) — the adapter counts it as a reach. */
+        val raisedByFocus: Boolean = false,
     ) : OpenCheckDecision
 }
 
@@ -181,13 +185,16 @@ class OpenCheckEngine(initial: OpenCheckState = OpenCheckState.Initial) {
         now: Instant,
         context: OpenCheckContext = OpenCheckContext(),
     ): OpenCheckDecision {
-        // Friction never stands between the user and a call or alarm (#77) —
-        // before even the grant, so nothing is consumed on the way through.
+        // The one decision point, in order (#168): the classified bypass first —
+        // an emergency app is an emergency app whether or not a session runs —
+        // then the grant, so a proceeded check flows back through without
+        // re-firing; then the session's allowed list; then the app's own rule.
         if (context.bypass) return OpenCheckDecision.Proceed
         if (appId == grantedApp && grantedUntil?.isBefore(now) == false) {
             clearGrant()
             return OpenCheckDecision.Proceed
         }
+        if (context.focusCheckDue) return OpenCheckDecision.ShowCheck(appId, now, raisedByFocus = true)
         return when (rule?.mode) {
             null, OpenCheckMode.Never -> OpenCheckDecision.Proceed
             OpenCheckMode.Always -> OpenCheckDecision.ShowCheck(appId, now)
