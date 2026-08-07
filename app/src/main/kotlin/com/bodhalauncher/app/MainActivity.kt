@@ -56,6 +56,7 @@ import com.bodhalauncher.app.ui.AppPickerDialog
 import com.bodhalauncher.app.ui.BodhaTheme
 import com.bodhalauncher.app.ui.EditHomeDialog
 import com.bodhalauncher.app.ui.ModeManageDialog
+import com.bodhalauncher.app.ui.minuteNow
 import com.bodhalauncher.app.ui.ModeSelectorDialog
 import com.bodhalauncher.app.ui.GestureAction
 import com.bodhalauncher.app.ui.HomeGestures
@@ -284,7 +285,7 @@ class MainActivity : ComponentActivity() {
  * placeholder arms of the `when` are replaced.
  */
 private val BUILT_SURFACES =
-    listOf(Surface.Home, Surface.Library, Surface.Today, Surface.Inbox)
+    listOf(Surface.Home, Surface.Library, Surface.Awareness, Surface.Today, Surface.Inbox)
 
 private fun openSurface(target: Surface, go: (Surface) -> Unit) =
     GestureAction("Open ${target.title}") { go(target) }
@@ -559,6 +560,10 @@ private fun BodhaHost(
             )
             return
         }
+        Surface.Awareness -> {
+            AwarenessSurface(sessions = sessions, onBack = back)
+            return
+        }
         Surface.Inbox -> {
             InboxSurface(
                 education = education,
@@ -581,12 +586,7 @@ private fun BodhaHost(
 
     // Ticks each minute so the intention drops at the 4am boundary (ADR 0003)
     // even when Home sits on screen with nothing else changing.
-    val now by produceState(LocalDateTime.now()) {
-        while (true) {
-            delay((60 - LocalDateTime.now().second) * 1000L)
-            value = LocalDateTime.now()
-        }
-    }
+    val now = minuteNow()
 
     // Remaining inputs fill in as their features ship (suggestions #6, digest #10, …).
     val state = resolveHome(

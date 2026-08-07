@@ -1,0 +1,115 @@
+package com.bodhalauncher.app.session
+
+import androidx.room.Dao
+import androidx.room.Entity
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
+import androidx.room.PrimaryKey
+import androidx.room.Query
+import com.bodhalauncher.engine.DataCategorySummary
+import com.bodhalauncher.engine.RetentionCategory
+import com.bodhalauncher.engine.RetentionConfig
+import com.bodhalauncher.engine.SessionRecord
+import com.bodhalauncher.engine.Transition
+import com.bodhalauncher.engine.dayKey
+import java.time.Instant
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.ZoneId
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+
+/**
+ * One durable phone session (#171, ADR 0028): the engine's timestamps and
+ * nothing else — no app identity, no text, nothing that transmits (ADR 0009).
+ * Device-local only.
+ */
+@Entity(tableName = "session_record")
+data class SessionRecordEntity(
+    /** The engine's SessionId — monotonic and persisted, so it survives restarts. */
+    @PrimaryKey val sessionId: Long,
+    val startMillis: Long,
+    /** Null while the session runs; the final screen-off once the engine ends it. */
+    val endMillis: Long?,
+    /** dayKey(start).toEpochDay(), stamped at write so reads share the 4am rule (ADR 0003). */
+    val dayEpochDay: Long,
+)
+
+@Dao
+interface SessionRecordDao {
+
+    /**
+     * A start the row already exists for keeps the first row — restart
+     * reconciliation and backfill replay the stream, they never fork it (#171).
+     */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insert(record: SessionRecordEntity)
+
+    @Query("UPDATE session_record SET endMillis = :endMillis WHERE sessionId = :sessionId")
+    suspend fun close(sessionId: Long, endMillis: Long)
+
+    /** The day's records, plus any still-open one — running is shown, whatever day it started. */
+    @Query("SELECT * FROM session_record WHERE dayEpochDay = :epochDay OR endMillis IS NULL ORDER BY startMillis")
+    suspend fun forDay(epochDay: Long): List<SessionRecordEntity>
+
+    /** The retention worker's cut, under raw usage (#19, ADR 0028). */
+    @Query("DELETE FROM session_record WHERE startMillis < :cutoffMillis")
+    suspend fun deleteBefore(cutoffMillis: Long)
+
+    /** The privacy dashboard's row: how many records Bodha holds (#24). */
+    @Query("SELECT COUNT(*) FROM session_record")
+    suspend fun count(): Int
+}
+
+/**
+ * Writes the engine's transitions into the durable record. Fire-and-forget like
+ * the event log, but on one lane so a backfilled end can never land before its
+ * start. A resume touches nothing — the row it belongs to is still open — and a
+ * peek writes nothing, so a peek leaves no record.
+ */
+class SessionRecordLog(private val dao: SessionRecordDao) {
+
+    @Suppress("OPT_IN_USAGE")
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO.limitedParallelism(1))
+
+    fun record(transition: Transition) {
+        scope.launch { runCatching { write(transition) } }
+    }
+
+    internal suspend fun write(transition: Transition) {
+        when (transition) {
+            is Transition.SessionStarted -> dao.insert(
+                SessionRecordEntity(
+                    sessionId = transition.session.value,
+                    startMillis = transition.at.toEpochMilli(),
+                    endMillis = null,
+                    dayEpochDay = dayKey(transition.at.toLocal()).toEpochDay(),
+                )
+            )
+            is Transition.SessionEnded ->
+                dao.close(transition.session.value, transition.at.toEpochMilli())
+            is Transition.SessionResumed, is Transition.PeekObserved -> Unit
+        }
+    }
+}
+
+fun SessionRecordEntity.toRecord(): SessionRecord = SessionRecord(
+    id = sessionId,
+    start = Instant.ofEpochMilli(startMillis).toLocal(),
+    end = endMillis?.let { Instant.ofEpochMilli(it).toLocal() },
+    // The key stamped at write decides — a zone change since must not re-file the day.
+    day = LocalDate.ofEpochDay(dayEpochDay),
+)
+
+private fun Instant.toLocal(): LocalDateTime = LocalDateTime.ofInstant(this, ZoneId.systemDefault())
+
+/** The store's row for the privacy dashboard's local-data section (#24, ADR 0028). */
+suspend fun SessionRecordDao.dashboardSummary(
+    config: RetentionConfig = RetentionConfig(),
+): DataCategorySummary = DataCategorySummary(
+    category = RetentionCategory.RawUsageEvents,
+    count = count(),
+    retentionDays = config.days(RetentionCategory.RawUsageEvents),
+)

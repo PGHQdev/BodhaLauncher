@@ -5,6 +5,7 @@ import com.bodhalauncher.app.data.BodhaDatabase
 import com.bodhalauncher.app.data.EventLogger
 import com.bodhalauncher.app.data.RetentionWorker
 import com.bodhalauncher.app.intent.IntentPromptRuntime
+import com.bodhalauncher.app.session.SessionRecordLog
 import com.bodhalauncher.app.session.SessionRuntime
 import com.bodhalauncher.engine.EventType
 import com.bodhalauncher.engine.Transition
@@ -24,7 +25,11 @@ class BodhaApp : Application() {
         super.onCreate()
         events = EventLogger(BodhaDatabase.get(this).eventLog())
         sessions = SessionRuntime(this)
+        // The durable record Awareness reads (#171, ADR 0028), fed from the same
+        // stream as the event log — restart reconciliation and backfill included.
+        val sessionRecords = SessionRecordLog(BodhaDatabase.get(this).sessionRecords())
         sessions.addTransitionListener { transition ->
+            sessionRecords.record(transition)
             when (transition) {
                 is Transition.SessionStarted -> events.log(EventType.SessionStarted)
                 is Transition.SessionEnded -> events.log(EventType.SessionEnded)

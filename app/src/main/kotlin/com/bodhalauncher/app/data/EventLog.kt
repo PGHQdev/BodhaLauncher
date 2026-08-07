@@ -13,6 +13,8 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.bodhalauncher.app.inbox.NotificationLogDao
 import com.bodhalauncher.app.inbox.NotificationRecordEntity
+import com.bodhalauncher.app.session.SessionRecordDao
+import com.bodhalauncher.app.session.SessionRecordEntity
 
 /**
  * One on-device event (#25, ADR 0009): a type, a timestamp, at most one duration.
@@ -53,8 +55,8 @@ interface EventLogDao {
  * with the digest (#161). Device-local only.
  */
 @Database(
-    entities = [EventLogEntity::class, NotificationRecordEntity::class],
-    version = 2,
+    entities = [EventLogEntity::class, NotificationRecordEntity::class, SessionRecordEntity::class],
+    version = 3,
     exportSchema = true,
 )
 abstract class BodhaDatabase : RoomDatabase() {
@@ -62,6 +64,8 @@ abstract class BodhaDatabase : RoomDatabase() {
     abstract fun eventLog(): EventLogDao
 
     abstract fun notificationLog(): NotificationLogDao
+
+    abstract fun sessionRecords(): SessionRecordDao
 
     companion object {
         @Volatile
@@ -79,10 +83,21 @@ abstract class BodhaDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `session_record` (" +
+                        "`sessionId` INTEGER NOT NULL, `startMillis` INTEGER NOT NULL, " +
+                        "`endMillis` INTEGER, `dayEpochDay` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`sessionId`))"
+                )
+            }
+        }
+
         fun get(context: Context): BodhaDatabase = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(
                 context.applicationContext, BodhaDatabase::class.java, "bodha.db"
-            ).addMigrations(MIGRATION_1_2).build().also { instance = it }
+            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build().also { instance = it }
         }
     }
 }
